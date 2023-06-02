@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 import chex
 import jax
 
@@ -23,3 +24,19 @@ def cosine_beta_schedule(timesteps, s=0.008):
     alphas_cumprod = alphas_cumprod / alphas_cumprod[0]
     betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
     return np.clip(betas, 0, 0.999)
+
+
+def plot_samples(x):
+    plt.scatter(x[:, 0], x[:, 1])
+    plt.xlim(-2, 2)
+    plt.ylim(-2, 2)
+
+
+def dist_show_2d(fn, xr, yr):
+    nticks = 100
+    x, y = np.meshgrid(
+        np.linspace(xr[0], xr[1], nticks), np.linspace(yr[0], yr[1], nticks)
+    )
+    coord = np.stack([x, y], axis=-1).reshape((-1, 2))
+    heatmap = fn(coord).reshape((nticks, nticks))
+    plt.imshow(heatmap)

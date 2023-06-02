@@ -65,28 +65,9 @@ xr = [-0.75, 0.75]
 yr = [-0.75, 0.75]
 
 
-def plot_samples(x):
-    plt.scatter(x[:, 0], x[:, 1])
-    plt.xlim(-2, 2)
-    plt.ylim(-2, 2)
-
-
-def dist_show_2d(fn, xr, yr):
-    nticks = 100
-    x, y = np.meshgrid(
-        np.linspace(xr[0], xr[1], nticks), np.linspace(yr[0], yr[1], nticks)
-    )
-    coord = np.stack([x, y], axis=-1).reshape((-1, 2))
-    heatmap = fn(coord).reshape((nticks, nticks))
-    plt.imshow(heatmap)
-
-
 # load data
 dataset_energy, dataset_sample = bar(scale=0.2)
 x = dataset_sample(batch_size)
-
-plot_samples(x)
-plt.show()
 x = x.reshape(x.shape[0], -1)
 
 
@@ -141,23 +122,8 @@ for itr in range(num_steps):
         losses.append(loss)
     if itr % 1000 == 0:
         x_samp = sample_fn(ema_params, next(rng_seq), batch_size)
-        plot_samples(x_samp)
-        plt.show()
         logpx = logpx_fn(ema_params, next(rng_seq), x).mean()
         print("TEST", itr, "logpx", logpx)
         test_logpx.append(logpx)
-
-        if ebm:
-            for t in range(10):
-                dist_show_2d(
-                    lambda x: logp_unnorm_fn(ema_params, next(rng_seq), x, 10 * t),
-                    xr=xr,
-                    yr=yr,
-                )
-                plt.show()
-
-plt.plot(losses)
-plt.show()
-plt.plot(test_logpx)
 
 bar_params = ema_params
