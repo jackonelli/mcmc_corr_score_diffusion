@@ -11,6 +11,9 @@ import distrax
 import chex
 import optax
 
+# from toy_examples.utils import timestep_embedding
+from toy_examples.train import toy_gmm, PortableDiffusionModel
+
 
 # Define a energy diffusion model (wrapper around a normal diffusion model)
 class EBMDiffusionModel(hk.Module):
@@ -52,6 +55,25 @@ class ProductEBMDiffusionModel(hk.Module):
     def __call__(self, x, t):
         score = self.net(x, t) + self.net2(x, t)
         return score
+
+
+def test():
+    rng_seq = hk.PRNGSequence(0)
+    x_dim = 2
+    n_steps = 100
+    forward = hk.transform(forward_fn)
+    print(forward)
+
+    batch_size = 100
+    _, dataset = toy_gmm()
+    x_batch = jnp.array(dataset(batch_size))
+    params = forward.init(next(rng_seq), x_batch)
+    output_1 = forward.apply(params=params, x=x_batch, rng=rng_seq)
+    # t = jax.random.randint(hk.next_rng_key(), (x_batch.shape[0],), 0, n_steps)
+
+    # t = torch.ones((batch_size,))
+    # model(x_batch, t)
+    print(type(x_batch))
 
 
 # Define a simple MLP Diffusion Model
@@ -118,3 +140,29 @@ class ResnetDiffusionModel(hk.Module):
         x = hk.Linear(self._x_dim, w_init=jnp.zeros)(x)
         chex.assert_shape(x, (None, self._x_dim))
         return x
+
+
+def forward_fn():
+    n_steps = 100
+    data_dim = 2
+    net = ResnetDiffusionModel(
+        n_steps=n_steps, n_layers=4, x_dim=data_dim, h_dim=128, emb_dim=32
+    )
+
+    net = EBMDiffusionModel(net)
+
+    ddpm = PortableDiffusionModel(data_dim, n_steps, net, var_type="beta_forward")
+
+    def logp_unnorm(x, t):
+        scale_e = ddpm.energy_scale(-2 - t)
+        t = jnp.ones((x.shape[0],), dtype=jnp.int32) * t
+        return -net.neg_logp_unnorm(x, t) * scale_e
+
+    def _logpx(x):
+        return ddpm.logpx(x)["logpx"]
+
+    return ddpm.loss, (ddpm.loss, ddpm.sample, _logpx, logp_unnorm)
+
+
+if __name__ == "__main__":
+    test()

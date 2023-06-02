@@ -15,6 +15,7 @@ pandas="*"
 tensorflow="*"
 tensorflow_datasets="*"
 ipykernel = "*"
+torch = "*"
 
 [dev-packages]
 pytest = "*"
@@ -22,7 +23,6 @@ pylint = "*"
 black = "*"
 neovim = "*"
 rope = "*"
-
 
 [requires]
 python_version = "3.8"
