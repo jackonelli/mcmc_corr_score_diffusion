@@ -292,6 +292,7 @@ if __name__ == '__main__':
     n = 2000  # Number of samples from target distribution
     batch_size = 2000  # Number of generated samples from model
     file_samples = "samples-2.p"  # File to save samples
+    seed = 0
 
     # Load Data and Train Model - Energy-Based Diffusion Model and Diffusion Model
     nll_gmm, dataset_sample_gmm, means = toy_gmm(n_comp, std=std)
@@ -350,7 +351,7 @@ if __name__ == '__main__':
     for name, param in experiment_param.items():
         model_param, ebm, sampler, grad, n_trapets = param
         samples, grad_sample, _ = sampling_product_distribution(model_param, ebm=ebm, sampler=sampler, grad=grad,
-                                                                n_trapets=n_trapets)
+                                                                n_trapets=n_trapets, seed=seed)
         samples_dict[name] = samples
         if grad:
             samples_dict[name.split('_')[0] + '_reverse'] = grad_sample
