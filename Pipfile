@@ -16,6 +16,7 @@ tensorflow="*"
 tensorflow_datasets="*"
 ipykernel = "*"
 torch = "*"
+scikit-learn = "*"
 
 [dev-packages]
 pytest = "*"
