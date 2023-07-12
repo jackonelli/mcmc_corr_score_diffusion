@@ -68,7 +68,7 @@ def toy_gmm(n_comp=8, std=0.075, radius=0.5):
             n = samples.shape[0]
         return samples[:n_samples]
 
-    return nll, sample_constraint
+    return nll, sample_constraint, mean
 
 
 def toy_gauss(radius=0.5):
@@ -102,16 +102,17 @@ def toy_box(scale=1.0):
     return nll, sample
 
 
-def bar(scale=0.2):
+def bar(scale=0.2, prob_inside=0.99, r=1.1):
     """Ring of 2D Gaussians. Returns energy and sample functions."""
-    p_inside = 0.99
-    p_re = 1. - p_inside
+    p_re = 1. - prob_inside
     r = 1.1
+    pdf_outer = p_re / (4*r ** 2 - 4 * scale)
+    pdf_inner = prob_inside/(4 * scale)
 
     def nll(x):
         l_x = np.zeros(shape=x.shape[0])
-        l_x[(x[:, 0] > -r) & (x[:, 0] < r) & (x[:, 1] > -r) & (x[:, 1] < r)] = p_re / (4*r ** 2 - 4 * scale)
-        l_x[(x[:, 0] > -scale) & (x[:, 0] < scale) & (x[:, 1] > -1.) & (x[:, 1] < 1.)] = p_inside/(4 * scale)
+        l_x[(x[:, 0] > -r) & (x[:, 0] < r) & (x[:, 1] > -r) & (x[:, 1] < r)] = pdf_outer
+        l_x[(x[:, 0] > -scale) & (x[:, 0] < scale) & (x[:, 1] > -1.) & (x[:, 1] < 1.)] = pdf_inner
         return -np.log(l_x)
 
     def sample(n_samples):
@@ -119,7 +120,7 @@ def bar(scale=0.2):
         data[:, 0] = data[:, 0] * scale
         return data
 
-    return nll, sample
+    return nll, sample, pdf_outer, pdf_inner
 
 
 def bar_horizontal(scale=0.2):

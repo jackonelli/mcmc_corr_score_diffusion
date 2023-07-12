@@ -2,25 +2,24 @@ import jax
 import jax.numpy as jnp
 import haiku as hk
 import distrax
-import chex
 import numpy as np
 import optax
 import matplotlib.pyplot as plt
 import time
 import pickle
-import tensorflow as tf
-import tensorflow_datasets as tfds
-import functools
-import pandas as pd
+from reduce_reuse_recycle.toy_examples.simple_distributions.metrics import compute_normalizing_constant
 from functools import partial
 from reduce_reuse_recycle.toy_examples.simple_distributions.datasets import toy_gmm, bar
 from reduce_reuse_recycle.toy_examples.simple_distributions.models import ResnetDiffusionModel, EBMDiffusionModel, \
     PortableDiffusionModel, ProductEBMDiffusionModel
-from reduce_reuse_recycle.toy_examples.simple_distributions.sampler import AnnealedMUHASampler, AnnealedMUHADiffSampler, AnnealedULASampler, AnnealedUHASampler
+from reduce_reuse_recycle.toy_examples.simple_distributions.sampler import AnnealedMUHASampler, AnnealedMUHADiffSampler, \
+    AnnealedULASampler, AnnealedUHASampler, AnnealedMALASampler, AnnealedMALADiffSampler, AnnealedMUHADiffReuseSampler
+from scipy.spatial.distance import cdist
+from scipy.optimize import linear_sum_assignment
+
 
 
 # Train Spiral EBM Model
-batch_size = 1000
 data_dim = 2
 num_steps = 15001
 
@@ -80,47 +79,6 @@ def forward_fn_product(ebm=True):
         return ddpm.loss, (ddpm.loss, ddpm.sample, _logpx, logp_unnorm, ddpm.p_gradient, ddpm.p_energy)
     else:
         return ddpm.loss, (ddpm.loss, ddpm.sample, _logpx, logp_unnorm, ddpm.p_gradient, ddpm.p_gradient)
-
-
-def forward_fn_product_multiple():
-    # EBM
-    net_one_ebm = ResnetDiffusionModel(n_steps=n_steps, n_layers=4, x_dim=data_dim, h_dim=128, emb_dim=32)
-    net_one_ebm = EBMDiffusionModel(net_one_ebm)
-
-    net_two_ebm = ResnetDiffusionModel(n_steps=n_steps, n_layers=4, x_dim=data_dim, h_dim=128, emb_dim=32)
-    net_two_ebm = EBMDiffusionModel(net_two_ebm)
-
-    dual_net_ebm = ProductEBMDiffusionModel(net_one_ebm, net_two_ebm)
-    ddpm_ebm = PortableDiffusionModel(data_dim, n_steps, dual_net_ebm, var_type="beta_forward")
-
-    def logp_unnorm_ebm(x, t):
-        scale_e = ddpm_ebm.energy_scale(-2 - t)
-        t = jnp.ones((x.shape[0],), dtype=jnp.int32) * t
-        return -dual_net_ebm.neg_logp_unnorm(x, t) * scale_e
-
-    def _logpx_ebm(x):
-        return ddpm_ebm.logpx(x)["logpx"]
-
-    # Diffusion
-    net_one_diff = ResnetDiffusionModel(n_steps=n_steps, n_layers=4, x_dim=data_dim, h_dim=128, emb_dim=32)
-    net_one_diff = EBMDiffusionModel(net_one_diff)
-
-    net_two_diff = ResnetDiffusionModel(n_steps=n_steps, n_layers=4, x_dim=data_dim, h_dim=128, emb_dim=32)
-    net_two_diff = EBMDiffusionModel(net_two_diff)
-
-    dual_net_diff = ProductEBMDiffusionModel(net_one_diff, net_two_diff)
-    ddpm_diff = PortableDiffusionModel(data_dim, n_steps, dual_net_diff, var_type="beta_forward")
-
-    def logp_unnorm_diff(x, t):
-        scale_e = ddpm_diff.energy_scale(-2 - t)
-        t = jnp.ones((x.shape[0],), dtype=jnp.int32) * t
-        return -dual_net_diff.neg_logp_unnorm(x, t) * scale_e
-
-    def _logpx_diff(x):
-        return ddpm_diff.logpx(x)["logpx"]
-
-    return None, (ddpm_ebm.loss, ddpm_ebm.sample, _logpx_ebm, logp_unnorm_ebm, ddpm_ebm.p_gradient, ddpm_ebm.p_energy,
-                  ddpm_diff.loss, ddpm_diff.sample, _logpx_diff, logp_unnorm_diff, ddpm_diff.p_gradient, ddpm_diff.forward)
 
 
 def plot_samples(x):
@@ -222,10 +180,10 @@ def train_single_model(dataset_sample, load_param=None, save_param=None, ebm=Tru
     return ema_params
 
 
-def sampling_product_distribution(params, ebm=True, n_trapets=5, grad=False):
+def sampling_product_distribution(params, ebm=True, sampler='HMC', n_trapets=5, grad=False, batch_size=2000, seed=0):
     partial_forward_fn_product = partial(forward_fn_product, ebm)
     forward_product = hk.multi_transform(partial_forward_fn_product)
-    rng_seq = hk.PRNGSequence(0)
+    rng_seq = hk.PRNGSequence(seed)
 
     if ebm:
         _, dual_product_sample_fn, dual_product_nll, dual_product_logp_unorm_fn, dual_product_gradient_fn, dual_product_energy_fn = forward_product.apply
@@ -251,8 +209,6 @@ def sampling_product_distribution(params, ebm=True, n_trapets=5, grad=False):
     uha_step_size = .03
     ula_step_size = .001
 
-    batch_size = 1000
-
     means = jax.random.normal(next(rng_seq), (n_mode, dim))
     comp_dists = distrax.MultivariateNormalDiag(means, jnp.ones_like(means) * std)
     pi = distrax.Categorical(logits=jnp.zeros((n_mode,)))
@@ -275,17 +231,38 @@ def sampling_product_distribution(params, ebm=True, n_trapets=5, grad=False):
 
         betas = jnp.linspace(0., 1., n_steps)
 
-        if ebm:
-            # Choose MCMC Sampler to use
-            # sampler = AnnealedULASampler(n_steps, samples_per_step, ula_step_sizes, initial_dist, target_distribution=None, gradient_function=gradient_function)
-            # sampler = AnnealedMALASampler(n_steps, samples_per_step, ula_step_sizes, initial_dist, target_distribution=None, gradient_function=gradient_function, energy_function=energy_function)
-            sampler = AnnealedUHASampler(n_steps, samples_per_step, uha_step_sizes, damping, mass_diag_sqrt, num_leapfrog, initial_dist, target_distribution=None, gradient_function=gradient_function)
-            # sampler = AnnealedMUHASampler(n_steps, samples_per_step, uha_step_sizes, damping, mass_diag_sqrt, num_leapfrog, initial_dist, target_distribution=energy_function, gradient_function=gradient_function,energy_function=energy_function)
+        if sampler == 'HMC':
+            if ebm:
+                sampler = AnnealedMUHASampler(n_steps, samples_per_step, uha_step_sizes, damping, mass_diag_sqrt,
+                                              num_leapfrog, initial_dist, target_distribution=energy_function,
+                                              gradient_function=gradient_function, energy_function=energy_function)
+            else:
+                sampler = AnnealedMUHADiffSampler(n_steps, samples_per_step, uha_step_sizes, damping, mass_diag_sqrt,
+                                                  num_leapfrog, initial_dist, target_distribution=None,
+                                                  gradient_function=gradient_function,
+                                                  energy_function=energy_function, n_trapets=n_trapets)
+        elif sampler == 'MALA':
+            if ebm:
+                sampler = AnnealedMALASampler(n_steps, samples_per_step, ula_step_sizes, initial_dist,
+                                              target_distribution=None, gradient_function=gradient_function,
+                                              energy_function=energy_function)
+            else:
+                sampler = AnnealedMALADiffSampler(n_steps, samples_per_step, ula_step_sizes, initial_dist,
+                                                  target_distribution=None, gradient_function=gradient_function,
+                                                  energy_function=energy_function, n_trapets=n_trapets)
+        elif sampler == 'UHMC':
+            sampler = AnnealedUHASampler(n_steps, samples_per_step, uha_step_sizes, damping, mass_diag_sqrt,
+                                         num_leapfrog, initial_dist, target_distribution=None,
+                                         gradient_function=gradient_function)
+        elif sampler == 'ULA':
+            sampler = AnnealedULASampler(n_steps, samples_per_step, ula_step_sizes, initial_dist,
+                                         target_distribution=None, gradient_function=gradient_function)
         else:
-            sampler = AnnealedMUHADiffSampler(n_steps, samples_per_step, uha_step_sizes, damping, mass_diag_sqrt,
-                                              num_leapfrog, initial_dist, target_distribution=None,
-                                              gradient_function=gradient_function,
-                                              energy_function=energy_function, n_trapets=n_trapets)
+            # raise ValueError('Not Valid Sampler Name')
+            sampler = AnnealedMUHADiffReuseSampler(n_steps, samples_per_step, uha_step_sizes, damping, mass_diag_sqrt,
+                                                   num_leapfrog, initial_dist, target_distribution=None,
+                                                   gradient_function=gradient_function,
+                                                   energy_function=energy_function)
 
         x_samp, logw, accept = sampler.sample(next(rng_seq), batch_size)
         # Samples from MCMC
@@ -301,63 +278,81 @@ def sampling_product_distribution(params, ebm=True, n_trapets=5, grad=False):
 
         plt.show()
 
-        return x_samp, grad_sample, logw
+        return x_samp, grad_sample, accept
 
 
 if __name__ == '__main__':
-    with jax.disable_jit():
-        # Load Data and Train Model - Energy-Based Diffusion Model and Diffusion Model
-        nll_gmm, dataset_sample = toy_gmm(std=.03)
-        spiral_params_ebm = train_single_model(dataset_sample, load_param='params_ebmdiff_gmm.p', ebm=True)
-        spiral_params_diff = train_single_model(dataset_sample, load_param='params_diff_gmm.p', ebm=False)
+    # with jax.disable_jit():
+    # Parameter for Datasets
+    n_comp = 8
+    std = 0.03
+    scale = 0.2
+    r = 1.1
+    prob_inside = 0.99
+    n = 2000  # Number of samples from target distribution
+    batch_size = 2000  # Number of generated samples from model
+    file_samples = "samples-2.p"  # File to save samples
 
-        # Load Data and Train Model - Energy-Based Diffusion Model and Diffusion Model
-        nll_bar, dataset_sample = bar(scale=0.2)
-        bar_params_ebm = train_single_model(dataset_sample, load_param='params_ebmdiff_bar.p', ebm=True)
-        bar_params_diff = train_single_model(dataset_sample, load_param='params_diff_bar.p', ebm=False)
+    # Load Data and Train Model - Energy-Based Diffusion Model and Diffusion Model
+    nll_gmm, dataset_sample_gmm, means = toy_gmm(n_comp, std=std)
+    spiral_params_ebm = train_single_model(dataset_sample_gmm, load_param='params_ebmdiff_gmm.p', ebm=True)
+    spiral_params_diff = train_single_model(dataset_sample_gmm, load_param='params_diff_gmm.p', ebm=False)
 
-        # Collect Params
-        params_ebm = {}
-        for k, v in spiral_params_ebm.items():
-            params_ebm[k] = v
+    # Load Data and Train Model - Energy-Based Diffusion Model and Diffusion Model
+    nll_bar, dataset_sample_bar, pdf_outer, pdf_inner = bar(scale=scale, r=r, prob_inside=prob_inside)
+    bar_params_ebm = train_single_model(dataset_sample_bar, load_param='params_ebmdiff_bar.p', ebm=True)
+    bar_params_diff = train_single_model(dataset_sample_bar, load_param='params_diff_bar.p', ebm=False)
 
-        for k, v in bar_params_ebm.items():
-            k = k.replace('resnet_diffusion_model/', 'resnet_diffusion_model_1/')
-            params_ebm[k] = v
+    # Collect Params
+    params_ebm = {}
+    for k, v in spiral_params_ebm.items():
+        params_ebm[k] = v
 
-        # Collect Params Diff
-        params_diff = {}
-        for k, v in spiral_params_diff.items():
-            params_diff[k] = v
+    for k, v in bar_params_ebm.items():
+        k = k.replace('resnet_diffusion_model/', 'resnet_diffusion_model_1/')
+        params_ebm[k] = v
 
-        for k, v in bar_params_diff.items():
-            k = k.replace('resnet_diffusion_model/', 'resnet_diffusion_model_1/')
-            params_diff[k] = v
+    # Collect Params Diff
+    params_diff = {}
+    for k, v in spiral_params_diff.items():
+        params_diff[k] = v
 
-        # Sample with Product Distribution
-        # samples, grad_sample, _ = sampling_product_distribution(params_ebm, ebm=True, grad=True)
-        # print('LL EBM: ', np.mean(-nll_gmm(samples) - nll_bar(samples)))
-        # print('LL Reverse: ', np.mean(-nll_gmm(grad_sample) - nll_bar(grad_sample)))
-        samples, grad_sample, _ = sampling_product_distribution(params_diff, ebm=False, grad=True)
-        print('LL Reverse: ', np.mean(-nll_gmm(grad_sample) - nll_bar(grad_sample)))
+    for k, v in bar_params_diff.items():
+        k = k.replace('resnet_diffusion_model/', 'resnet_diffusion_model_1/')
+        params_diff[k] = v
 
+    bounds_outer = jnp.array([[-r, r], [-r, r]])
+    bounds_inner = jnp.array([[-scale, scale], [-1., 1.]])
+    c = compute_normalizing_constant(means, std, n_comp, pdf_outer, pdf_inner, bounds_outer, bounds_inner)
 
-        # Sample with Product Distribution
-        samples, _, _ = sampling_product_distribution(params_diff, ebm=False, n_trapets=0)
-        print('LL Diff Taylor ', np.mean(-nll_gmm(samples) - nll_bar(samples)))
+    samples_target = dataset_sample_gmm(n, bounds_inner[0], bounds_inner[1])
+    experiment_param = {
+        'ebm_hmc': (params_ebm, True, 'HMC', True, None),
+        'ebm_uhmc': (params_ebm, True, 'UHMC', False, None),
+        'ebm_ula': (params_ebm, True, 'ULA', False, None),
+        'ebm_mala': (params_ebm, True, 'MALA', False, None),
+        'diff_hmc4eff': (params_diff, False, 'effective', False, None),
+        'diff_hmc3': (params_diff, False, 'HMC', True, 3),
+        'diff_hmc5': (params_diff, False, 'HMC', False, 5),
+        'diff_hmc10': (params_diff, False, 'HMC', False, 10),
+        'diff_uhmc': (params_diff, False, 'UHMC', False, None),
+        'diff_ula': (params_diff, False, 'ULA', False, None),
+        'diff_mala3': (params_diff, False, 'MALA', False, 3),
+        'diff_mala5': (params_diff, False, 'MALA', False, 5),
+        'diff_mala10': (params_diff, False, 'MALA', False, 10),
+    }
 
-        # Sample with Product Distribution
-        samples, _, _ = sampling_product_distribution(params_diff, ebm=False, n_trapets=2)
-        print('LL Diff Trapets-2 ', np.mean(-nll_gmm(samples) - nll_bar(samples)))
+    results = dict()
+    samples_dict = dict()
+    samples_dict['target'] = samples_target
+    # samples_dict = pickle.load(open(file_samples, "rb"))
 
-        # Sample with Product Distribution
-        samples, _, _ = sampling_product_distribution(params_diff, ebm=False, n_trapets=5)
-        print('LL Diff Trapets-5 ', np.mean(-nll_gmm(samples) - nll_bar(samples)))
+    for name, param in experiment_param.items():
+        model_param, ebm, sampler, grad, n_trapets = param
+        samples, grad_sample, _ = sampling_product_distribution(model_param, ebm=ebm, sampler=sampler, grad=grad,
+                                                                n_trapets=n_trapets)
+        samples_dict[name] = samples
+        if grad:
+            samples_dict[name.split('_')[0] + '_reverse'] = grad_sample
 
-        # Sample with Product Distribution
-        samples, _, _ = sampling_product_distribution(params_diff, ebm=False, n_trapets=10)
-        print('LL Diff Trapets-10 ', np.mean(-nll_gmm(samples) - nll_bar(samples)))
-
-        # Sample with Product Distribution
-        samples, _, _ = sampling_product_distribution(params_diff, ebm=False, n_trapets=50)
-        print('LL Diff Trapets-50', np.mean(-nll_gmm(samples) - nll_bar(samples)))
+        pickle.dump(samples_dict, open(file_samples, "wb"))

@@ -471,7 +471,7 @@ class PortableDiffusionModel(hk.Module):
         xtm1 = (x_t - betas_t * pred_noise / jnp.sqrt(1. - alphas_bar_t)) / jnp.sqrt(alphas_t) + jnp.sqrt(posterior_variance_t) * z
         return xtm1
 
-    def sample(self, n, clip=jnp.inf, ho_implement=False):
+    def sample(self, n, clip=jnp.inf, ho_implement=True):
         """Sample from p(x)."""
         chex.assert_type(n, int)
         rng_key = hk.next_rng_key()
