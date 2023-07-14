@@ -3,6 +3,8 @@ from statistics import NormalDist
 import jax.numpy as jnp
 import numpy as np
 from sklearn.mixture import GaussianMixture
+from scipy.spatial.distance import cdist
+from scipy.optimize import linear_sum_assignment
 
 
 def prob_gmm_independent_uniform(means, sigmas, bounds, weights=None):
@@ -82,3 +84,37 @@ def gmm_metric(x_samples: np.ndarray, y_samples: np.ndarray, cov_type="diag") ->
     _, _, x_covs = x_gmm
     _, _, y_covs = y_gmm
     return gmm_params_metric(x_covs, y_covs)
+
+
+def wasserstein_metric(x_samples: np.ndarray, y_samples: np.ndarray, p: float = 2.) -> float:
+    """Wasserstein metric
+
+    Computes the empirical Wasserstein p-distance between x_samples and y_samples
+    by solving a linear assignment problem.
+
+    Args:
+        x_samples: samples
+        y_samples: samples
+        p: [0, inf) type of Wasserstein distance
+    """
+
+    d = cdist(x_samples, y_samples) ** p
+    assignment = linear_sum_assignment(d)
+    dist = (d[assignment].sum() / len(assignment)) ** (1. / p)
+    return dist
+
+
+def ll_prod_metric(nll_p1: np.ndarray, nll_p2: np.ndarray, c: float = 1.) -> float:
+    """Wasserstein metric
+
+    Computes the empirical Wasserstein p-distance between x_samples and y_samples
+    by solving a linear assignment problem.
+
+    Args:
+        nll_p1: negative log-likelihood of distribution p1
+        nll_p2: negative log-likelihood of distribution p2
+        c: normalizing constant
+    """
+
+    ll = np.mean(-nll_p1 - nll_p2 - np.log(c))
+    return ll
