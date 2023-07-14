@@ -1,4 +1,9 @@
-"""Reproduce results from 2D product composition experiments"""
+"""2D product composition experiments
+
+The script trains two diffusion models, one score parameterised and one energy parameterised,
+or loads existing parameters.
+It then samples from these models with various MCMC methods.
+"""
 from argparse import ArgumentParser
 from functools import partial
 from pathlib import Path
@@ -46,7 +51,6 @@ def main():
     batch_size = 2000  # Number of generated samples from model
     if not args.exp_name.exists():
         args.exp_name.mkdir(parents=True)
-    file_samples = args.exp_name / "samples.p"  # File to save samples
 
     # Load Data
     # Gaussian Mixture
@@ -105,64 +109,53 @@ def main():
             ebm=False,
         )
 
-    print("Sampling from diffusion models")
-    # Collect Params
-    params_ebm = {}
-    for k, v in gmm_params_ebm.items():
-        params_ebm[k] = v
+        print("Sampling from diffusion models")
 
-    for k, v in bar_params_ebm.items():
-        k = k.replace("resnet_diffusion_model/", "resnet_diffusion_model_1/")
-        params_ebm[k] = v
+        params_ebm = collect_product_params(gmm_params_ebm, bar_params_ebm)
+        params_diff = collect_product_params(gmm_params_diff, bar_params_diff)
 
-    # Collect Params Diff
-    params_diff = {}
-    for k, v in gmm_params_diff.items():
-        params_diff[k] = v
+        samples_target = dataset_sample_gmm(n, bounds_inner[0], bounds_inner[1])
+        experiment_param = {
+            "ebm_hmc": (params_ebm, True, "HMC", True, None),
+            "ebm_uhmc": (params_ebm, True, "UHMC", False, None),
+            "ebm_ula": (params_ebm, True, "ULA", False, None),
+            "ebm_mala": (params_ebm, True, "MALA", False, None),
+            "diff_hmc4eff": (params_diff, False, "effective", False, None),
+            "diff_hmc3": (params_diff, False, "HMC", True, 3),
+            "diff_hmc5": (params_diff, False, "HMC", False, 5),
+            "diff_hmc10": (params_diff, False, "HMC", False, 10),
+            "diff_uhmc": (params_diff, False, "UHMC", False, None),
+            "diff_ula": (params_diff, False, "ULA", False, None),
+            "diff_mala3": (params_diff, False, "MALA", False, 3),
+            "diff_mala5": (params_diff, False, "MALA", False, 5),
+            "diff_mala10": (params_diff, False, "MALA", False, 10),
+        }
 
-    for k, v in bar_params_diff.items():
-        k = k.replace("resnet_diffusion_model/", "resnet_diffusion_model_1/")
-        params_diff[k] = v
+        # results = dict()
+        samples_dict = dict()
+        samples_dict["target"] = samples_target
+        # samples_dict = pickle.load(open(file_samples, "rb"))
 
-    samples_target = dataset_sample_gmm(n, bounds_inner[0], bounds_inner[1])
-    experiment_param = {
-        "ebm_hmc": (params_ebm, True, "HMC", True, None),
-        "ebm_uhmc": (params_ebm, True, "UHMC", False, None),
-        "ebm_ula": (params_ebm, True, "ULA", False, None),
-        "ebm_mala": (params_ebm, True, "MALA", False, None),
-        "diff_hmc4eff": (params_diff, False, "effective", False, None),
-        "diff_hmc3": (params_diff, False, "HMC", True, 3),
-        "diff_hmc5": (params_diff, False, "HMC", False, 5),
-        "diff_hmc10": (params_diff, False, "HMC", False, 10),
-        "diff_uhmc": (params_diff, False, "UHMC", False, None),
-        "diff_ula": (params_diff, False, "ULA", False, None),
-        "diff_mala3": (params_diff, False, "MALA", False, 3),
-        "diff_mala5": (params_diff, False, "MALA", False, 5),
-        "diff_mala10": (params_diff, False, "MALA", False, 10),
-    }
+        for name, param in experiment_param.items():
+            print(f"Sampling with {name}")
+            model_param, ebm, sampler, grad, n_trapets = param
+            samples, grad_sample, _ = sampling_product_distribution(
+                model_param,
+                ebm=ebm,
+                sampler=sampler,
+                grad=grad,
+                n_trapets=n_trapets,
+                seed=args.seed,
+            )
+            samples_dict[name] = samples
+            if grad:
+                samples_dict[name.split("_")[0] + "_reverse"] = grad_sample
 
-    # results = dict()
-    samples_dict = dict()
-    samples_dict["target"] = samples_target
-    # samples_dict = pickle.load(open(file_samples, "rb"))
-
-    for name, param in experiment_param.items():
-        print(f"Sampling with {name}")
-        model_param, ebm, sampler, grad, n_trapets = param
-        samples, grad_sample, _ = sampling_product_distribution(
-            model_param,
-            ebm=ebm,
-            sampler=sampler,
-            grad=grad,
-            n_trapets=n_trapets,
-            seed=args.seed,
-        )
-        samples_dict[name] = samples
-        if grad:
-            samples_dict[name.split("_")[0] + "_reverse"] = grad_sample
-
-        print(f"Saving samples at {file_samples}")
-        pickle.dump(samples_dict, open(file_samples, "wb"))
+            file_samples = (
+                args.exp_name / f"samples_{model_id}.p"
+            )  # File to save samples
+            print(f"Saving samples at {file_samples}")
+            pickle.dump(samples_dict, open(file_samples, "wb"))
 
 
 def train_single_model(
@@ -510,6 +503,17 @@ def forward_fn_product(ebm=True):
             ddpm.p_gradient,
             ddpm.p_gradient,
         )
+
+
+def collect_product_params(gmm, bar):
+    """Combine parameters for the two models into a composition"""
+    params_comp = {}
+    for k, v in gmm.items():
+        params_comp[k] = v
+    for k, v in bar.items():
+        k = k.replace("resnet_diffusion_model/", "resnet_diffusion_model_1/")
+        params_comp[k] = v
+    return params_comp
 
 
 def plot_samples(x):
