@@ -5,6 +5,7 @@ import numpy as np
 from sklearn.mixture import GaussianMixture
 from scipy.spatial.distance import cdist
 from scipy.optimize import linear_sum_assignment
+from reduce_reuse_recycle.toy_examples.simple_distributions.datasets import toy_gmm, bar
 
 
 def prob_gmm_independent_uniform(means, sigmas, bounds, weights=None):
@@ -86,7 +87,9 @@ def gmm_metric(x_samples: np.ndarray, y_samples: np.ndarray, cov_type="diag") ->
     return gmm_params_metric(x_covs, y_covs)
 
 
-def wasserstein_metric(x_samples: np.ndarray, y_samples: np.ndarray, p: float = 2.) -> float:
+def wasserstein_metric(
+    x_samples: np.ndarray, y_samples: np.ndarray, p: float = 2.0
+) -> float:
     """Wasserstein metric
 
     Computes the empirical Wasserstein p-distance between x_samples and y_samples
@@ -100,15 +103,35 @@ def wasserstein_metric(x_samples: np.ndarray, y_samples: np.ndarray, p: float = 
 
     d = cdist(x_samples, y_samples) ** p
     assignment = linear_sum_assignment(d)
-    dist = (d[assignment].sum() / len(assignment)) ** (1. / p)
-    return dist
+    dist = (d[assignment].sum() / len(assignment)) ** (1.0 / p)
+    return dist.item()
 
 
-def ll_prod_metric(nll_p1: np.ndarray, nll_p2: np.ndarray, c: float = 1.) -> float:
-    """Wasserstein metric
+def ll_prod_metric(y_samples):
+    n_comp = 8
+    std = 0.03
+    scale = 0.2
+    r = 1.1
+    prob_inside = 0.99
 
-    Computes the empirical Wasserstein p-distance between x_samples and y_samples
-    by solving a linear assignment problem.
+    # Load Data
+    # Gaussian Mixture
+    nll_gmm, _, means = toy_gmm(n_comp, std=std)
+    bounds_outer = np.array([[-r, r], [-r, r]])
+    bounds_inner = np.array([[-scale, scale], [-1.0, 1.0]])
+
+    # Bar
+    nll_bar, _, pdf_outer, pdf_inner = bar(scale=scale, r=r, prob_inside=prob_inside)
+    c = compute_normalizing_constant(
+        means, std, n_comp, pdf_outer, pdf_inner, bounds_outer, bounds_inner
+    )
+    return ll_prod(nll_gmm(y_samples), nll_bar(y_samples), c)
+
+
+def ll_prod(nll_p1: np.ndarray, nll_p2: np.ndarray, c: float = 1.0) -> float:
+    """Log-likelihood metric
+
+    Evaluates LL for a product distribution with two components.
 
     Args:
         nll_p1: negative log-likelihood of distribution p1
@@ -117,4 +140,4 @@ def ll_prod_metric(nll_p1: np.ndarray, nll_p2: np.ndarray, c: float = 1.) -> flo
     """
 
     ll = np.mean(-nll_p1 - nll_p2 - np.log(c))
-    return ll
+    return ll.item()
