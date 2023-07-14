@@ -462,10 +462,7 @@ class PortableDiffusionModel(hk.Module):
         alphas_bar_t = extract(self._alphas_cumprod, t, x.shape)
         posterior_variance_t = extract(self._posterior_variance, t, x.shape)
 
-        if jnp.mean(t) > 0:
-            z = jax.random.normal(rng_key, x.shape)
-        else:
-            z = 0
+        z = jax.random.normal(rng_key, x.shape) * (jnp.mean(t) > 0)
 
         pred_noise = self.forward(x, t)
         xtm1 = (x_t - betas_t * pred_noise / jnp.sqrt(1. - alphas_bar_t)) / jnp.sqrt(alphas_t) + jnp.sqrt(posterior_variance_t) * z
