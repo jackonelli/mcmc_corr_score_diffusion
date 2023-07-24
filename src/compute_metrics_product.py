@@ -40,34 +40,44 @@ def main():
     gmm_stats = stats(gmm_metrics)
     w2_stats = stats(w2_metrics)
     ll_stats = stats(ll_metrics)
-    print_tex_table(comb_stats(ll_stats, w2_stats, gmm_stats))
+    if args.tex:
+        print_tex_table(comb_stats(ll_stats, w2_stats, gmm_stats))
+    else:
+        for metric_name, stats_dict in (
+            ("LL", ll_stats),
+            ("W_2", w2_stats),
+            ("GMM", gmm_stats),
+        ):
+            print_stats(stats_dict, metric_name)
 
 
-def print_stats(stats, metric_name):
+def print_stats(stats_dict, metric_name):
+    """Print stats"""
     print(metric_name)
-    for name, stat in stats.items():
+    for name, stat in stats_dict.items():
         mean, std = stat
         print(f"\t{name}: {mean} +/- {std}")
 
 
-# & Reverse & $-6.64 \pm 1.58$ & 0.3649112 & . \\
 def comb_stats(ll, w2, gmm):
+    """Combine multiple metrics into a common dict."""
     comb = dict()
     for name in ll.keys():
         comb[name] = (ll[name], w2[name], gmm[name])
     return comb
 
 
-def print_tex_table(stats):
+def print_tex_table(stats_dict):
+    """Helper function to generate a tex formatted table"""
     print("EBM")
-    for name, (ll, w2, gmm) in stats.items():
+    for name, (ll, w2, gmm) in stats_dict.items():
         if name == "target" or "diff" in name:
             continue
         print(
             f"& {NAME_CONV[name]}\t\t & ${ll[0]:.2f} \\pm {ll[1]:.2f}$ & ${w2[0]:.2f} \\pm {w2[1]:.2f}$ & ${gmm[0]:.3f} \\pm {gmm[1]:.5f}$ \\\\"
         )
     print("Diff")
-    for name, (ll, w2, gmm) in stats.items():
+    for name, (ll, w2, gmm) in stats_dict.items():
         if name == "target" or "ebm" in name:
             continue
         print(
@@ -76,6 +86,7 @@ def print_tex_table(stats):
 
 
 def stats(metrics):
+    """Compute stats"""
     stats_ = dict()
     for name, vals in metrics.items():
         stats_[name] = mean_and_std(vals)
@@ -83,11 +94,13 @@ def stats(metrics):
 
 
 def mean_and_std(vals: list):
+    """Compute mean and std from a list of numbers"""
     vals_ = np.array(vals)
     return vals_.mean(), vals_.std()
 
 
 def add_metric(dict_, key, val):
+    """Helper method to add a value to existing dict. key or add key."""
     if dict_.get(key) is None:
         dict_[key] = [val]
     else:
@@ -95,8 +108,17 @@ def add_metric(dict_, key, val):
 
 
 def parse_args():
+    """Script args"""
     parser = ArgumentParser(prog="compute_metrics_product")
-    parser.add_argument("--samples_path", default=None, type=Path)
+    parser.add_argument(
+        "--samples_path",
+        default=None,
+        type=Path,
+        help="Dir. to load samples files from. The script looks for files with the pattern 'samples*.p'",
+    )
+    parser.add_argument(
+        "--tex", action="store_true", help="If set, prints tex formatted output."
+    )
     return parser.parse_args()
 
 

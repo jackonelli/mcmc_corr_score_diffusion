@@ -4,27 +4,14 @@ import haiku as hk
 import distrax
 import chex
 import numpy as np
-import optax
 import matplotlib.pyplot as plt
-import time
 import tensorflow as tf
 import tensorflow_datasets as tfds
-import functools
-import pandas as pd
 from src.utils import extract, cosine_beta_schedule
 
-# Use a EBM formulation of likelihod vs a score formulation of likelihood
-ebm = True
-
-# Number of diffusion timesteps to train
-n_steps = 100
-data_dim = 2
-
-rng_seq = hk.PRNGSequence(0)
-seed = next(rng_seq)
+DATA_DIM = 2
 
 
-# Define a simple MLP Diffusion Model
 class ResnetDiffusionModel(hk.Module):
     """Resnet score model.
 
@@ -581,120 +568,3 @@ class PortableDiffusionModel(hk.Module):
         )
 
         return energy
-
-
-def forward_fn_product():
-    net_one = ResnetDiffusionModel(
-        n_steps=n_steps, n_layers=4, x_dim=data_dim, h_dim=128, emb_dim=32
-    )
-
-    if ebm:
-        net_one = EBMDiffusionModel(net_one)
-
-    net_two = ResnetDiffusionModel(
-        n_steps=n_steps, n_layers=4, x_dim=data_dim, h_dim=128, emb_dim=32
-    )
-
-    if ebm:
-        net_two = EBMDiffusionModel(net_two)
-
-    dual_net = ProductEBMDiffusionModel(net_one, net_two)
-    ddpm = PortableDiffusionModel(data_dim, n_steps, dual_net, var_type="beta_forward")
-
-    def logp_unnorm(x, t):
-        scale_e = ddpm.energy_scale(-2 - t)
-        t = jnp.ones((x.shape[0],), dtype=jnp.int32) * t
-        return -dual_net.neg_logp_unnorm(x, t) * scale_e
-
-    def _logpx(x):
-        return ddpm.logpx(x)["logpx"]
-
-    if ebm:
-        return ddpm.loss, (
-            ddpm.loss,
-            ddpm.sample,
-            _logpx,
-            logp_unnorm,
-            ddpm.p_gradient,
-            ddpm.p_energy,
-        )
-    else:
-        return ddpm.loss, (ddpm.loss, ddpm.sample, _logpx, logp_unnorm, ddpm.p_gradient)
-
-
-def forward_fn_mixture():
-    net_one = ResnetDiffusionModel(
-        n_steps=n_steps, n_layers=4, x_dim=data_dim, h_dim=128, emb_dim=32
-    )
-
-    if ebm:
-        net_one = EBMDiffusionModel(net_one)
-
-    net_two = ResnetDiffusionModel(
-        n_steps=n_steps, n_layers=4, x_dim=data_dim, h_dim=128, emb_dim=32
-    )
-
-    if ebm:
-        net_two = EBMDiffusionModel(net_two)
-
-    dual_net = MixtureEBMDiffusionModel(net_one, net_two)
-    ddpm = PortableDiffusionModel(data_dim, n_steps, dual_net, var_type="beta_forward")
-
-    def logp_unnorm(x, t):
-        scale_e = ddpm.energy_scale(-2 - t)
-        t = jnp.ones((x.shape[0],), dtype=jnp.int32) * t
-        return -dual_net.neg_logp_unnorm(x, t) * scale_e
-
-    def _logpx(x):
-        return ddpm.logpx(x)["logpx"]
-
-    if ebm:
-        return ddpm.loss, (
-            ddpm.loss,
-            ddpm.sample,
-            _logpx,
-            logp_unnorm,
-            ddpm.p_gradient,
-            ddpm.p_energy,
-        )
-    else:
-        return ddpm.loss, (ddpm.loss, ddpm.sample, _logpx, logp_unnorm, ddpm.p_gradient)
-
-
-def forward_fn_negation():
-    net_one = ResnetDiffusionModel(
-        n_steps=n_steps, n_layers=4, x_dim=data_dim, h_dim=128, emb_dim=32
-    )
-
-    if ebm:
-        net_one = EBMDiffusionModel(net_one)
-
-    net_two = ResnetDiffusionModel(
-        n_steps=n_steps, n_layers=4, x_dim=data_dim, h_dim=128, emb_dim=32
-    )
-
-    if ebm:
-        net_two = EBMDiffusionModel(net_two)
-
-    dual_net = NegationEBMDiffusionModel(net_one, net_two)
-    ddpm = PortableDiffusionModel(data_dim, n_steps, dual_net, var_type="beta_forward")
-
-    def logp_unnorm(x, t):
-        scale_e = ddpm.energy_scale(-2 - t)
-        t = jnp.ones((x.shape[0],), dtype=jnp.int32) * t
-        return -dual_net.neg_logp_unnorm(x, t) * scale_e
-
-    def _logpx(x):
-        return ddpm.logpx(x)["logpx"]
-
-    if ebm:
-        return ddpm.loss, (
-            ddpm.loss,
-            ddpm.sample,
-            _logpx,
-            logp_unnorm,
-            ddpm.p_gradient,
-            ddpm.p_energy,
-        )
-    else:
-        return ddpm.loss, (ddpm.loss, ddpm.sample, _logpx, logp_unnorm, ddpm.p_gradient)

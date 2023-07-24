@@ -16,8 +16,6 @@ import haiku as hk
 import distrax
 import numpy as np
 import optax
-from scipy.spatial.distance import cdist
-from scipy.optimize import linear_sum_assignment
 import matplotlib.pyplot as plt
 
 from src.datasets import toy_gmm, bar
@@ -54,20 +52,17 @@ def main():
     # Load Data
     # Gaussian Mixture
     _, dataset_sample_gmm, means = toy_gmm(n_comp, std=std)
-    bounds_outer = jnp.array([[-r, r], [-r, r]])
+    # bounds_outer = jnp.array([[-r, r], [-r, r]])
     bounds_inner = jnp.array([[-scale, scale], [-1.0, 1.0]])
 
     # Bar
     _, dataset_sample_bar, pdf_outer, pdf_inner = bar(
         scale=scale, r=r, prob_inside=prob_inside
     )
-    # c = compute_normalizing_constant(
-    #     means, std, n_comp, pdf_outer, pdf_inner, bounds_outer, bounds_inner
-    # )
 
     # Get models (train new model or load from file) - energy and score param
     print("Getting model params")
-    for model_id in range(1, args.num_retrains + 1):
+    for model_id in range(3, args.num_retrains + 2):
         print(f"Model {model_id}/{args.num_retrains}")
         param_path = args.exp_name / f"params_energy_gmm_{model_id}.p"
         gmm_params_ebm = train_single_model(
@@ -111,53 +106,53 @@ def main():
             seed=args.seed,
         )
 
-        # print("Sampling from diffusion models")
+        print("Sampling from diffusion models")
 
-        # params_ebm = collect_product_params(gmm_params_ebm, bar_params_ebm)
-        # params_diff = collect_product_params(gmm_params_diff, bar_params_diff)
+        params_ebm = collect_product_params(gmm_params_ebm, bar_params_ebm)
+        params_diff = collect_product_params(gmm_params_diff, bar_params_diff)
 
-        # samples_target = dataset_sample_gmm(n, bounds_inner[0], bounds_inner[1])
-        # experiment_param = {
-        #     "ebm_hmc": (params_ebm, True, "HMC", True, None),
-        #     # "ebm_uhmc": (params_ebm, True, "UHMC", False, None),
-        #     # "ebm_ula": (params_ebm, True, "ULA", False, None),
-        #     # "ebm_mala": (params_ebm, True, "MALA", False, None),
-        #     # "diff_hmc4eff": (params_diff, False, "effective", False, None),
-        #     "diff_hmc3": (params_diff, False, "HMC", True, 3),
-        #     # "diff_hmc5": (params_diff, False, "HMC", False, 5),
-        #     # "diff_hmc10": (params_diff, False, "HMC", False, 10),
-        #     # "diff_uhmc": (params_diff, False, "UHMC", False, None),
-        #     # "diff_ula": (params_diff, False, "ULA", False, None),
-        #     # "diff_mala3": (params_diff, False, "MALA", False, 3),
-        #     # "diff_mala5": (params_diff, False, "MALA", False, 5),
-        #     # "diff_mala10": (params_diff, False, "MALA", False, 10),
-        # }
+        samples_target = dataset_sample_gmm(n, bounds_inner[0], bounds_inner[1])
+        experiment_param = {
+            "ebm_hmc": (params_ebm, True, "HMC", True, None),
+            "ebm_uhmc": (params_ebm, True, "UHMC", False, None),
+            "ebm_ula": (params_ebm, True, "ULA", False, None),
+            "ebm_mala": (params_ebm, True, "MALA", False, None),
+            "diff_hmc4eff": (params_diff, False, "effective", False, None),
+            "diff_hmc3": (params_diff, False, "HMC", True, 3),
+            "diff_hmc5": (params_diff, False, "HMC", False, 5),
+            "diff_hmc10": (params_diff, False, "HMC", False, 10),
+            "diff_uhmc": (params_diff, False, "UHMC", False, None),
+            "diff_ula": (params_diff, False, "ULA", False, None),
+            "diff_mala3": (params_diff, False, "MALA", False, 3),
+            "diff_mala5": (params_diff, False, "MALA", False, 5),
+            "diff_mala10": (params_diff, False, "MALA", False, 10),
+        }
 
-        # # results = dict()
-        # samples_dict = dict()
-        # samples_dict["target"] = samples_target
-        # # samples_dict = pickle.load(open(file_samples, "rb"))
+        # results = dict()
+        samples_dict = dict()
+        samples_dict["target"] = samples_target
+        # samples_dict = pickle.load(open(file_samples, "rb"))
 
-        # for name, param in experiment_param.items():
-        #     print(f"Sampling with {name}")
-        #     model_param, ebm, sampler, grad, n_trapets = param
-        #     samples, grad_sample, _ = sampling_product_distribution(
-        #         model_param,
-        #         ebm=ebm,
-        #         sampler=sampler,
-        #         grad=grad,
-        #         n_trapets=n_trapets,
-        #         seed=args.seed,
-        #     )
-        #     samples_dict[name] = samples
-        #     if grad:
-        #         samples_dict[name.split("_")[0] + "_reverse"] = grad_sample
+        for name, param in experiment_param.items():
+            print(f"Sampling with {name}")
+            model_param, ebm, sampler, grad, n_trapets = param
+            samples, grad_sample, _ = sampling_product_distribution(
+                model_param,
+                ebm=ebm,
+                sampler=sampler,
+                grad=grad,
+                n_trapets=n_trapets,
+                seed=args.seed,
+            )
+            samples_dict[name] = samples
+            if grad:
+                samples_dict[name.split("_")[0] + "_reverse"] = grad_sample
 
-        #     file_samples = (
-        #         args.exp_name / f"samples_{model_id}.p"
-        #     )  # File to save samples
-        #     print(f"Saving samples at {file_samples}")
-        #     pickle.dump(samples_dict, open(file_samples, "wb"))
+            file_samples = (
+                args.exp_name / f"samples_{model_id}.p"
+            )  # File to save samples
+            print(f"Saving samples at {file_samples}")
+            pickle.dump(samples_dict, open(file_samples, "wb"))
 
 
 def train_single_model(
@@ -427,7 +422,11 @@ def sampling_product_distribution(
         # Samples from MCMC
         # plt.scatter(x_samp[:, 0], x_samp[:, 1], color="green", alpha=0.5)
 
-        rng_seq = hk.PRNGSequence(seed)
+        if seed is not None:
+            rng_seq = hk.PRNGSequence(seed)
+        else:
+            rand_seed = randint(0, 9999)
+            rng_seq = hk.PRNGSequence(jax.random.PRNGKey(rand_seed))
         grad_sample = None
         if grad:
             grad_sample = dual_product_sample_fn(

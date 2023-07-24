@@ -12,8 +12,8 @@ see `Pipfile` for the requirements.
 
 ```
 # Get the source code
-git clone git@github.com:jackonelli/post_lin_smooth.git
-cd post_lin_smooth
+git clone git@github.com:jackonelli/mcmc_corr_score_diffusion.git
+cd mcmc_corr_score_diffusion
 # Start a shell with a python virtual env. with the needed deps.
 pipenv shell
 ```
@@ -25,7 +25,8 @@ To reproduce the results in table 1, run
 ```
 # Train models and generate samples.
 python src/train_script_product.py --exp_name=<SAVE_DIR> --num_retrains=5
-python src/compute_metrics_product.py.py --exp_name=<SAVE_DIR> --num_retrains=5
+# Compute metrics
+python src/compute_metrics_product.py.py --samples_path=<SAVE_DIR>
 ```
 
-See script for more details.
+See scripts for more details.
