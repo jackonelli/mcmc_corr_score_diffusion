@@ -14,11 +14,10 @@ matplotlib="*"
 pandas="*"
 tensorflow="*"
 tensorflow_datasets="*"
-ipykernel = "*"
-torch = "*"
 scikit-learn = "*"
 
 [dev-packages]
+ipykernel = "*"
 pytest = "*"
 pylint = "*"
 black = "*"
