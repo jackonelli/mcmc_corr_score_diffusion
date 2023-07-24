@@ -165,29 +165,6 @@ class NegationEBMDiffusionModel(hk.Module):
         return hk.grad(neg_logp_unnorm)(x)
 
 
-class Tmp(hk.Module):
-    def __init__(self, w, name=None):
-        super().__init__(name=name)
-        self.w = w
-
-    def forward(self, x):
-        return jnp.array([jnp.exp(self.w[0] * x[0]), jnp.exp(self.w[1] * x[1])])
-
-
-def init_tmp():
-    tmp = Tmp(jnp.array([2.0, 3.0]))
-    return None, (tmp.forward,)
-
-
-def tmp_transform():
-    tmp_fn = hk.multi_transform(init_tmp).apply
-
-    def tmp_p(x):
-        return tmp_fn[0](None, None, x)
-
-    return tmp_p
-
-
 # Simple diffusion model training
 class PortableDiffusionModel(hk.Module):
     """Basic Diffusion Model."""

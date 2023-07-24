@@ -62,7 +62,7 @@ def main():
 
     # Get models (train new model or load from file) - energy and score param
     print("Getting model params")
-    for model_id in range(3, args.num_retrains + 2):
+    for model_id in range(1, args.num_retrains + 1):
         print(f"Model {model_id}/{args.num_retrains}")
         param_path = args.exp_name / f"params_energy_gmm_{model_id}.p"
         gmm_params_ebm = train_single_model(
