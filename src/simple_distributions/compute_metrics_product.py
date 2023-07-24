@@ -7,7 +7,7 @@ import pickle
 from pathlib import Path
 import numpy as np
 
-from reduce_reuse_recycle.toy_examples.simple_distributions.metrics import (
+from src.simple_distributions.metrics import (
     gmm_metric,
     wasserstein_metric,
     ll_prod_metric,
@@ -19,7 +19,8 @@ def main():
     gmm_metrics = dict()
     w2_metrics = dict()
     ll_metrics = dict()
-    for sample_file in args.samples_path.glob("samples*.p"):
+    sample_files = args.samples_path.glob("samples*.p")
+    for sample_file in sample_files:
         samples = pickle.load(open(sample_file, "rb"))
         # True data distribution
         target = samples["target"]

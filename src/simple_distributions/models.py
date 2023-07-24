@@ -1,68 +1,204 @@
-import numpy as np
-
 import jax
 import jax.numpy as jnp
 import haiku as hk
 import distrax
 import chex
+import numpy as np
+import optax
+import matplotlib.pyplot as plt
+import time
+import tensorflow as tf
+import tensorflow_datasets as tfds
+import functools
+import pandas as pd
+from src.simple_distributions.utils import extract, cosine_beta_schedule
 
-from toy_examples.utils import cosine_beta_schedule, extract
+# Use a EBM formulation of likelihod vs a score formulation of likelihood
+ebm = True
+
+# Number of diffusion timesteps to train
+n_steps = 100
+data_dim = 2
+
+rng_seq = hk.PRNGSequence(0)
+seed = next(rng_seq)
 
 
-def bar(scale=0.2):
-    """Ring of 2D Gaussians. Returns energy and sample functions."""
+# Define a simple MLP Diffusion Model
+class ResnetDiffusionModel(hk.Module):
+    """Resnet score model.
 
-    def nll(_x):
-        return 1
+    Adds embedding for each scale after each linear layer.
+    """
 
-    def sample(n_samples):
-        data = np.random.uniform(-1, 1, (n_samples, 2))
-        data[:, 0] = data[:, 0] * scale
+    def __init__(
+        self,
+        n_steps,
+        n_layers,
+        x_dim,
+        h_dim,
+        emb_dim,
+        widen=2,
+        emb_type="learned",
+        name=None,
+    ):
+        assert emb_type in ("learned", "sinusoidal")
+        super().__init__(name=name)
+        self._n_layers = n_layers
+        self._n_steps = n_steps
+        self._x_dim = x_dim
+        self._h_dim = h_dim
+        self._emb_dim = emb_dim
+        self._widen = widen
+        self._emb_type = emb_type
 
-        return data
+    def __call__(self, x, t):
 
-    return nll, sample
+        x = jnp.atleast_2d(x)
+        t = jnp.atleast_1d(t)
+
+        chex.assert_shape(x, (None, self._x_dim))
+        chex.assert_shape(t, (None,))
+        chex.assert_type([x, t], [jnp.float32, jnp.int64])
+
+        if self._emb_type == "learned":
+            emb = hk.Embed(self._n_steps, self._emb_dim)(t)
+        else:
+            emb = timestep_embedding(t, self._emb_dim)
+
+        x = hk.Linear(self._h_dim)(x)
+
+        for _ in range(self._n_layers):
+            # get layers and embeddings
+            layer_h = hk.Linear(self._h_dim * self._widen)
+            layer_emb = hk.Linear(self._h_dim * self._widen)
+            layer_int = hk.Linear(self._h_dim * self._widen)
+            layer_out = hk.Linear(self._h_dim, w_init=jnp.zeros)
+
+            h = hk.LayerNorm(-1, True, True)(x)
+            h = jax.nn.swish(h)
+            h = layer_h(h)
+            h += layer_emb(emb)
+            h = jax.nn.swish(h)
+            h = layer_int(h)
+            h = jax.nn.swish(h)
+            h = layer_out(h)
+            x += h
+
+        x = hk.Linear(self._x_dim, w_init=jnp.zeros)(x)
+        chex.assert_shape(x, (None, self._x_dim))
+        return x
 
 
-def toy_gmm(n_comp=8, std=0.075, radius=0.5):
-    """Ring of 2D Gaussians. Returns energy and sample functions."""
+# Define a energy diffusion model (wrapper around a normal diffusion model)
+class EBMDiffusionModel(hk.Module):
+    """EBM parameterization on top of score model.
 
-    means_x = np.cos(2 * np.pi * np.linspace(0, (n_comp - 1) / n_comp, n_comp)).reshape(
-        n_comp, 1, 1, 1
-    )
-    means_y = np.sin(2 * np.pi * np.linspace(0, (n_comp - 1) / n_comp, n_comp)).reshape(
-        n_comp, 1, 1, 1
-    )
-    mean = radius * np.concatenate((means_x, means_y), axis=1)
-    weights = np.ones(n_comp) / n_comp
+    Adds embedding for each scale after each linear layer.
+    """
 
-    def nll(x):
-        means = jnp.array(mean.reshape((-1, 1, 2)))
-        c = np.log(n_comp * 2 * np.pi * std ** 2)
-        f = (
-            jax.nn.logsumexp(
-                jnp.sum(-0.5 * jnp.square((x - means) / std), axis=2), axis=0
-            )
-            + c
-        )
-        # f = f + np.log(2)
+    def __init__(self, net, name=None):
+        super().__init__(name=name)
+        self.net = net
 
-        return f
+    def neg_logp_unnorm(self, x, t):
+        score = self.net(x, t)
+        return ((score - x) ** 2).sum(-1)
 
-    def sample(n_samples):
-        toy_sample = np.zeros(0).reshape((0, 2, 1, 1))
-        sample_group_sz = np.random.multinomial(n_samples, weights)
-        for i in range(n_comp):
-            sample_group = mean[i] + std * np.random.randn(
-                2 * sample_group_sz[i]
-            ).reshape(-1, 2, 1, 1)
-            toy_sample = np.concatenate((toy_sample, sample_group), axis=0)
-            np.random.shuffle(toy_sample)
-        data = toy_sample[:, :, 0, 0]
+    def __call__(self, x, t):
+        neg_logp_unnorm = lambda _x: self.neg_logp_unnorm(_x, t).sum()
+        return hk.grad(neg_logp_unnorm)(x)
 
-        return data
 
-    return nll, sample
+# Define how to multiply two different EBM distributions together
+class ProductEBMDiffusionModel(hk.Module):
+    """EBM where we compose two distributions together.
+
+    Add the energy value together
+    """
+
+    def __init__(self, net, net2, name=None):
+        super().__init__(name=name)
+        self.net = net
+        self.net2 = net2
+
+    def neg_logp_unnorm(self, x, t):
+        unorm_1 = self.net.neg_logp_unnorm(x, t)
+        unorm_2 = self.net2.neg_logp_unnorm(x, t)
+        return unorm_1 + unorm_2
+
+    def __call__(self, x, t):
+        score = self.net(x, t) + self.net2(x, t)
+        return score
+
+
+# Define how to add two different EBM distributions
+class MixtureEBMDiffusionModel(hk.Module):
+    """EBM where we compose two distributions together.
+
+    Take the logsumexp of the energies
+    """
+
+    def __init__(self, net, net2, name=None):
+        super().__init__(name=name)
+        self.net = net
+        self.net2 = net2
+
+    def neg_logp_unnorm(self, x, t):
+        unorm_1 = self.net.neg_logp_unnorm(x, t)
+        unorm_2 = self.net2.neg_logp_unnorm(x, t)
+        concat_energy = jnp.stack([unorm_1, unorm_2], axis=-1)
+        energy = -jax.scipy.special.logsumexp(-concat_energy * 3.5, -1)
+
+        return energy
+
+    def __call__(self, x, t):
+        neg_logp_unnorm = lambda _x: self.neg_logp_unnorm(_x, t).sum()
+        return hk.grad(neg_logp_unnorm)(x)
+
+
+class NegationEBMDiffusionModel(hk.Module):
+    """EBM where we compose two distributions together.
+
+    Negate one distribution
+    """
+
+    def __init__(self, net, net2, name=None):
+        super().__init__(name=name)
+        self.net = net
+        self.net2 = net2
+
+    def neg_logp_unnorm(self, x, t):
+        unorm_1 = self.net.neg_logp_unnorm(x, t)
+        unorm_2 = self.net2.neg_logp_unnorm(x, t)
+        return 1.3 * unorm_1 - 0.3 * unorm_2
+
+    def __call__(self, x, t):
+        neg_logp_unnorm = lambda _x: self.neg_logp_unnorm(_x, t).sum()
+        return hk.grad(neg_logp_unnorm)(x)
+
+
+class Tmp(hk.Module):
+    def __init__(self, w, name=None):
+        super().__init__(name=name)
+        self.w = w
+
+    def forward(self, x):
+        return jnp.array([jnp.exp(self.w[0] * x[0]), jnp.exp(self.w[1] * x[1])])
+
+
+def init_tmp():
+    tmp = Tmp(jnp.array([2.0, 3.0]))
+    return None, (tmp.forward,)
+
+
+def tmp_transform():
+    tmp_fn = hk.multi_transform(init_tmp).apply
+
+    def tmp_p(x):
+        return tmp_fn[0](None, None, x)
+
+    return tmp_p
 
 
 # Simple diffusion model training
@@ -336,7 +472,22 @@ class PortableDiffusionModel(hk.Module):
         logpx = -(kls + e) * self._dim * self._n_steps
         return {"logpx": logpx}
 
-    def sample(self, n, clip=jnp.inf):
+    def p_sample_ho(self, x, t, rng_key=None, clip=jnp.inf):
+        x_t = x
+        betas_t = extract(self._betas, t, x.shape)
+        alphas_t = extract(self._alphas, t, x.shape)
+        alphas_bar_t = extract(self._alphas_cumprod, t, x.shape)
+        posterior_variance_t = extract(self._posterior_variance, t, x.shape)
+
+        z = jax.random.normal(rng_key, x.shape) * (jnp.mean(t) > 0)
+
+        pred_noise = self.forward(x, t)
+        xtm1 = (x_t - betas_t * pred_noise / jnp.sqrt(1.0 - alphas_bar_t)) / jnp.sqrt(
+            alphas_t
+        ) + jnp.sqrt(posterior_variance_t) * z
+        return xtm1
+
+    def sample(self, n, clip=jnp.inf, ho_implement=True):
         """Sample from p(x)."""
         chex.assert_type(n, int)
         rng_key = hk.next_rng_key()
@@ -349,7 +500,10 @@ class PortableDiffusionModel(hk.Module):
             rng_key, r = jax.random.split(rng_key)
             j = self._n_steps - 1 - i
             t = jnp.ones((n,), dtype=jnp.int64) * j
-            x = self.p_sample(x, t, rng_key=r, clip=clip)
+            if ho_implement:
+                x = self.p_sample_ho(x, t, rng_key=r, clip=clip)
+            else:
+                x = self.p_sample(x, t, rng_key=r, clip=clip)
             return rng_key, x
 
         x = hk.fori_loop(0, self._n_steps, body_fn, (rng_key, x))[1]
@@ -427,3 +581,120 @@ class PortableDiffusionModel(hk.Module):
         )
 
         return energy
+
+
+def forward_fn_product():
+    net_one = ResnetDiffusionModel(
+        n_steps=n_steps, n_layers=4, x_dim=data_dim, h_dim=128, emb_dim=32
+    )
+
+    if ebm:
+        net_one = EBMDiffusionModel(net_one)
+
+    net_two = ResnetDiffusionModel(
+        n_steps=n_steps, n_layers=4, x_dim=data_dim, h_dim=128, emb_dim=32
+    )
+
+    if ebm:
+        net_two = EBMDiffusionModel(net_two)
+
+    dual_net = ProductEBMDiffusionModel(net_one, net_two)
+    ddpm = PortableDiffusionModel(data_dim, n_steps, dual_net, var_type="beta_forward")
+
+    def logp_unnorm(x, t):
+        scale_e = ddpm.energy_scale(-2 - t)
+        t = jnp.ones((x.shape[0],), dtype=jnp.int32) * t
+        return -dual_net.neg_logp_unnorm(x, t) * scale_e
+
+    def _logpx(x):
+        return ddpm.logpx(x)["logpx"]
+
+    if ebm:
+        return ddpm.loss, (
+            ddpm.loss,
+            ddpm.sample,
+            _logpx,
+            logp_unnorm,
+            ddpm.p_gradient,
+            ddpm.p_energy,
+        )
+    else:
+        return ddpm.loss, (ddpm.loss, ddpm.sample, _logpx, logp_unnorm, ddpm.p_gradient)
+
+
+def forward_fn_mixture():
+    net_one = ResnetDiffusionModel(
+        n_steps=n_steps, n_layers=4, x_dim=data_dim, h_dim=128, emb_dim=32
+    )
+
+    if ebm:
+        net_one = EBMDiffusionModel(net_one)
+
+    net_two = ResnetDiffusionModel(
+        n_steps=n_steps, n_layers=4, x_dim=data_dim, h_dim=128, emb_dim=32
+    )
+
+    if ebm:
+        net_two = EBMDiffusionModel(net_two)
+
+    dual_net = MixtureEBMDiffusionModel(net_one, net_two)
+    ddpm = PortableDiffusionModel(data_dim, n_steps, dual_net, var_type="beta_forward")
+
+    def logp_unnorm(x, t):
+        scale_e = ddpm.energy_scale(-2 - t)
+        t = jnp.ones((x.shape[0],), dtype=jnp.int32) * t
+        return -dual_net.neg_logp_unnorm(x, t) * scale_e
+
+    def _logpx(x):
+        return ddpm.logpx(x)["logpx"]
+
+    if ebm:
+        return ddpm.loss, (
+            ddpm.loss,
+            ddpm.sample,
+            _logpx,
+            logp_unnorm,
+            ddpm.p_gradient,
+            ddpm.p_energy,
+        )
+    else:
+        return ddpm.loss, (ddpm.loss, ddpm.sample, _logpx, logp_unnorm, ddpm.p_gradient)
+
+
+def forward_fn_negation():
+    net_one = ResnetDiffusionModel(
+        n_steps=n_steps, n_layers=4, x_dim=data_dim, h_dim=128, emb_dim=32
+    )
+
+    if ebm:
+        net_one = EBMDiffusionModel(net_one)
+
+    net_two = ResnetDiffusionModel(
+        n_steps=n_steps, n_layers=4, x_dim=data_dim, h_dim=128, emb_dim=32
+    )
+
+    if ebm:
+        net_two = EBMDiffusionModel(net_two)
+
+    dual_net = NegationEBMDiffusionModel(net_one, net_two)
+    ddpm = PortableDiffusionModel(data_dim, n_steps, dual_net, var_type="beta_forward")
+
+    def logp_unnorm(x, t):
+        scale_e = ddpm.energy_scale(-2 - t)
+        t = jnp.ones((x.shape[0],), dtype=jnp.int32) * t
+        return -dual_net.neg_logp_unnorm(x, t) * scale_e
+
+    def _logpx(x):
+        return ddpm.logpx(x)["logpx"]
+
+    if ebm:
+        return ddpm.loss, (
+            ddpm.loss,
+            ddpm.sample,
+            _logpx,
+            logp_unnorm,
+            ddpm.p_gradient,
+            ddpm.p_energy,
+        )
+    else:
+        return ddpm.loss, (ddpm.loss, ddpm.sample, _logpx, logp_unnorm, ddpm.p_gradient)

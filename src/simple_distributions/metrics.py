@@ -5,7 +5,7 @@ import numpy as np
 from sklearn.mixture import GaussianMixture
 from scipy.spatial.distance import cdist
 from scipy.optimize import linear_sum_assignment
-from reduce_reuse_recycle.toy_examples.simple_distributions.datasets import toy_gmm, bar
+from src.simple_distributions.datasets import toy_gmm, bar
 
 
 def prob_gmm_independent_uniform(means, sigmas, bounds, weights=None):

@@ -19,17 +19,18 @@ import optax
 from scipy.spatial.distance import cdist
 from scipy.optimize import linear_sum_assignment
 import matplotlib.pyplot as plt
-from reduce_reuse_recycle.toy_examples.simple_distributions.metrics import (
+
+from src.simple_distributions.metrics import (
     compute_normalizing_constant,
 )
-from reduce_reuse_recycle.toy_examples.simple_distributions.datasets import toy_gmm, bar
-from reduce_reuse_recycle.toy_examples.simple_distributions.models import (
+from src.simple_distributions.datasets import toy_gmm, bar
+from src.simple_distributions.models import (
     ResnetDiffusionModel,
     EBMDiffusionModel,
     PortableDiffusionModel,
     ProductEBMDiffusionModel,
 )
-from reduce_reuse_recycle.toy_examples.simple_distributions.sampler import (
+from src.simple_distributions.sampler import (
     AnnealedMUHASampler,
     AnnealedMUHADiffSampler,
     AnnealedULASampler,

@@ -11,8 +11,8 @@ import distrax
 import chex
 import optax
 
-from toy_examples.utils import timestep_embedding
-from toy_examples.train import toy_gmm, PortableDiffusionModel
+from src.utils import timestep_embedding
+from src.train import toy_gmm, PortableDiffusionModel
 
 
 # Define a energy diffusion model (wrapper around a normal diffusion model)
