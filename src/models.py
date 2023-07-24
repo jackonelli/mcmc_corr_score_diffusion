@@ -165,7 +165,6 @@ class NegationEBMDiffusionModel(hk.Module):
         return hk.grad(neg_logp_unnorm)(x)
 
 
-# Simple diffusion model training
 class PortableDiffusionModel(hk.Module):
     """Basic Diffusion Model."""
 
@@ -545,3 +544,72 @@ class PortableDiffusionModel(hk.Module):
         )
 
         return energy
+
+
+def forward_fn(n_steps, ebm=True):
+    """JAX forward function for single model"""
+    net = ResnetDiffusionModel(
+        n_steps=n_steps, n_layers=4, x_dim=DATA_DIM, h_dim=128, emb_dim=32
+    )
+
+    if ebm:
+        net = EBMDiffusionModel(net)
+
+    ddpm = PortableDiffusionModel(DATA_DIM, n_steps, net, var_type="beta_forward")
+
+    def logp_unnorm(x, t):
+        scale_e = ddpm.energy_scale(-2 - t)
+        t = jnp.ones((x.shape[0],), dtype=jnp.int32) * t
+        return -net.neg_logp_unnorm(x, t) * scale_e
+
+    def _logpx(x):
+        return ddpm.logpx(x)["logpx"]
+
+    return ddpm.loss, (ddpm.loss, ddpm.sample, _logpx, logp_unnorm)
+
+
+def forward_fn_product(n_steps, ebm=True):
+    """JAX forward function for product model"""
+    net_one = ResnetDiffusionModel(
+        n_steps=n_steps, n_layers=4, x_dim=DATA_DIM, h_dim=128, emb_dim=32
+    )
+
+    if ebm:
+        net_one = EBMDiffusionModel(net_one)
+
+    net_two = ResnetDiffusionModel(
+        n_steps=n_steps, n_layers=4, x_dim=DATA_DIM, h_dim=128, emb_dim=32
+    )
+
+    if ebm:
+        net_two = EBMDiffusionModel(net_two)
+
+    dual_net = ProductEBMDiffusionModel(net_one, net_two)
+    ddpm = PortableDiffusionModel(DATA_DIM, n_steps, dual_net, var_type="beta_forward")
+
+    def logp_unnorm(x, t):
+        scale_e = ddpm.energy_scale(-2 - t)
+        t = jnp.ones((x.shape[0],), dtype=jnp.int32) * t
+        return -dual_net.neg_logp_unnorm(x, t) * scale_e
+
+    def _logpx(x):
+        return ddpm.logpx(x)["logpx"]
+
+    if ebm:
+        return ddpm.loss, (
+            ddpm.loss,
+            ddpm.sample,
+            _logpx,
+            logp_unnorm,
+            ddpm.p_gradient,
+            ddpm.p_energy,
+        )
+    else:
+        return ddpm.loss, (
+            ddpm.loss,
+            ddpm.sample,
+            _logpx,
+            logp_unnorm,
+            ddpm.p_gradient,
+            ddpm.p_gradient,
+        )

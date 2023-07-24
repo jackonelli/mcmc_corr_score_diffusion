@@ -20,10 +20,8 @@ import matplotlib.pyplot as plt
 
 from src.datasets import toy_gmm, bar
 from src.models import (
-    ResnetDiffusionModel,
-    EBMDiffusionModel,
-    PortableDiffusionModel,
-    ProductEBMDiffusionModel,
+    forward_fn,
+    forward_fn_product,
 )
 from src.sampler import (
     AnnealedMUHASampler,
@@ -169,9 +167,9 @@ def train_single_model(
         params = pickle.load(open(load_param, "rb"))
         return params
 
-    partial_forward_fn = partial(forward_fn, ebm)
-
+    partial_forward_fn = partial(forward_fn, n_steps=N_STEPS, ebm=ebm)
     forward = hk.multi_transform(partial_forward_fn)
+
     if seed is not None:
         rng_seq = hk.PRNGSequence(seed)
     else:
@@ -262,7 +260,7 @@ def train_single_model(
 def sampling_product_distribution(
     params, ebm=True, sampler="HMC", n_trapets=5, grad=False, batch_size=2000, seed=None
 ):
-    partial_forward_fn_product = partial(forward_fn_product, ebm)
+    partial_forward_fn_product = partial(forward_fn_product, n_steps=N_STEPS, ebm=ebm)
     forward_product = hk.multi_transform(partial_forward_fn_product)
     if seed is not None:
         rng_seq = hk.PRNGSequence(seed)
@@ -297,7 +295,6 @@ def sampling_product_distribution(
     # Sampling from product of distributions
     dim = 2
     n_mode = 4
-    std = 0.05
     init_std = 1.0
     init_mu = 0.0
     n_steps = 10
@@ -309,9 +306,6 @@ def sampling_product_distribution(
     ula_step_size = 0.001
 
     means = jax.random.normal(next(rng_seq), (n_mode, dim))
-    comp_dists = distrax.MultivariateNormalDiag(means, jnp.ones_like(means) * std)
-    pi = distrax.Categorical(logits=jnp.zeros((n_mode,)))
-    target_dist = distrax.MixtureSameFamily(pi, comp_dists)
     initial_dist = distrax.MultivariateNormalDiag(
         means[0] * 0 + init_mu, init_std * jnp.ones_like(means[0])
     )
@@ -329,8 +323,6 @@ def sampling_product_distribution(
     for n_steps in n_stepss:
         ula_step_sizes = jnp.ones((n_steps,)) * ula_step_size
         uha_step_sizes = jnp.ones((n_steps,)) * uha_step_size
-
-        betas = jnp.linspace(0.0, 1.0, n_steps)
 
         if sampler == "HMC":
             if ebm:
@@ -439,73 +431,6 @@ def sampling_product_distribution(
         # plt.show()
 
         return x_samp, grad_sample, accept
-
-
-def forward_fn(ebm=True):
-    net = ResnetDiffusionModel(
-        n_steps=N_STEPS, n_layers=4, x_dim=DATA_DIM, h_dim=128, emb_dim=32
-    )
-
-    if ebm:
-        net = EBMDiffusionModel(net)
-
-    ddpm = PortableDiffusionModel(DATA_DIM, N_STEPS, net, var_type="beta_forward")
-
-    def logp_unnorm(x, t):
-        scale_e = ddpm.energy_scale(-2 - t)
-        t = jnp.ones((x.shape[0],), dtype=jnp.int32) * t
-        return -net.neg_logp_unnorm(x, t) * scale_e
-
-    def _logpx(x):
-        return ddpm.logpx(x)["logpx"]
-
-    return ddpm.loss, (ddpm.loss, ddpm.sample, _logpx, logp_unnorm)
-
-
-def forward_fn_product(ebm=True):
-    net_one = ResnetDiffusionModel(
-        n_steps=N_STEPS, n_layers=4, x_dim=DATA_DIM, h_dim=128, emb_dim=32
-    )
-
-    if ebm:
-        net_one = EBMDiffusionModel(net_one)
-
-    net_two = ResnetDiffusionModel(
-        n_steps=N_STEPS, n_layers=4, x_dim=DATA_DIM, h_dim=128, emb_dim=32
-    )
-
-    if ebm:
-        net_two = EBMDiffusionModel(net_two)
-
-    dual_net = ProductEBMDiffusionModel(net_one, net_two)
-    ddpm = PortableDiffusionModel(DATA_DIM, N_STEPS, dual_net, var_type="beta_forward")
-
-    def logp_unnorm(x, t):
-        scale_e = ddpm.energy_scale(-2 - t)
-        t = jnp.ones((x.shape[0],), dtype=jnp.int32) * t
-        return -dual_net.neg_logp_unnorm(x, t) * scale_e
-
-    def _logpx(x):
-        return ddpm.logpx(x)["logpx"]
-
-    if ebm:
-        return ddpm.loss, (
-            ddpm.loss,
-            ddpm.sample,
-            _logpx,
-            logp_unnorm,
-            ddpm.p_gradient,
-            ddpm.p_energy,
-        )
-    else:
-        return ddpm.loss, (
-            ddpm.loss,
-            ddpm.sample,
-            _logpx,
-            logp_unnorm,
-            ddpm.p_gradient,
-            ddpm.p_gradient,
-        )
 
 
 def collect_product_params(gmm, bar):
