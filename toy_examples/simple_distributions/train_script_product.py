@@ -7,6 +7,7 @@ It then samples from these models with various MCMC methods.
 from argparse import ArgumentParser
 from functools import partial
 from pathlib import Path
+from random import randint
 import time
 import pickle
 import jax
@@ -88,6 +89,7 @@ def main():
             load_param=param_path if args.pre_trained else None,
             save_param=param_path,
             ebm=False,
+            seed=args.seed,
         )
 
         param_path = args.exp_name / f"params_energy_bar_{model_id}.p"
@@ -98,6 +100,7 @@ def main():
             load_param=param_path if args.pre_trained else None,
             save_param=param_path,
             ebm=True,
+            seed=args.seed,
         )
         param_path = args.exp_name / f"params_score_bar_{model_id}.p"
         bar_params_diff = train_single_model(
@@ -107,6 +110,7 @@ def main():
             load_param=param_path if args.pre_trained else None,
             save_param=param_path,
             ebm=False,
+            seed=args.seed,
         )
 
         print("Sampling from diffusion models")
@@ -117,18 +121,18 @@ def main():
         samples_target = dataset_sample_gmm(n, bounds_inner[0], bounds_inner[1])
         experiment_param = {
             "ebm_hmc": (params_ebm, True, "HMC", True, None),
-            "ebm_uhmc": (params_ebm, True, "UHMC", False, None),
-            "ebm_ula": (params_ebm, True, "ULA", False, None),
-            "ebm_mala": (params_ebm, True, "MALA", False, None),
-            "diff_hmc4eff": (params_diff, False, "effective", False, None),
+            # "ebm_uhmc": (params_ebm, True, "UHMC", False, None),
+            # "ebm_ula": (params_ebm, True, "ULA", False, None),
+            # "ebm_mala": (params_ebm, True, "MALA", False, None),
+            # "diff_hmc4eff": (params_diff, False, "effective", False, None),
             "diff_hmc3": (params_diff, False, "HMC", True, 3),
-            "diff_hmc5": (params_diff, False, "HMC", False, 5),
-            "diff_hmc10": (params_diff, False, "HMC", False, 10),
-            "diff_uhmc": (params_diff, False, "UHMC", False, None),
-            "diff_ula": (params_diff, False, "ULA", False, None),
-            "diff_mala3": (params_diff, False, "MALA", False, 3),
-            "diff_mala5": (params_diff, False, "MALA", False, 5),
-            "diff_mala10": (params_diff, False, "MALA", False, 10),
+            # "diff_hmc5": (params_diff, False, "HMC", False, 5),
+            # "diff_hmc10": (params_diff, False, "HMC", False, 10),
+            # "diff_uhmc": (params_diff, False, "UHMC", False, None),
+            # "diff_ula": (params_diff, False, "ULA", False, None),
+            # "diff_mala3": (params_diff, False, "MALA", False, 3),
+            # "diff_mala5": (params_diff, False, "MALA", False, 5),
+            # "diff_mala10": (params_diff, False, "MALA", False, 10),
         }
 
         # results = dict()
@@ -178,7 +182,8 @@ def train_single_model(
     if seed is not None:
         rng_seq = hk.PRNGSequence(seed)
     else:
-        rng_seq = hk.PRNGSequence(jax.random.PRNGKey)
+        rand_seed = randint(0, 9999)
+        rng_seq = hk.PRNGSequence(jax.random.PRNGKey(rand_seed))
 
     x = dataset_sample(batch_size)
 
@@ -269,7 +274,8 @@ def sampling_product_distribution(
     if seed is not None:
         rng_seq = hk.PRNGSequence(seed)
     else:
-        rng_seq = hk.PRNGSequence(jax.random.PRNGKey)
+        rand_seed = randint(0, 9999)
+        rng_seq = hk.PRNGSequence(jax.random.PRNGKey(rand_seed))
 
     if ebm:
         (
@@ -421,7 +427,7 @@ def sampling_product_distribution(
 
         x_samp, logw, accept = sampler.sample(next(rng_seq), batch_size)
         # Samples from MCMC
-        plt.scatter(x_samp[:, 0], x_samp[:, 1], color="green", alpha=0.5)
+        # plt.scatter(x_samp[:, 0], x_samp[:, 1], color="green", alpha=0.5)
 
         rng_seq = hk.PRNGSequence(seed)
         grad_sample = None
@@ -431,9 +437,9 @@ def sampling_product_distribution(
             )
 
             # Samples from adding score functions
-            plt.scatter(grad_sample[:, 0], grad_sample[:, 1], color="blue", alpha=0.5)
+            # plt.scatter(grad_sample[:, 0], grad_sample[:, 1], color="blue", alpha=0.5)
 
-        plt.show()
+        # plt.show()
 
         return x_samp, grad_sample, accept
 
@@ -538,7 +544,7 @@ def parse_args():
     parser.add_argument("--pre_trained", action="store_true")
     parser.add_argument("--num_training_steps", default=15001, type=int)
     parser.add_argument("--num_retrains", default=1, type=int)
-    parser.add_argument("--seed", default=0)
+    parser.add_argument("--seed", type=int)
     return parser.parse_args()
 
 
