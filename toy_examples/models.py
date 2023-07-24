@@ -11,7 +11,7 @@ import distrax
 import chex
 import optax
 
-# from toy_examples.utils import timestep_embedding
+from toy_examples.utils import timestep_embedding
 from toy_examples.train import toy_gmm, PortableDiffusionModel
 
 
@@ -69,10 +69,6 @@ def test():
     x_batch = jnp.array(dataset(batch_size))
     params = forward.init(next(rng_seq), x_batch)
     output_1 = forward.apply(params=params, x=x_batch, rng=rng_seq)
-    # t = jax.random.randint(hk.next_rng_key(), (x_batch.shape[0],), 0, n_steps)
-
-    # t = torch.ones((batch_size,))
-    # model(x_batch, t)
     print(type(x_batch))
 
 
