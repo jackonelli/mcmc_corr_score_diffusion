@@ -7,7 +7,7 @@ import pickle
 from pathlib import Path
 import numpy as np
 
-from src.simple_distributions.metrics import (
+from src.metrics import (
     gmm_metric,
     wasserstein_metric,
     ll_prod_metric,
@@ -21,6 +21,7 @@ def main():
     ll_metrics = dict()
     sample_files = args.samples_path.glob("samples*.p")
     for sample_file in sample_files:
+        print(f"Computing metrics for '{sample_file.name}'")
         samples = pickle.load(open(sample_file, "rb"))
         # True data distribution
         target = samples["target"]

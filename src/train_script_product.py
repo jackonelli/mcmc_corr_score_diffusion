@@ -20,17 +20,14 @@ from scipy.spatial.distance import cdist
 from scipy.optimize import linear_sum_assignment
 import matplotlib.pyplot as plt
 
-from src.simple_distributions.metrics import (
-    compute_normalizing_constant,
-)
-from src.simple_distributions.datasets import toy_gmm, bar
-from src.simple_distributions.models import (
+from src.datasets import toy_gmm, bar
+from src.models import (
     ResnetDiffusionModel,
     EBMDiffusionModel,
     PortableDiffusionModel,
     ProductEBMDiffusionModel,
 )
-from src.simple_distributions.sampler import (
+from src.sampler import (
     AnnealedMUHASampler,
     AnnealedMUHADiffSampler,
     AnnealedULASampler,
@@ -114,53 +111,53 @@ def main():
             seed=args.seed,
         )
 
-        print("Sampling from diffusion models")
+        # print("Sampling from diffusion models")
 
-        params_ebm = collect_product_params(gmm_params_ebm, bar_params_ebm)
-        params_diff = collect_product_params(gmm_params_diff, bar_params_diff)
+        # params_ebm = collect_product_params(gmm_params_ebm, bar_params_ebm)
+        # params_diff = collect_product_params(gmm_params_diff, bar_params_diff)
 
-        samples_target = dataset_sample_gmm(n, bounds_inner[0], bounds_inner[1])
-        experiment_param = {
-            "ebm_hmc": (params_ebm, True, "HMC", True, None),
-            # "ebm_uhmc": (params_ebm, True, "UHMC", False, None),
-            # "ebm_ula": (params_ebm, True, "ULA", False, None),
-            # "ebm_mala": (params_ebm, True, "MALA", False, None),
-            # "diff_hmc4eff": (params_diff, False, "effective", False, None),
-            "diff_hmc3": (params_diff, False, "HMC", True, 3),
-            # "diff_hmc5": (params_diff, False, "HMC", False, 5),
-            # "diff_hmc10": (params_diff, False, "HMC", False, 10),
-            # "diff_uhmc": (params_diff, False, "UHMC", False, None),
-            # "diff_ula": (params_diff, False, "ULA", False, None),
-            # "diff_mala3": (params_diff, False, "MALA", False, 3),
-            # "diff_mala5": (params_diff, False, "MALA", False, 5),
-            # "diff_mala10": (params_diff, False, "MALA", False, 10),
-        }
+        # samples_target = dataset_sample_gmm(n, bounds_inner[0], bounds_inner[1])
+        # experiment_param = {
+        #     "ebm_hmc": (params_ebm, True, "HMC", True, None),
+        #     # "ebm_uhmc": (params_ebm, True, "UHMC", False, None),
+        #     # "ebm_ula": (params_ebm, True, "ULA", False, None),
+        #     # "ebm_mala": (params_ebm, True, "MALA", False, None),
+        #     # "diff_hmc4eff": (params_diff, False, "effective", False, None),
+        #     "diff_hmc3": (params_diff, False, "HMC", True, 3),
+        #     # "diff_hmc5": (params_diff, False, "HMC", False, 5),
+        #     # "diff_hmc10": (params_diff, False, "HMC", False, 10),
+        #     # "diff_uhmc": (params_diff, False, "UHMC", False, None),
+        #     # "diff_ula": (params_diff, False, "ULA", False, None),
+        #     # "diff_mala3": (params_diff, False, "MALA", False, 3),
+        #     # "diff_mala5": (params_diff, False, "MALA", False, 5),
+        #     # "diff_mala10": (params_diff, False, "MALA", False, 10),
+        # }
 
-        # results = dict()
-        samples_dict = dict()
-        samples_dict["target"] = samples_target
-        # samples_dict = pickle.load(open(file_samples, "rb"))
+        # # results = dict()
+        # samples_dict = dict()
+        # samples_dict["target"] = samples_target
+        # # samples_dict = pickle.load(open(file_samples, "rb"))
 
-        for name, param in experiment_param.items():
-            print(f"Sampling with {name}")
-            model_param, ebm, sampler, grad, n_trapets = param
-            samples, grad_sample, _ = sampling_product_distribution(
-                model_param,
-                ebm=ebm,
-                sampler=sampler,
-                grad=grad,
-                n_trapets=n_trapets,
-                seed=args.seed,
-            )
-            samples_dict[name] = samples
-            if grad:
-                samples_dict[name.split("_")[0] + "_reverse"] = grad_sample
+        # for name, param in experiment_param.items():
+        #     print(f"Sampling with {name}")
+        #     model_param, ebm, sampler, grad, n_trapets = param
+        #     samples, grad_sample, _ = sampling_product_distribution(
+        #         model_param,
+        #         ebm=ebm,
+        #         sampler=sampler,
+        #         grad=grad,
+        #         n_trapets=n_trapets,
+        #         seed=args.seed,
+        #     )
+        #     samples_dict[name] = samples
+        #     if grad:
+        #         samples_dict[name.split("_")[0] + "_reverse"] = grad_sample
 
-            file_samples = (
-                args.exp_name / f"samples_{model_id}.p"
-            )  # File to save samples
-            print(f"Saving samples at {file_samples}")
-            pickle.dump(samples_dict, open(file_samples, "wb"))
+        #     file_samples = (
+        #         args.exp_name / f"samples_{model_id}.p"
+        #     )  # File to save samples
+        #     print(f"Saving samples at {file_samples}")
+        #     pickle.dump(samples_dict, open(file_samples, "wb"))
 
 
 def train_single_model(
@@ -541,10 +538,27 @@ def dist_show_2d(fn, xr, yr):
 
 def parse_args():
     parser = ArgumentParser(prog="train_script_product")
-    parser.add_argument("--exp_name", default=None, type=Path)
-    parser.add_argument("--pre_trained", action="store_true")
-    parser.add_argument("--num_training_steps", default=15001, type=int)
-    parser.add_argument("--num_retrains", default=1, type=int)
+    parser.add_argument(
+        "--exp_name",
+        default=None,
+        type=Path,
+        help="Directory to save parameters and samples to",
+    )
+    parser.add_argument(
+        "--pre_trained", action="store_true", help="If set, loads parameters from file."
+    )
+    parser.add_argument(
+        "--num_training_steps",
+        default=15001,
+        type=int,
+        help="Number of training steps during training of the diff. models.",
+    )
+    parser.add_argument(
+        "--num_retrains",
+        default=1,
+        type=int,
+        help="Number of repetitions of the experiment.",
+    )
     parser.add_argument("--seed", type=int)
     return parser.parse_args()
 
