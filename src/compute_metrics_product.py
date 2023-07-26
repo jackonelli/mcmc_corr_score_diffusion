@@ -36,19 +36,34 @@ def main():
 
             ll = ll_prod_metric(sample)
             add_metric(ll_metrics, name, ll)
-
+    save_metrics(ll_metrics, gmm_metrics, w2_metrics, args.samples_path)
     gmm_stats = stats(gmm_metrics)
     w2_stats = stats(w2_metrics)
     ll_stats = stats(ll_metrics)
     if args.tex:
         print_tex_table(comb_stats(ll_stats, w2_stats, gmm_stats))
-    else:
-        for metric_name, stats_dict in (
-            ("LL", ll_stats),
-            ("W_2", w2_stats),
-            ("GMM", gmm_stats),
-        ):
-            print_stats(stats_dict, metric_name)
+    for metric_name, stats_dict in (
+        ("LL", ll_stats),
+        ("W_2", w2_stats),
+        ("GMM", gmm_stats),
+    ):
+        print_stats(stats_dict, metric_name)
+
+
+def save_metrics(ll, gmm, w2, save_dir: Path):
+    """Save raw metrics to avoid recomputation"""
+    print(f"Saving metrics to '{save_dir}'")
+    save_dict = {}
+    save_dict["ll"] = ll
+    save_dict["gmm"] = gmm
+    save_dict["w2"] = w2
+    pickle.dump(save_dict, open(save_dir / "metrics.p", "wb"))
+
+
+def load_metrics(save_dir):
+    """Load already computed metrics"""
+    save_dict = pickle.load(open(save_dir / "metrics.p", "rb"))
+    return save_dict["ll"], save_dict["gmm"], save_dict["w2"]
 
 
 def print_stats(stats_dict, metric_name):
@@ -69,19 +84,19 @@ def comb_stats(ll, w2, gmm):
 
 def print_tex_table(stats_dict):
     """Helper function to generate a tex formatted table"""
-    print("EBM")
+    print("Energy")
     for name, (ll, w2, gmm) in stats_dict.items():
         if name == "target" or "diff" in name:
             continue
         print(
-            f"& {NAME_CONV[name]}\t\t & ${ll[0]:.2f} \\pm {ll[1]:.2f}$ & ${w2[0]:.2f} \\pm {w2[1]:.2f}$ & ${gmm[0]:.3f} \\pm {gmm[1]:.5f}$ \\\\"
+            f"& {NAME_CONV[name]}\t\t & ${ll[0]:.2f} \\pm {ll[1]:.2f}$ & ${w2[0]:.2f} \\pm {w2[1]:.2f}$ & ${gmm[0]:.5f} \\pm {gmm[1]:.5f}$ \\\\"
         )
     print("Diff")
     for name, (ll, w2, gmm) in stats_dict.items():
         if name == "target" or "ebm" in name:
             continue
         print(
-            f"& {NAME_CONV[name]}\t\t & ${ll[0]:.2f} \\pm {ll[1]:.2f}$ & ${w2[0]:.2f} \\pm {w2[1]:.2f}$ & ${gmm[0]:.3f} \\pm {gmm[1]:.5f}$ \\\\"
+            f"& {NAME_CONV[name]}\t\t & ${ll[0]:.2f} \\pm {ll[1]:.2f}$ & ${w2[0]:.2f} \\pm {w2[1]:.2f}$ & ${gmm[0]:.5f} \\pm {gmm[1]:.5f}$ \\\\"
         )
 
 

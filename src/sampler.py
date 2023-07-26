@@ -1,10 +1,8 @@
+"""MCMC samplers"""
 from functools import partial
 import jax
 import jax.numpy as jnp
 import distrax
-import matplotlib.pyplot as plt
-import tensorflow as tf
-import tensorflow_datasets as tfds
 from jax import jvp
 import jax
 import jax.numpy as jnp
