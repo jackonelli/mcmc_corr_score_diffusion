@@ -1,4 +1,4 @@
-name: image_tds
+name: mcmc_corr
 channels:
   - nvidia
   - conda-forge
