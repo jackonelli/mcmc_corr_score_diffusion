@@ -43,6 +43,4 @@ class UNetInstantiation(unittest.TestCase):
         self.assertEqual(x.device, th.device("cpu"))
 
         out = model(x, ts)
-        self.assertEqual(
-            out.size(), th.Size((2, 2 * image_channels, image_size, image_size))
-        )
+        self.assertEqual(out.size(), th.Size((2, 2 * image_channels, image_size, image_size)))
