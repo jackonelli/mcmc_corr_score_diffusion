@@ -9,7 +9,10 @@ https://github.com/openai/guided-diffusion, which is under the MIT license
 from abc import abstractmethod
 
 import math
+from pathlib import Path
 from typing import Tuple
+import io
+import blobfile as bf
 
 import torch as th
 import torch.nn as nn
@@ -309,6 +312,12 @@ class UNetModel(nn.Module):
             h = module(h, emb)
         h = h.type(x.dtype)
         return self.out(h)
+
+    def load_state_dict(self, path: Path, map_location: str = "cpu"):
+        with bf.BlobFile(str(path), "rb") as f:
+            data = f.read()
+        state_dict = th.load(io.BytesIO(data), map_location)
+        super().load_state_dict(state_dict)
 
 
 class EncoderUNetModel(nn.Module):
@@ -915,3 +924,8 @@ class QKVAttention(nn.Module):
     @staticmethod
     def count_flops(model, _x, y):
         return count_flops_attn(model, _x, y)
+
+
+def attention_down_sampling(resolutions: Tuple[int, int, int], image_size: int):
+    """Map downsampled image size to downsampling factor"""
+    return tuple(map(lambda res: image_size // res, resolutions))
