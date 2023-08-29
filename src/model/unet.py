@@ -1,4 +1,4 @@
-"""U-Net
+"""UNet
 
 Base diffusion model
 
