@@ -1,4 +1,4 @@
-"""U-Net
+"""UNet
 
 Base diffusion model
 
@@ -9,6 +9,10 @@ https://github.com/openai/guided-diffusion, which is under the MIT license
 from abc import abstractmethod
 
 import math
+from pathlib import Path
+from typing import Tuple
+import io
+import blobfile as bf
 
 import torch as th
 import torch.nn as nn
@@ -30,43 +34,44 @@ class UNetModel(nn.Module):
     """
     The full UNet model with attention and timestep embedding.
 
-    :param image_size: Image size (square images)
-    :param in_channels: channels in the input Tensor (image channels (RGB)).
-    :param model_channels: base channel count for the model.
-    :param out_channels: channels in the output Tensor.
-    :param num_res_blocks: number of residual blocks per downsample.
-    :param attention_resolutions: a collection of downsample rates at which
-        attention will take place. May be a set, list, or tuple.
-        For example, if this contains 4, then at 4x downsampling, attention
-        will be used.
-    :param dropout: the dropout probability.
-    :param channel_mult: channel multiplier for each level of the UNet.
-    :param conv_resample: if True, use learned convolutions for upsampling and
-        downsampling.
-    :param dims: determines if the signal is 1D, 2D, or 3D.
-    :param num_classes: if specified (as an int), then this model will be
-        class-conditional with `num_classes` classes.
-    :param use_checkpoint: use gradient checkpointing to reduce memory usage.
-    :param num_heads: the number of attention heads in each attention layer.
-    :param num_heads_channels: if specified, ignore num_heads and instead use
-                               a fixed channel width per attention head.
-    :param num_heads_upsample: works with num_heads to set a different number
-                               of heads for upsampling. Deprecated.
-    :param use_scale_shift_norm: use a FiLM-like conditioning mechanism.
-    :param resblock_updown: use residual blocks for up/downsampling.
-    :param use_new_attention_order: use a different attention pattern for potentially
-                                    increased efficiency.
+    Params:
+        image_size: Image size (square images)
+        in_channels: channels in the input Tensor (image channels (RGB)).
+        model_channels: base channel count for the model.
+        out_channels: channels in the output Tensor.
+        num_res_blocks: number of residual blocks per downsample.
+        attention_resolutions: a collection of downsample rates at which
+            attention will take place. May be a set, list, or tuple.
+            For example, if this contains 4, then at 4x downsampling, attention
+            will be used.
+        dropout: the dropout probability.
+        channel_mult: channel multiplier for each level of the UNet.
+        conv_resample: if True, use learned convolutions for upsampling and
+            downsampling.
+        dims: determines if the signal is 1D, 2D, or 3D.
+        num_classes: if specified (as an int), then this model will be
+            class-conditional with `num_classes` classes.
+        use_checkpoint: use gradient checkpointing to reduce memory usage.
+        num_heads: the number of attention heads in each attention layer.
+        num_heads_channels: if specified, ignore num_heads and instead use
+                                   a fixed channel width per attention head.
+        num_heads_upsample: works with num_heads to set a different number
+                                   of heads for upsampling. Deprecated.
+        use_scale_shift_norm: use a FiLM-like conditioning mechanism.
+        resblock_updown: use residual blocks for up/downsampling.
+        use_new_attention_order: use a different attention pattern for potentially
+                                        increased efficiency.
     """
 
     def __init__(
         self,
-        image_size,
-        in_channels,
-        model_channels,
-        out_channels,
-        num_res_blocks,
-        attention_resolutions,
-        dropout=0,
+        image_size: int,
+        in_channels: int,
+        model_channels: int,
+        out_channels: int,
+        num_res_blocks: int,
+        attention_resolutions: Tuple[int, int, int],
+        dropout: float = 0,
         channel_mult=(1, 2, 4, 8),
         conv_resample=True,
         dims=2,
@@ -297,7 +302,7 @@ class UNetModel(nn.Module):
             assert y.shape == (x.shape[0],)
             emb = emb + self.label_emb(y)
 
-        h = x.type(self.dtype)
+        h = x.type(self.dtype)  # Copy x, with new float type
         for module in self.input_blocks:
             h = module(h, emb)
             hs.append(h)
@@ -307,6 +312,12 @@ class UNetModel(nn.Module):
             h = module(h, emb)
         h = h.type(x.dtype)
         return self.out(h)
+
+    def load_state_dict(self, path: Path, map_location: str = "cpu"):
+        with bf.BlobFile(str(path), "rb") as f:
+            data = f.read()
+        state_dict = th.load(io.BytesIO(data), map_location)
+        super().load_state_dict(state_dict)
 
 
 class EncoderUNetModel(nn.Module):
@@ -913,3 +924,8 @@ class QKVAttention(nn.Module):
     @staticmethod
     def count_flops(model, _x, y):
         return count_flops_attn(model, _x, y)
+
+
+def attention_down_sampling(resolutions: Tuple[int, int, int], image_size: int):
+    """Map downsampled image size to downsampling factor"""
+    return tuple(map(lambda res: image_size // res, resolutions))
