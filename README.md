@@ -1,5 +1,7 @@
 # MCMC-Correction for Diffusion Model Composition: Energy Approximation using Diffusion Models
 
+## Note: we are currently adding more functionality. The instructions below are relevant for the commit `a0ddd3bd`
+
 Implementation for the paper [MCMC-Correction of Score-Based Diffusion Models for Model Composition](https://arxiv.org/abs/2307.14012)
 
 The code is based on the implementation for the paper [Reduce, reuse, recycle](https://arxiv.org/abs/2302.11552),
