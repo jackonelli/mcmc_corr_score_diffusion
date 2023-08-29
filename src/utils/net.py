@@ -4,6 +4,8 @@
 Various utilities for neural networks.
 """
 
+from enum import Enum
+from typing import Optional
 import math
 
 import torch as th
@@ -170,3 +172,29 @@ class CheckpointFunction(th.autograd.Function):
         del ctx.input_params
         del output_tensors
         return (None, None) + input_grads
+
+
+class Device(Enum):
+    CPU = 1
+    GPU = 2
+
+
+def dev(target: Optional[Enum] = None):
+    """
+    Get the device to use for torch
+    """
+    cuda_ok = th.cuda.is_available()
+    if target is not None:
+        # Python has added pattern matching, but not in Python 3.9 (which we use)
+        if target == Device.CPU:
+            return th.device("cpu")
+        elif target == Device.GPU:
+            if cuda_ok:
+                return th.device("cuda")
+            else:
+                print("Warning: GPU not available")
+                return th.device("cpu")
+        else:
+            raise ValueError("Invalid enum variant")
+    else:
+        return th.device("cpu")
