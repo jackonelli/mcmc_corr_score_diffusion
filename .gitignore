@@ -2,4 +2,4 @@
 *.p
 *.pyc
 __pycache__
-store
+models
