@@ -14,7 +14,6 @@ def reverse_diffusion(noise_pred_fn, dim, alpha_ts, sigma_ts, store_traj=False):
     traj = th.empty((T, *x_T.size())) if store_traj else None
     for step, t in enumerate(reversed(range(1, T + 1))):
         print(f"Sampling diffusion step {t}")
-        print(x_t.size())
         t_ind = t - 1
         z = th.randn_like(x_T) if t > 1 else th.zeros_like(x_T)
         a_t, a_bar_t, sigma_t = alpha_ts[t_ind], alpha_bar_ts[t_ind], sigma_ts[t_ind]
@@ -24,6 +23,7 @@ def reverse_diffusion(noise_pred_fn, dim, alpha_ts, sigma_ts, store_traj=False):
         if store_traj:
             traj[step] = x_tm1.clone()[0, 0, :, :]
         x_t = x_tm1
+    return x_t, traj  # x_0
 
 
 def _rev_diff_step(x_t, a_t, a_bar_t, eps_t, sigma_t, z):

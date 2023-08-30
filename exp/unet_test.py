@@ -43,7 +43,8 @@ def main():
     bs = beta_schedule_improved(T)
     as_ = 1.0 - bs
     ss = bs
-    reverse_diffusion(model, image_size, as_, ss, True)
+    x_0, _ = reverse_diffusion(model, image_size, as_, ss, True)
+    th.save(x_0, Path.cwd() / "outputs/x_0.pth")
 
 
 if __name__ == "__main__":
