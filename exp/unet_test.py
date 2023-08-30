@@ -5,7 +5,8 @@ Create instance and feed a random tensor of MNIST shape to it.
 from pathlib import Path
 import torch as th
 from src.model.unet import UNetModel, attention_down_sampling
-from src.utils.net import dev, Device
+from src.utils.net import dev
+from src.samplers.sampling import reverse_diffusion
 
 
 def main():
@@ -37,15 +38,7 @@ def main():
     )
     device = dev()
     model.to(device)
-
-    image_channels = 1
-    image_size = 28
-    batch_size = 2
-    x = th.rand((batch_size, image_channels, image_size, image_size))
-    ts = th.randint(low=1, high=T, size=(batch_size,))
-    x, ts = x.to(device), ts.to(device)
-    print(x.device)
-    model(x, ts)
+    reverse_diffusion(model, image_size, alpha_ts, sigma_ts, True)
 
 
 if __name__ == "__main__":

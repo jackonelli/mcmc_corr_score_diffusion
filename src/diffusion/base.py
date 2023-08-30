@@ -1,5 +1,6 @@
 """Diffusion utils"""
 from typing import Union
+from matplotlib.image import math
 import torch as th
 
 
@@ -24,26 +25,8 @@ def sample_x_t_given_x_0(x_0: th.Tensor, ts: th.Tensor, alphas_bar: th.Tensor):
 
 
 def compute_alpha_bars(alphas):
-    """Compute sequence of alpha_bar from sequence of alphas
-
-    alpha_bar_t = prod_s=1^t alpha_s
-    """
+    """Compute sequence of alpha_bar from sequence of alphas"""
     return th.cumprod(alphas, dim=0)
-
-
-def linear_beta_schedule(beta_start: float = 1e-4, beta_end: float = 0.02, num_timesteps: int = 200):
-    """Generate linearly spaced betas
-
-    Args:
-        beta_start,
-        beta_end,
-        num_timesteps
-
-    Returns:
-        betas: sequence of betas.
-    """
-    betas = th.linspace(beta_start, beta_end, num_timesteps)
-    return betas
 
 
 def _extract(a: th.Tensor, t: Union[int, th.Tensor], x: th.Tensor):
