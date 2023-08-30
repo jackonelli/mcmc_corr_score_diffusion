@@ -4,13 +4,14 @@ Create instance and feed a random tensor of MNIST shape to it.
 """
 from pathlib import Path
 import torch as th
+from src.diffusion.beta_schedules import beta_schedule_improved
 from src.model.unet import UNetModel, attention_down_sampling
 from src.utils.net import dev
 from src.samplers.sampling import reverse_diffusion
 
 
 def main():
-    T = 10
+    T = 1000
     image_channels = 1
     image_size = 28
     model = UNetModel(
@@ -38,7 +39,11 @@ def main():
     )
     device = dev()
     model.to(device)
-    reverse_diffusion(model, image_size, alpha_ts, sigma_ts, True)
+
+    bs = beta_schedule_improved(T)
+    as_ = 1.0 - bs
+    ss = bs
+    reverse_diffusion(model, image_size, as_, ss, True)
 
 
 if __name__ == "__main__":
