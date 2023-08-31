@@ -8,10 +8,13 @@ from src.diffusion.beta_schedules import improved_beta_schedule, linear_beta_sch
 from src.model.unet import UNetModel, attention_down_sampling
 from src.utils.net import dev, Device
 from src.samplers.sampling import reverse_diffusion
+import matplotlib.pyplot as plt
+
+EXP_NAME = "uncond_rev_diff"
 
 
 def main():
-    T = 1000
+    T = 100
     image_channels = 1
     image_size = 28
     model = UNetModel(
@@ -46,7 +49,11 @@ def main():
     ss = bs
     x_0, _ = reverse_diffusion(model, image_size, as_, ss, True)
     x_0 = x_0.detach().cpu()
-    th.save(x_0, Path.cwd() / "outputs/x_0.pth")
+    save_dir = Path.cwd() / "outputs" / EXP_NAME
+    save_dir.mkdir(parents=True, exist_ok=True)
+    th.save(x_0, save_dir / f"x_0_T{T}.pth")
+    plt.imshow(x_0[0, 0, :, :])
+    plt.show()
 
 
 if __name__ == "__main__":
