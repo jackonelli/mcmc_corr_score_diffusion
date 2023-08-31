@@ -179,7 +179,7 @@ class Device(Enum):
     GPU = 2
 
 
-def dev(target: Optional[Enum] = None):
+def get_device(target: Optional[Enum] = None):
     """
     Get the device to use for torch
     """

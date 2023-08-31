@@ -7,7 +7,7 @@ from pathlib import Path
 import torch as th
 import torch.nn as nn
 from src.model.resnet import ResNet, Bottleneck
-from src.utils.net import dev, Device
+from src.utils.net import get_device, Device
 
 
 class ResNetInstantiation(unittest.TestCase):
@@ -21,7 +21,7 @@ class ResNetInstantiation(unittest.TestCase):
         model.load_state_dict(resnet_model_info["state_dict"])
         # NB: This fails for device CPU
         # There is something about the DataParallel super class which prevents CPU.
-        device = dev(Device.GPU)
+        device = get_device(Device.GPU)
         model.to(device)
 
         batch_size = 2

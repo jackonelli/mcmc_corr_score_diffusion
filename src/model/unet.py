@@ -14,8 +14,8 @@ class UNet(nn.Module):
     def __init__(
         self,
         dim: int,
-        time_dim: int = 112,
-        channels: int = 1,
+        time_emb_dim: int,
+        channels: int,
     ):
         # Input
         # dim = (int) desired dimension of network structure (corresponds to the z-dimension).
@@ -26,11 +26,11 @@ class UNet(nn.Module):
         # Dimensions
         self.channels = channels
         self.dim = dim
-        self.time_dim = time_dim
+        self.time_dim = time_emb_dim
 
         # First & Final Layers
         self.init_conv = nn.Conv2d(channels, dim, 1, padding=0)
-        self.final_res_block = ResnetBlock(dim * 2, dim, time_emb_dim=time_dim)
+        self.final_res_block = ResnetBlock(dim * 2, dim, time_emb_dim=time_emb_dim)
         self.final_conv = nn.Conv2d(dim, channels, 1)
 
         # Layers
@@ -41,10 +41,10 @@ class UNet(nn.Module):
         # Time Embedding
         self.time_mlp = nn.Sequential(
             *[
-                SinusoidalPositionEmbeddings(time_dim),
-                nn.Linear(time_dim, time_dim),
+                SinusoidalPositionEmbeddings(time_emb_dim),
+                nn.Linear(time_emb_dim, time_emb_dim),
                 nn.GELU(),
-                nn.Linear(time_dim, time_dim),
+                nn.Linear(time_emb_dim, time_emb_dim),
             ]
         )
 
@@ -53,8 +53,8 @@ class UNet(nn.Module):
         self.downs.append(
             nn.ModuleList(
                 [
-                    ResnetBlock(dim, dim, time_dim),
-                    ResnetBlock(dim, dim, time_dim),
+                    ResnetBlock(dim, dim, time_emb_dim),
+                    ResnetBlock(dim, dim, time_emb_dim),
                     Residual(PreNorm(dim, LinearAttention(dim))),
                     downsample(dim, dim),
                 ]
@@ -64,8 +64,8 @@ class UNet(nn.Module):
         self.downs.append(
             nn.ModuleList(
                 [
-                    ResnetBlock(dim, dim, time_dim),
-                    ResnetBlock(dim, dim, time_dim),
+                    ResnetBlock(dim, dim, time_emb_dim),
+                    ResnetBlock(dim, dim, time_emb_dim),
                     Residual(PreNorm(dim, LinearAttention(dim))),
                     downsample(dim, 2 * dim),
                 ]
@@ -75,8 +75,8 @@ class UNet(nn.Module):
         self.downs.append(
             nn.ModuleList(
                 [
-                    ResnetBlock(2 * dim, 2 * dim, time_dim),
-                    ResnetBlock(2 * dim, 2 * dim, time_dim),
+                    ResnetBlock(2 * dim, 2 * dim, time_emb_dim),
+                    ResnetBlock(2 * dim, 2 * dim, time_emb_dim),
                     Residual(PreNorm(2 * dim, LinearAttention(2 * dim))),
                     nn.Conv2d(2 * dim, 4 * dim, kernel_size=3, padding=1),
                 ]
@@ -86,9 +86,9 @@ class UNet(nn.Module):
         # Latent Layer
         self.middle = nn.ModuleList(
             [
-                ResnetBlock(4 * dim, 4 * dim, time_dim),
+                ResnetBlock(4 * dim, 4 * dim, time_emb_dim),
                 Residual(PreNorm(4 * dim, Attention(4 * dim))),
-                ResnetBlock(4 * dim, 4 * dim, time_dim),
+                ResnetBlock(4 * dim, 4 * dim, time_emb_dim),
             ]
         )
 
@@ -97,8 +97,8 @@ class UNet(nn.Module):
         self.ups.append(
             nn.ModuleList(
                 [
-                    ResnetBlock(6 * dim, 4 * dim, time_dim),
-                    ResnetBlock(6 * dim, 4 * dim, time_dim),
+                    ResnetBlock(6 * dim, 4 * dim, time_emb_dim),
+                    ResnetBlock(6 * dim, 4 * dim, time_emb_dim),
                     Residual(PreNorm(4 * dim, LinearAttention(4 * dim))),
                     upsample(4 * dim, 2 * dim),
                 ]
@@ -108,8 +108,8 @@ class UNet(nn.Module):
         self.ups.append(
             nn.ModuleList(
                 [
-                    ResnetBlock(3 * dim, 2 * dim, time_dim),
-                    ResnetBlock(3 * dim, 2 * dim, time_dim),
+                    ResnetBlock(3 * dim, 2 * dim, time_emb_dim),
+                    ResnetBlock(3 * dim, 2 * dim, time_emb_dim),
                     Residual(PreNorm(2 * dim, LinearAttention(2 * dim))),
                     upsample(2 * dim, dim),
                 ]
@@ -119,8 +119,8 @@ class UNet(nn.Module):
         self.ups.append(
             nn.ModuleList(
                 [
-                    ResnetBlock(2 * dim, dim, time_dim),
-                    ResnetBlock(2 * dim, dim, time_dim),
+                    ResnetBlock(2 * dim, dim, time_emb_dim),
+                    ResnetBlock(2 * dim, dim, time_emb_dim),
                     Residual(PreNorm(dim, LinearAttention(dim))),
                     nn.Conv2d(dim, dim, kernel_size=3, padding=1),
                 ]

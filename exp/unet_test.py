@@ -6,7 +6,7 @@ from pathlib import Path
 import torch as th
 from src.diffusion.beta_schedules import improved_beta_schedule, linear_beta_schedule
 from src.model.unet import UNetModel, attention_down_sampling
-from src.utils.net import dev, Device
+from src.utils.net import get_device, Device
 from src.samplers.sampling import reverse_diffusion
 import matplotlib.pyplot as plt
 
@@ -40,7 +40,7 @@ def main():
     model.load_state_dict(
         path=Path.cwd() / "models/model060000.pt",
     )
-    device = dev(Device.GPU)
+    device = get_device(Device.GPU)
     model.to(device)
     print(f"Using device {device}")
 

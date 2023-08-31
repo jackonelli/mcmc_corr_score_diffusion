@@ -5,7 +5,7 @@ Create instance and feed a random tensor of MNIST shape to it.
 import unittest
 import torch as th
 from src.model.tds_unet import UNetModel, attention_down_sampling
-from src.utils.net import dev, Device
+from src.utils.net import get_device, Device
 
 
 class UNetInstantiation(unittest.TestCase):
@@ -33,7 +33,7 @@ class UNetInstantiation(unittest.TestCase):
             use_new_attention_order=False,
             diffusion_steps=T,
         )
-        device = dev(Device.CPU)
+        device = get_device(Device.CPU)
         model.to(device)
 
         batch_size = 2
