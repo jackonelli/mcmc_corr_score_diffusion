@@ -25,6 +25,7 @@ def main():
 
     dev = get_device(Device.GPU)
     unet = UNet(image_size, time_emb_dim, channels).to(dev)
+    unet.train()
     noise_scheduler = NoiseScheduler(improved_beta_schedule, num_diff_steps)
 
     diffm = DiffusionModel(model=unet, loss_f=F.mse_loss, noise_scheduler=noise_scheduler)

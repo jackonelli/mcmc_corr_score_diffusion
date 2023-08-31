@@ -6,19 +6,16 @@ import unittest
 from pathlib import Path
 import torch as th
 import torch.nn as nn
-from src.model.resnet import ResNet, Bottleneck
+from src.model.resnet import ResNet, Bottleneck, load_classifier
 from src.utils.net import get_device, Device
 
 
 class ResNetInstantiation(unittest.TestCase):
     def test_init(self):
-        T = 10
         image_channels = 1
         image_size = 28
-        model = ResNet(Bottleneck, [3, 4, 6, 3], num_classes=10, num_channels=1)
-        model = nn.DataParallel(model)
-        resnet_model_info = th.load(Path.cwd() / "models/resnet.pth.tar", map_location="cpu")
-        model.load_state_dict(resnet_model_info["state_dict"])
+        model_path = Path.cwd() / "models/resnet.pth.tar"
+        model = load_classifier(model_path)
         # NB: This fails for device CPU
         # There is something about the DataParallel super class which prevents CPU.
         device = get_device(Device.GPU)

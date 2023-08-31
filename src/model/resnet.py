@@ -14,21 +14,13 @@ import torch.nn.functional as F
 ARCH = "resnet50_mnist"
 
 
-def load_classifier(resnet_model_path, device):
-    # for mnist
-    resnet_model_info = th.load(resnet_model_path, map_location="cpu")
-    resnet_model = get_model(arch=resnet_model_info["arch"], num_classes=10)
-
-    resnet_model = nn.DataParallel(resnet_model)
-    resnet_model.load_state_dict(resnet_model_info["state_dict"])
-    resnet_model.to(device)
-    resnet_model.eval()
-
-    def classifier_fn(data):
-        data = (data + 1) / 2  # scale [-1,1] to [0, 1]
-        return resnet_model(data)  # (P, num_classes)
-
-    return classifier_fn
+def load_classifier(resnet_model_path: Path):
+    """Helper function to load default classifier with pre-trained weights"""
+    model = ResNet(Bottleneck, [3, 4, 6, 3], num_classes=10, num_channels=1)
+    model = nn.DataParallel(model)
+    stored_data = th.load(resnet_model_path, map_location="cpu")
+    model.load_state_dict(stored_data["state_dict"])
+    return model
 
 
 class ResNet(nn.Module):
