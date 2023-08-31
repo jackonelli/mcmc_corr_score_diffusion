@@ -1,58 +1,34 @@
-"""Test script for UNet
+"""Prototyping script for sampling a UNet-based unconditional diffusion model for MNIST"""
 
-Create instance and feed a random tensor of MNIST shape to it.
-"""
+
 from pathlib import Path
 import torch as th
-from src.diffusion.beta_schedules import improved_beta_schedule, linear_beta_schedule
-from src.model.unet import UNetModel, attention_down_sampling
-from src.utils.net import get_device, Device
-from src.samplers.sampling import reverse_diffusion
 import matplotlib.pyplot as plt
-
-EXP_NAME = "uncond_rev_diff"
+from src.diffusion.base import NoiseScheduler
+from src.diffusion.beta_schedules import improved_beta_schedule
+from src.model.unet import UNet
+from src.utils.net import get_device, Device
 
 
 def main():
-    T = 100
-    image_channels = 1
     image_size = 28
-    model = UNetModel(
-        image_size=image_size,
-        in_channels=image_channels,
-        model_channels=64,
-        out_channels=2 * image_channels,  # Times 2 if learned sigma
-        num_res_blocks=3,
-        attention_resolutions=attention_down_sampling((28, 14, 7), image_size),
-        dropout=0,
-        channel_mult=(1, 2, 2, 2),
-        num_classes=None,
-        use_checkpoint=False,
-        num_heads=4,
-        num_head_channels=-1,
-        num_heads_upsample=-1,
-        use_scale_shift_norm=True,
-        resblock_updown=True,
-        use_fp16=False,
-        use_new_attention_order=False,
-        diffusion_steps=T,
-    )
-    model.load_state_dict(
-        path=Path.cwd() / "models/model060000.pt",
-    )
-    device = get_device(Device.GPU)
-    model.to(device)
-    print(f"Using device {device}")
+    time_emb_dim = 112
+    channels = 1
+    num_diff_steps = 1000
+    model_path = Path.cwd() / "models" / "uncond_unet_mnist.pth"
 
-    bs = linear_beta_schedule(num_timesteps=T).to(device)
-    as_ = 1.0 - bs
-    ss = bs
-    x_0, _ = reverse_diffusion(model, image_size, as_, ss, True)
-    x_0 = x_0.detach().cpu()
-    save_dir = Path.cwd() / "outputs" / EXP_NAME
-    save_dir.mkdir(parents=True, exist_ok=True)
-    th.save(x_0, save_dir / f"x_0_T{T}.pth")
-    plt.imshow(x_0[0, 0, :, :])
+    dev = get_device(Device.GPU)
+    unet = UNet(image_size, time_emb_dim, channels).to(dev)
+    noise_scheduler = NoiseScheduler(improved_beta_schedule, num_diff_steps)
+    unet.load_state_dict(th.load(model_path))
+
+    samples = noise_scheduler.sample(unet, 100, dev, (1, 28, 28))[0]
+
+    _, axes = plt.subplots(10, 10, figsize=(8, 8))
+    for i in range(10):
+        for j in range(10):
+            axes[i, j].imshow(samples[i * 10 + j].squeeze(), cmap="gray")
+            axes[i, j].axis("off")
     plt.show()
 
 

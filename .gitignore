@@ -4,3 +4,4 @@
 __pycache__
 models
 outputs
+lightning_logs

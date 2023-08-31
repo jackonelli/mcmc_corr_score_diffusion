@@ -1,7 +1,6 @@
 """UNet
 
 Base diffusion model
-
 """
 import torch as th
 import torch.nn as nn
@@ -11,19 +10,20 @@ from einops import rearrange, reduce
 
 
 class UNet(nn.Module):
+    """UNet
+    @param dim: dimension of input x (assumes square (dim x dim) img for now)
+    @param time_emb_dim: dimension of time embedding.
+    @param channels: number of channels the data have (e.g. 3 for RGB images).
+    """
+
     def __init__(
         self,
         dim: int,
         time_emb_dim: int,
         channels: int,
     ):
-        # Input
-        # dim = (int) desired dimension of network structure (corresponds to the z-dimension).
-        # time_dim = (int) desired dimension of time embedding.
-        # channels = (int) number of channels the data have.
         super().__init__()
 
-        # Dimensions
         self.channels = channels
         self.dim = dim
         self.time_dim = time_emb_dim
@@ -37,7 +37,6 @@ class UNet(nn.Module):
         self.downs = nn.ModuleList([])
         self.ups = nn.ModuleList([])
 
-        # YOUR CODE HERE
         # Time Embedding
         self.time_mlp = nn.Sequential(
             *[
@@ -127,7 +126,11 @@ class UNet(nn.Module):
             )
         )
 
-    def unet_forward(self, x: th.Tensor, t: th.Tensor):
+    def forward(self, x: th.Tensor, time: th.Tensor):
+        t = self.time_mlp(time)
+        return self._unet_forward(x, t)
+
+    def _unet_forward(self, x: th.Tensor, t: th.Tensor):
         x = self.init_conv(x)
         r = x.clone()
 
@@ -163,10 +166,6 @@ class UNet(nn.Module):
 
         x = self.final_res_block(x, t)
         return self.final_conv(x)
-
-    def forward(self, x: th.Tensor, time: th.Tensor):
-        t = self.time_mlp(time)
-        return self.unet_forward(x, t)
 
 
 def upsample(dim, dim_out):

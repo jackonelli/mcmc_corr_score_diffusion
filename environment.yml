@@ -20,6 +20,7 @@ dependencies:
   - cuda-nvrtc=11.8.89=0
   - cuda-nvtx=11.8.86=0
   - cuda-runtime=11.8.0=0
+  - datasets=2.10.1=py39h06a4308_0
   - einops=0.6.1=pyhd8ed1ab_0
   - ffmpeg=4.3=hf484d3e_0
   - filelock=3.12.2=pyhd8ed1ab_0
