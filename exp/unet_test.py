@@ -4,9 +4,9 @@ Create instance and feed a random tensor of MNIST shape to it.
 """
 from pathlib import Path
 import torch as th
-from src.diffusion.beta_schedules import beta_schedule_improved
+from src.diffusion.beta_schedules import improved_beta_schedule, linear_beta_schedule
 from src.model.unet import UNetModel, attention_down_sampling
-from src.utils.net import dev
+from src.utils.net import dev, Device
 from src.samplers.sampling import reverse_diffusion
 
 
@@ -37,13 +37,15 @@ def main():
     model.load_state_dict(
         path=Path.cwd() / "models/model060000.pt",
     )
-    device = dev()
+    device = dev(Device.GPU)
     model.to(device)
+    print(f"Using device {device}")
 
-    bs = beta_schedule_improved(T)
+    bs = linear_beta_schedule(num_timesteps=T).to(device)
     as_ = 1.0 - bs
     ss = bs
     x_0, _ = reverse_diffusion(model, image_size, as_, ss, True)
+    x_0 = x_0.detach().cpu()
     th.save(x_0, Path.cwd() / "outputs/x_0.pth")
 
 

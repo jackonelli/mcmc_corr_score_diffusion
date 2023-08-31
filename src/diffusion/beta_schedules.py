@@ -18,7 +18,7 @@ def linear_beta_schedule(beta_start: float = 1e-4, beta_end: float = 0.02, num_t
     return betas
 
 
-def beta_schedule_improved(num_timesteps: int, s: float = 0.008, beta_max: float = 0.999) -> th.Tensor:
+def improved_beta_schedule(num_timesteps: int, s: float = 0.008, beta_max: float = 0.999) -> th.Tensor:
     """Improved beta schedulce
 
     From A. Nichol and P. Dhariwal (Improved Denoising Diffusion Probabilistic Models)

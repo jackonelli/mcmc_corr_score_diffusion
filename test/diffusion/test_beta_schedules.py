@@ -1,7 +1,7 @@
 """Test diffusion parameter arithmetics"""
 import unittest
 import torch as th
-from src.diffusion.beta_schedules import linear_beta_schedule, beta_schedule_improved
+from src.diffusion.beta_schedules import linear_beta_schedule, improved_beta_schedule
 
 
 class BetaShedules(unittest.TestCase):
@@ -17,4 +17,4 @@ class BetaShedules(unittest.TestCase):
 
     def test_improved_beta_schedule(self):
         betas = th.tensor([0.1012940794, 0.2795438460, 0.4736353534, 0.7240523691, 0.9990000000])
-        self.assertTrue(th.all(th.isclose(beta_schedule_improved(5), betas)))
+        self.assertTrue(th.all(th.isclose(improved_beta_schedule(5), betas)))
