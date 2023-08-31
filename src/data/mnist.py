@@ -10,8 +10,7 @@ def get_mnist_data_loaders(batch_size: int):
 
     # define image transformations
     def transforms_f(train=True):
-        transform_list = [transforms.RandomHorizontalFlip()] if train else []
-        transform = Compose(transform_list + [transforms.ToTensor(), transforms.Lambda(lambda t: (t * 2) - 1)])
+        transform = Compose([transforms.ToTensor()])
 
         def f(examples):
             examples["pixel_values"] = [transform(image.convert("L")) for image in examples["image"]]

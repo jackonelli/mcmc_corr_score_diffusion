@@ -4,7 +4,7 @@
 from pathlib import Path
 import torch as th
 from src.model.resnet import load_classifier
-from src.data.mnist import get_mnist_data_loaders
+from src.data.mnist import get_mnist_data_loaders, mnist_transform
 from src.utils.net import Device, get_device
 
 
@@ -22,18 +22,12 @@ def main():
     for batch_idx, batch in enumerate(val_loader):
         print(f"Batch {batch_idx}/{len(val_loader)}")
         x, y = batch["pixel_values"].to(device), batch["label"].to(device)
-        x = mnist_transform(x)
         logits = model(x)
         y_pred = logits_to_label(logits)
         batch_acc = accuracy(y, y_pred)
         accs.append(batch_acc)
     accs = th.Tensor(accs)
     print(f"Accuracy: {accs.mean()}+/-{accs.std()}")
-
-
-def mnist_transform(data):
-    """Map MNIST pixel values from [-1,1] to [0, 1]"""
-    return (data + 1) / 2
 
 
 @th.no_grad()
