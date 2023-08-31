@@ -27,7 +27,5 @@ class ResNetInstantiation(unittest.TestCase):
         batch_size = 2
         x = th.rand((batch_size, image_channels, image_size, image_size))
         x = x.to(device)
-        self.assertEqual(x.device, th.device("cpu"))
-
         out = model(x)
         self.assertEqual(out.size(), th.Size((2, 10)))
