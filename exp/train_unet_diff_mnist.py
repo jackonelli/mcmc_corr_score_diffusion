@@ -18,6 +18,10 @@ def main():
     channels = 1
     num_diff_steps = 1000
     batch_size = 256
+    model_path = Path.cwd() / "models" / "uncond_unet_mnist.pt"
+    if not model_path.parent.exists():
+        print(f"Save dir. '{model_path.parent}' does not exist.")
+        return
 
     dev = get_device(Device.GPU)
     unet = UNet(image_size, time_emb_dim, channels).to(dev)
@@ -32,7 +36,7 @@ def main():
     trainer.fit(diffm, dataloader_train, dataloader_val)
 
     print("Saving model")
-    model_path = Path.cwd() / "models" / "uncond_unet_mnist.pth"
+    model_path = Path.cwd() / "models" / "uncond_unet_mnist.pt"
     th.save(unet.state_dict(), model_path)
 
 

@@ -15,7 +15,7 @@ def main():
     time_emb_dim = 112
     channels = 1
     num_diff_steps = 1000
-    model_path = Path.cwd() / "models" / "uncond_unet_mnist.pth"
+    model_path = Path.cwd() / "models" / "uncond_unet_mnist.pt"
 
     dev = get_device(Device.GPU)
     unet = UNet(image_size, time_emb_dim, channels).to(dev)
