@@ -1,16 +1,7 @@
-"""Guidance"""
+"""Reconstructoin guidance"""
 import torch as th
 from torch import nn
-from abc import ABC, abstractmethod
-
-
-class Guidance(ABC):
-    def __init__(self, lambda_):
-        self.lambda_ = lambda_
-
-    @abstractmethod
-    def grad(self, *args, **kwargs):
-        raise NotImplementedError
+from src.guidance.base import Guidance
 
 
 class ReconstructionGuidance(Guidance):
@@ -51,28 +42,11 @@ class ReconstructionGuidance(Guidance):
         return mean_x_0_given_x_t(x_t, self.noise_pred(x_t, t), self.alpha_bars[t])
 
 
-def mean_x_0_given_x_t(x_t, noise_pred_t, a_bar_t):
+def mean_x_0_given_x_t(x_t: th.Tensor, noise_pred_t: th.Tensor, a_bar_t: th.Tensor):
     """Compute E[x_0|x_t] using Tweedie's formula
 
     See Prop. 1 in https://arxiv.org/pdf/2209.14687.pdf
 
-    NB: This uses the score function eps_theta
+    NB: This uses the noise prediction function eps_theta, not the score function s_theta.
     """
     return (x_t - th.sqrt(1.0 - a_bar_t) * noise_pred_t) / th.sqrt(a_bar_t)
-
-
-class ClassifierFullGuidance(Guidance):
-    def __init__(self, classifier: nn.Module, loss: nn.Module, lambda_: float = 1.0):
-        """
-        @param classifier: Classifier model p(y|x_t , t)
-        @param loss: Corresponding loss for the classifier
-        @param lambda_: Magnitude of the gradient
-        """
-        super(ClassifierFullGuidance, self).__init__(lambda_=lambda_)
-        self.classifier = classifier
-        self.loss = loss
-
-    def grad(self, x_t, t, y):
-        x_t.requires_grad = True
-        loss = self.loss(self.classifier(x_t, t), y)
-        return self.lambda_ * th.autograd.grad(loss, x_t, retain_graph=True)[0]
