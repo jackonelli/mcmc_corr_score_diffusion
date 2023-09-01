@@ -8,11 +8,16 @@ import pytorch_lightning as pl
 
 
 class DiffusionModel(pl.LightningModule):
-    def __init__(self, model: nn.Module, loss_f: Callable, noise_scheduler):
+    def __init__(self, noise_pred_model: nn.Module, loss_f: Callable, diff_sampler):
+        """
+        @param noise_pred_model: eps_theta(x_t, t), noise prediction model
+        @param loss_f:
+        @param lambda_: Magnitude of the gradient
+        """
         super().__init__()
-        self.model = model
+        self.noise_pred_model = noise_pred_model
         self.loss_f = loss_f
-        self.noise_scheduler = noise_scheduler
+        self.diff_sampler = diff_sampler
 
         # Default Initialization
         self.train_loss = 0.0
@@ -26,11 +31,11 @@ class DiffusionModel(pl.LightningModule):
         x = batch["pixel_values"].to(self.device)
 
         # Algorithm 1 line 3: sample t uniformally for every example in the batch
-        ts = th.randint(0, self.noise_scheduler.num_timesteps, (batch_size,), device=self.device).long()
+        ts = th.randint(0, self.diff_sampler.num_timesteps, (batch_size,), device=self.device).long()
 
         noise = th.randn_like(x)
-        x_noisy = self.noise_scheduler.q_sample(x_0=x, ts=ts, noise=noise)
-        predicted_noise = self.model(x_noisy, ts)
+        x_noisy = self.diff_sampler.q_sample(x_0=x, ts=ts, noise=noise)
+        predicted_noise = self.noise_pred_model(x_noisy, ts)
 
         loss = self.loss_f(noise, predicted_noise)
         self.log("train_loss", loss)
@@ -57,13 +62,13 @@ class DiffusionModel(pl.LightningModule):
         th.manual_seed(self.i_batch_val)
 
         # Algorithm 1 line 3: sample t uniformally for every example in the batch
-        ts = th.randint(0, self.noise_scheduler.num_timesteps, (batch_size,), device=self.device).long()
+        ts = th.randint(0, self.diff_sampler.num_timesteps, (batch_size,), device=self.device).long()
 
         noise = th.randn_like(x)
         th.set_rng_state(rng_state)
 
-        x_noisy = self.noise_scheduler.q_sample(x_0=x, ts=ts, noise=noise)
-        predicted_noise = self.model(x_noisy, ts)
+        x_noisy = self.diff_sampler.q_sample(x_0=x, ts=ts, noise=noise)
+        predicted_noise = self.noise_pred_model(x_noisy, ts)
 
         loss = self.loss_f(noise, predicted_noise)
         self.log("val_loss", loss)
@@ -77,7 +82,7 @@ class DiffusionModel(pl.LightningModule):
         self.i_batch_val = 0
 
 
-class NoiseScheduler:
+class DiffusionSampler:
     """Sampling from DDPM"""
 
     def __init__(
@@ -143,7 +148,9 @@ class NoiseScheduler:
 
             # Use the model to predict noise and use the noise to step back
             pred_noise = model(x_tm1, t_tensor)
-            x_tm1 = step_back(x_tm1, t, self.betas, self.alphas, self.alphas_bar, self.posterior_variance, pred_noise)
+            x_tm1 = sample_x_tm1_given_x_t(
+                x_tm1, t, self.betas, self.alphas, self.alphas_bar, self.posterior_variance, pred_noise
+            )
             steps.append(x_tm1.detach().cpu())
 
         return x_tm1.detach().cpu(), steps
@@ -168,7 +175,7 @@ def sample_x_t_given_x_0(x_0: th.Tensor, ts: th.Tensor, alphas_bar: th.Tensor, n
     return x_t
 
 
-def step_back(
+def sample_x_tm1_given_x_t(
     x_t: th.Tensor,
     t: int,
     betas: th.Tensor,

@@ -7,7 +7,7 @@ import torch as th
 import torch.nn.functional as F
 from src.model.resnet import load_classifier
 from src.utils.net import Device, get_device
-from src.diffusion.base import NoiseScheduler
+from src.diffusion.base import DiffusionSampler
 from src.diffusion.beta_schedules import improved_beta_schedule
 from src.model.unet import UNet
 from src.data.mnist import mnist_transform

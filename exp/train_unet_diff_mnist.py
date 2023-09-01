@@ -5,7 +5,7 @@ from pathlib import Path
 import torch as th
 import torch.nn.functional as F
 import pytorch_lightning as pl
-from src.diffusion.base import DiffusionModel, NoiseScheduler
+from src.diffusion.base import DiffusionModel, DiffusionSampler
 from src.diffusion.beta_schedules import improved_beta_schedule
 from src.model.unet import UNet
 from src.utils.net import get_device, Device
@@ -26,9 +26,9 @@ def main():
     dev = get_device(Device.GPU)
     unet = UNet(image_size, time_emb_dim, channels).to(dev)
     unet.train()
-    noise_scheduler = NoiseScheduler(improved_beta_schedule, num_diff_steps)
+    diff_sampler = DiffusionSampler(improved_beta_schedule, num_diff_steps)
 
-    diffm = DiffusionModel(model=unet, loss_f=F.mse_loss, noise_scheduler=noise_scheduler)
+    diffm = DiffusionModel(noise_pred_model=unet, loss_f=F.mse_loss, diff_sampler=diff_sampler)
 
     diffm.to(dev)
     trainer = pl.Trainer(max_epochs=20, num_sanity_val_steps=0, accelerator="gpu", devices=1)
