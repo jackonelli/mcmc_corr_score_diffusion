@@ -10,6 +10,9 @@ from pathlib import Path
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
+from src.model.unet import SinusoidalPositionEmbeddings
+from einops import rearrange
+from abc import ABC
 
 ARCH = "resnet50_mnist"
 
@@ -23,18 +26,40 @@ def load_classifier(resnet_model_path: Path):
     return model
 
 
-class ResNet(nn.Module):
-    def __init__(self, block, num_blocks, num_classes=10, num_channels=3):
-        super(ResNet, self).__init__()
-        self.in_planes = 64
+def load_classifier_t(resnet_model_path: Path):
+    model = ResNetTimeEmbedding(block=BottleneckTimeEmb,
+                                num_blocks=[3, 4, 6, 3],
+                                emb_dim=112,
+                                num_classes=10,
+                                num_channels=1)
+    model.load_state_dict(th.load(resnet_model_path))
+    return model
 
-        self.conv1 = nn.Conv2d(num_channels, 64, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(64)
-        self.layer1 = self._make_layer(block, 64, num_blocks[0], stride=1)
-        self.layer2 = self._make_layer(block, 128, num_blocks[1], stride=2)
-        self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
-        self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
-        self.linear = nn.Linear(512 * block.expansion, num_classes)
+
+class ResNetBase(nn.Module, ABC):
+
+    def __init__(self, block, num_blocks, num_classes=10, num_channels=3, in_planes=64):
+        super(ResNetBase, self).__init__()
+        self.in_planes = in_planes
+
+        self.conv1 = nn.Conv2d(num_channels, self.in_planes, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(self.in_planes)
+        self.linear = nn.Linear(self.in_planes * 2 ** (len(num_blocks)-1) * block.expansion, num_classes)
+
+    def forward(self, *args, **kwargs):
+        raise NotImplementedError
+
+
+class ResNet(ResNetBase):
+    def __init__(self, block, num_blocks, num_classes=10, num_channels=3, in_planes=64):
+        super(ResNet, self).__init__(block, num_blocks, num_classes, num_channels, in_planes)
+        self.in_planes = 64
+        dims = [self.in_planes, self.in_planes*2, self.in_planes*4, self.in_planes*8]
+
+        self.layer1 = self._make_layer(block, dims[0], num_blocks[0], stride=1)
+        self.layer2 = self._make_layer(block, dims[1], num_blocks[1], stride=2)
+        self.layer3 = self._make_layer(block, dims[2], num_blocks[2], stride=2)
+        self.layer4 = self._make_layer(block, dims[3], num_blocks[3], stride=2)
 
     def forward(self, x):
         out = F.relu(self.bn1(self.conv1(x)))
@@ -45,6 +70,8 @@ class ResNet(nn.Module):
         out = F.avg_pool2d(out, 4)
         out = out.view(out.size(0), -1)
         out = self.linear(out)
+        import pdb;
+        pdb.set_trace()
         return out
 
     def _make_layer(self, block, planes, num_blocks, stride):
@@ -54,6 +81,44 @@ class ResNet(nn.Module):
             layers.append(block(self.in_planes, planes, stride))
             self.in_planes = planes * block.expansion
         return nn.Sequential(*layers)
+
+
+class ResNetTimeEmbedding(ResNetBase):
+
+    def __init__(self, block, num_blocks, emb_dim, num_classes=10, num_channels=3, in_planes=64):
+        super(ResNetTimeEmbedding, self).__init__(block, num_blocks, num_classes, num_channels, in_planes)
+        self.emb_dim = emb_dim
+        self.time_mlp = nn.Sequential(
+            SinusoidalPositionEmbeddings(emb_dim),
+            nn.Linear(emb_dim, emb_dim),
+            nn.GELU(),
+            nn.Linear(emb_dim, emb_dim),
+        )
+        dims = [self.in_planes * 2 ** i for i in range(len(num_blocks))]
+        strides = [1] + [2] * (len(num_blocks) - 1)
+        self.layers = list()
+        for i, num_block in enumerate(num_blocks):
+            self.layers.append(self._make_layer(block, dims[i], num_block, stride=strides[i]))
+        self.layers = nn.ModuleList(self.layers)
+
+    def forward(self, x, t):
+        x_ = F.relu(self.bn1(self.conv1(x)))
+        time_emb = self.time_mlp(t)
+        for j, layer in enumerate(self.layers):
+            for block_ in layer:
+                x_ = block_(x_, time_emb)
+        x_ = F.avg_pool2d(x_, 4)
+        x_ = x_.view(x_.size(0), -1)
+        x_ = self.linear(x_)
+        return x_
+
+    def _make_layer(self, block, planes, num_blocks, stride):
+        strides = [stride] + [1] * (num_blocks - 1)
+        layers = []
+        for stride in strides:
+            layers.append(block(self.in_planes, planes, self.emb_dim, stride))
+            self.in_planes = planes * block.expansion
+        return nn.ModuleList(layers)
 
 
 class BasicBlock(nn.Module):
@@ -113,6 +178,45 @@ class Bottleneck(nn.Module):
             )
 
     def forward(self, x):
+        out = F.relu(self.bn1(self.conv1(x)))
+        out = F.relu(self.bn2(self.conv2(out)))
+        out = self.bn3(self.conv3(out))
+        out += self.shortcut(x)
+        out = F.relu(out)
+        return out
+
+
+class BottleneckTimeEmb(nn.Module):
+    expansion = 4
+
+    def __init__(self, in_planes, planes, time_emb_dim, stride=1):
+        super(BottleneckTimeEmb, self).__init__()
+        self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(planes)
+        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(planes)
+        self.conv3 = nn.Conv2d(planes, self.expansion * planes, kernel_size=1, bias=False)
+        self.bn3 = nn.BatchNorm2d(self.expansion * planes)
+        self.mlp = nn.Sequential(nn.SiLU(), nn.Linear(time_emb_dim, in_planes * 2))
+
+        self.shortcut = nn.Sequential()
+        if stride != 1 or in_planes != self.expansion * planes:
+            self.shortcut = nn.Sequential(
+                nn.Conv2d(
+                    in_planes,
+                    self.expansion * planes,
+                    kernel_size=1,
+                    stride=stride,
+                    bias=False,
+                ),
+                nn.BatchNorm2d(self.expansion * planes),
+            )
+
+    def forward(self, x, time_emb):
+        time_emb = self.mlp(time_emb)
+        time_emb = rearrange(time_emb, "b c -> b c 1 1")
+        scale, shift = time_emb.chunk(2, dim=1)
+        x = x * (scale + 1) + shift
         out = F.relu(self.bn1(self.conv1(x)))
         out = F.relu(self.bn2(self.conv2(out)))
         out = self.bn3(self.conv3(out))
