@@ -27,24 +27,21 @@ def load_classifier(resnet_model_path: Path):
 
 
 def load_classifier_t(resnet_model_path: Path):
-    model = ResNetTimeEmbedding(block=BottleneckTimeEmb,
-                                num_blocks=[3, 4, 6, 3],
-                                emb_dim=112,
-                                num_classes=10,
-                                num_channels=1)
+    model = ResNetTimeEmbedding(
+        block=BottleneckTimeEmb, num_blocks=[3, 4, 6, 3], emb_dim=112, num_classes=10, num_channels=1
+    )
     model.load_state_dict(th.load(resnet_model_path))
     return model
 
 
 class ResNetBase(nn.Module, ABC):
-
     def __init__(self, block, num_blocks, num_classes=10, num_channels=3, in_planes=64):
         super(ResNetBase, self).__init__()
         self.in_planes = in_planes
 
         self.conv1 = nn.Conv2d(num_channels, self.in_planes, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(self.in_planes)
-        self.linear = nn.Linear(self.in_planes * 2 ** (len(num_blocks)-1) * block.expansion, num_classes)
+        self.linear = nn.Linear(self.in_planes * 2 ** (len(num_blocks) - 1) * block.expansion, num_classes)
 
     def forward(self, *args, **kwargs):
         raise NotImplementedError
@@ -54,7 +51,7 @@ class ResNet(ResNetBase):
     def __init__(self, block, num_blocks, num_classes=10, num_channels=3, in_planes=64):
         super(ResNet, self).__init__(block, num_blocks, num_classes, num_channels, in_planes)
         self.in_planes = 64
-        dims = [self.in_planes, self.in_planes*2, self.in_planes*4, self.in_planes*8]
+        dims = [self.in_planes, self.in_planes * 2, self.in_planes * 4, self.in_planes * 8]
 
         self.layer1 = self._make_layer(block, dims[0], num_blocks[0], stride=1)
         self.layer2 = self._make_layer(block, dims[1], num_blocks[1], stride=2)
@@ -70,8 +67,8 @@ class ResNet(ResNetBase):
         out = F.avg_pool2d(out, 4)
         out = out.view(out.size(0), -1)
         out = self.linear(out)
-        import pdb;
-        pdb.set_trace()
+        # import pdb;
+        # pdb.set_trace()
         return out
 
     def p_y_given_x(self, x):
@@ -88,7 +85,6 @@ class ResNet(ResNetBase):
 
 
 class ResNetTimeEmbedding(ResNetBase):
-
     def __init__(self, block, num_blocks, emb_dim, num_classes=10, num_channels=3, in_planes=64):
         super(ResNetTimeEmbedding, self).__init__(block, num_blocks, num_classes, num_channels, in_planes)
         self.emb_dim = emb_dim
@@ -98,7 +94,7 @@ class ResNetTimeEmbedding(ResNetBase):
             nn.GELU(),
             nn.Linear(emb_dim, emb_dim),
         )
-        dims = [self.in_planes * 2 ** i for i in range(len(num_blocks))]
+        dims = [self.in_planes * 2**i for i in range(len(num_blocks))]
         strides = [1] + [2] * (len(num_blocks) - 1)
         self.layers = list()
         for i, num_block in enumerate(num_blocks):
