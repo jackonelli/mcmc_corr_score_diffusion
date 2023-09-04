@@ -8,11 +8,11 @@ class ReconstructionGuidance(Guidance):
     """A class the computes the gradient used in reconstruction guidance"""
 
     def __init__(
-        self, classifier: nn.Module, noise_pred: nn.Module, alpha_bars: th.Tensor, loss: nn.Module, lambda_: float = 1.0
+        self, noise_pred: nn.Module, classifier: nn.Module, alpha_bars: th.Tensor, loss: nn.Module, lambda_: float = 1.0
     ):
         """
-        @param classifier: Classifier model p(y|x_0)
         @param noise_pred: eps_theta(x_t, t), noise prediction model
+        @param classifier: Classifier model p(y|x_0)
         @param loss: Corresponding loss function for the classifier (e.g., CrossEntropy)
         @param lambda_: Magnitude of the gradient
         """

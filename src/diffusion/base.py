@@ -7,88 +7,13 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 
 
-class DiffusionModel(pl.LightningModule):
-    def __init__(self, noise_pred_model: nn.Module, loss_f: Callable, diff_sampler):
-        """
-        @param noise_pred_model: eps_theta(x_t, t), noise prediction model
-        @param loss_f:
-        @param lambda_: Magnitude of the gradient
-        """
-        super().__init__()
-        self.noise_pred_model = noise_pred_model
-        self.loss_f = loss_f
-        self.diff_sampler = diff_sampler
-
-        # Default Initialization
-        self.train_loss = 0.0
-        self.val_loss = 0.0
-        self.i_batch_train = 0
-        self.i_batch_val = 0
-        self.i_epoch = 0
-
-    def training_step(self, batch, batch_idx):
-        batch_size = batch["pixel_values"].shape[0]
-        x = batch["pixel_values"].to(self.device)
-
-        # Algorithm 1 line 3: sample t uniformally for every example in the batch
-        ts = th.randint(0, self.diff_sampler.num_timesteps, (batch_size,), device=self.device).long()
-
-        noise = th.randn_like(x)
-        x_noisy = self.diff_sampler.q_sample(x_0=x, ts=ts, noise=noise)
-        predicted_noise = self.noise_pred_model(x_noisy, ts)
-
-        loss = self.loss_f(noise, predicted_noise)
-        self.log("train_loss", loss)
-        self.train_loss += loss.detach().cpu().item()
-        self.i_batch_train += 1
-        return loss
-
-    def on_train_epoch_end(self):
-        print(" {}. Train Loss: {}".format(self.i_epoch, self.train_loss / self.i_batch_train))
-        self.train_loss = 0.0
-        self.i_batch_train = 0
-        self.i_epoch += 1
-
-    def configure_optimizers(self):
-        optimizer = th.optim.Adam(self.parameters(), lr=1e-3)
-        scheduler = th.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.99)
-        return [optimizer], [scheduler]
-
-    def validation_step(self, batch, batch_idx):
-        batch_size = batch["pixel_values"].shape[0]
-        x = batch["pixel_values"].to(self.device)
-
-        rng_state = th.get_rng_state()
-        th.manual_seed(self.i_batch_val)
-
-        # Algorithm 1 line 3: sample t uniformally for every example in the batch
-        ts = th.randint(0, self.diff_sampler.num_timesteps, (batch_size,), device=self.device).long()
-
-        noise = th.randn_like(x)
-        th.set_rng_state(rng_state)
-
-        x_noisy = self.diff_sampler.q_sample(x_0=x, ts=ts, noise=noise)
-        predicted_noise = self.noise_pred_model(x_noisy, ts)
-
-        loss = self.loss_f(noise, predicted_noise)
-        self.log("val_loss", loss)
-        self.val_loss += loss.detach().cpu().item()
-        self.i_batch_val += 1
-        return loss
-
-    def on_validation_epoch_end(self):
-        print(" {}. Validation Loss: {}".format(self.i_epoch, self.val_loss / self.i_batch_val))
-        self.val_loss = 0.0
-        self.i_batch_val = 0
-
-
 class DiffusionSampler:
     """Sampling from DDPM"""
 
     def __init__(
         self,
         beta_schedule: Callable,
-        num_diff_steps,
+        num_diff_steps: int,
         posterior_variance="beta",
     ):
         self.num_timesteps = num_diff_steps
@@ -209,6 +134,81 @@ def sample_x_tm1_given_x_t(
     noise = post_var_t.sqrt() * z
     xtm1 = m_tm1 + noise
     return xtm1
+
+
+class DiffusionModel(pl.LightningModule):
+    def __init__(self, noise_pred_model: nn.Module, loss_f: Callable, diff_sampler):
+        """
+        @param noise_pred_model: eps_theta(x_t, t), noise prediction model
+        @param loss_f:
+        @param lambda_: Magnitude of the gradient
+        """
+        super().__init__()
+        self.noise_pred_model = noise_pred_model
+        self.loss_f = loss_f
+        self.diff_sampler = diff_sampler
+
+        # Default Initialization
+        self.train_loss = 0.0
+        self.val_loss = 0.0
+        self.i_batch_train = 0
+        self.i_batch_val = 0
+        self.i_epoch = 0
+
+    def training_step(self, batch, batch_idx):
+        batch_size = batch["pixel_values"].shape[0]
+        x = batch["pixel_values"].to(self.device)
+
+        # Algorithm 1 line 3: sample t uniformally for every example in the batch
+        ts = th.randint(0, self.diff_sampler.num_timesteps, (batch_size,), device=self.device).long()
+
+        noise = th.randn_like(x)
+        x_noisy = self.diff_sampler.q_sample(x_0=x, ts=ts, noise=noise)
+        predicted_noise = self.noise_pred_model(x_noisy, ts)
+
+        loss = self.loss_f(noise, predicted_noise)
+        self.log("train_loss", loss)
+        self.train_loss += loss.detach().cpu().item()
+        self.i_batch_train += 1
+        return loss
+
+    def on_train_epoch_end(self):
+        print(" {}. Train Loss: {}".format(self.i_epoch, self.train_loss / self.i_batch_train))
+        self.train_loss = 0.0
+        self.i_batch_train = 0
+        self.i_epoch += 1
+
+    def configure_optimizers(self):
+        optimizer = th.optim.Adam(self.parameters(), lr=1e-3)
+        scheduler = th.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.99)
+        return [optimizer], [scheduler]
+
+    def validation_step(self, batch, batch_idx):
+        batch_size = batch["pixel_values"].shape[0]
+        x = batch["pixel_values"].to(self.device)
+
+        rng_state = th.get_rng_state()
+        th.manual_seed(self.i_batch_val)
+
+        # Algorithm 1 line 3: sample t uniformally for every example in the batch
+        ts = th.randint(0, self.diff_sampler.num_timesteps, (batch_size,), device=self.device).long()
+
+        noise = th.randn_like(x)
+        th.set_rng_state(rng_state)
+
+        x_noisy = self.diff_sampler.q_sample(x_0=x, ts=ts, noise=noise)
+        predicted_noise = self.noise_pred_model(x_noisy, ts)
+
+        loss = self.loss_f(noise, predicted_noise)
+        self.log("val_loss", loss)
+        self.val_loss += loss.detach().cpu().item()
+        self.i_batch_val += 1
+        return loss
+
+    def on_validation_epoch_end(self):
+        print(" {}. Validation Loss: {}".format(self.i_epoch, self.val_loss / self.i_batch_val))
+        self.val_loss = 0.0
+        self.i_batch_val = 0
 
 
 def compute_alpha_bars(alphas):

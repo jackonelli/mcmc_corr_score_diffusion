@@ -5,6 +5,7 @@ from pathlib import Path
 from functools import partial
 import torch as th
 import torch.nn.functional as F
+from src.guidance.reconstruction import ReconstructionGuidance
 from src.model.resnet import load_classifier
 from src.utils.net import Device, get_device
 from src.diffusion.base import DiffusionSampler
@@ -19,6 +20,9 @@ def main():
     models_dir = Path.cwd() / "models"
     uncond_diff = _load_diff(models_dir / "uncond_unet_mnist.pt", device)
     classifier = _load_class(models_dir / "resnet.pth.tar", device)
+    T = 1000
+    diff_sampler = DiffusionSampler(improved_beta_schedule, num_diff_steps=T)
+    guidance = ReconstructionGuidance(uncond_diff, classifier, alpha_bars, F.cross_entropy)
 
 
 def likelihood(x_0, y, classifier):
