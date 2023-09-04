@@ -14,8 +14,8 @@ import matplotlib.pyplot as plt
 
 
 @th.no_grad()
-def main():
-    model_path = Path.cwd() / "models/resnet.pth.tar"
+def test_reconstruction_classifier():
+    model_path = Path.cwd() / "models/resnet_reconstruction_classifier_mnist.pt"
     model = load_classifier(model_path)
     device = get_device(Device.GPU)
     model.to(device)
@@ -106,4 +106,4 @@ def logits_to_label(logits):
 
 
 if __name__ == "__main__":
-    test_classifier_t()
+    test_reconstruction_classifier()

@@ -9,7 +9,6 @@ from pathlib import Path
 import torch as th
 import pytorch_lightning as pl
 from src.guidance.reconstruction import ReconstructionClassifier
-from src.diffusion.beta_schedules import improved_beta_schedule
 from src.model.resnet import ResNet, Bottleneck
 from src.utils.net import get_device, Device
 from src.data.mnist import get_mnist_data_loaders

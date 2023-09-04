@@ -13,20 +13,14 @@ from src.diffusion.beta_schedules import improved_beta_schedule
 from src.model.unet import UNet
 
 
-@th.no_grad()
 def main():
     device = get_device(Device.GPU)
     models_dir = Path.cwd() / "models"
     uncond_diff = _load_diff(models_dir / "uncond_unet_mnist.pt", device)
     classifier = _load_class(models_dir / "resnet.pth.tar", device)
-    T = 1000
+    T = 100
     diff_sampler = DiffusionSampler(improved_beta_schedule, num_diff_steps=T)
     guidance = ReconstructionGuidance(uncond_diff, classifier, diff_sampler.alphas_bar.clone(), F.cross_entropy)
-
-
-def p_y_given_x(x, classifier):
-    logits = classifier(x)
-    return F.softmax(logits)
 
 
 def _load_diff(diff_path: Path, device):

@@ -20,9 +20,7 @@ ARCH = "resnet50_mnist"
 def load_classifier(resnet_model_path: Path):
     """Helper function to load default classifier with pre-trained weights"""
     model = ResNet(Bottleneck, [3, 4, 6, 3], num_classes=10, num_channels=1)
-    model = nn.DataParallel(model)
-    stored_data = th.load(resnet_model_path, map_location="cpu")
-    model.load_state_dict(stored_data["state_dict"])
+    model.load_state_dict(th.load(resnet_model_path))
     return model
 
 
@@ -71,9 +69,9 @@ class ResNet(ResNetBase):
         # pdb.set_trace()
         return out
 
-    def p_y_given_x(self, x):
+    def p_y_given_x(self, x: th.Tensor) -> th.Tensor:
         logits = self.forward(x)
-        return F.softmax(logits)
+        return logits_to_prob(logits)
 
     def _make_layer(self, block, planes, num_blocks, stride):
         strides = [stride] + [1] * (num_blocks - 1)
@@ -82,6 +80,10 @@ class ResNet(ResNetBase):
             layers.append(block(self.in_planes, planes, stride))
             self.in_planes = planes * block.expansion
         return nn.Sequential(*layers)
+
+
+def logits_to_prob(logits: th.Tensor) -> th.Tensor:
+    return F.softmax(logits, dim=1)
 
 
 class ResNetTimeEmbedding(ResNetBase):
