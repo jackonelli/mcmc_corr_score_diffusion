@@ -11,7 +11,6 @@ from src.utils.net import Device, get_device
 from src.diffusion.base import DiffusionSampler
 from src.diffusion.beta_schedules import improved_beta_schedule
 from src.model.unet import UNet
-from src.data.mnist import mnist_transform
 
 
 @th.no_grad()
@@ -22,12 +21,12 @@ def main():
     classifier = _load_class(models_dir / "resnet.pth.tar", device)
     T = 1000
     diff_sampler = DiffusionSampler(improved_beta_schedule, num_diff_steps=T)
-    guidance = ReconstructionGuidance(uncond_diff, classifier, alpha_bars, F.cross_entropy)
+    guidance = ReconstructionGuidance(uncond_diff, classifier, diff_sampler.alphas_bar.clone(), F.cross_entropy)
 
 
-def likelihood(x_0, y, classifier):
-    x_0 = mnist_transform(x_0)
-    F.
+def p_y_given_x(x, classifier):
+    logits = classifier(x)
+    return F.softmax(logits)
 
 
 def _load_diff(diff_path: Path, device):

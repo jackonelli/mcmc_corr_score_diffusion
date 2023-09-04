@@ -47,6 +47,10 @@ class ResNet(nn.Module):
         out = self.linear(out)
         return out
 
+    def p_y_given_x(self, x):
+        logits = self.forward(x)
+        return F.softmax(logits)
+
     def _make_layer(self, block, planes, num_blocks, stride):
         strides = [stride] + [1] * (num_blocks - 1)
         layers = []
