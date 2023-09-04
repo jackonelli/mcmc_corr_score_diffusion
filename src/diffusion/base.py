@@ -94,7 +94,7 @@ class DiffusionClassifier(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         batch_size = batch["pixel_values"].shape[0]
         x = batch["pixel_values"].to(self.device).float()
-        y = batch['label'].to(self.device).long()
+        y = batch["label"].to(self.device).long()
 
         # Algorithm 1 line 3: sample t uniformally for every example in the batch
         ts = th.randint(0, self.noise_scheduler.num_timesteps, (batch_size,), device=self.device).long()
@@ -122,7 +122,7 @@ class DiffusionClassifier(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         batch_size = batch["pixel_values"].shape[0]
         x = batch["pixel_values"].to(self.device)
-        y = batch['label'].to(self.device)
+        y = batch["label"].to(self.device)
 
         rng_state = th.get_rng_state()
         th.manual_seed(self.i_batch_val)
@@ -148,13 +148,13 @@ class DiffusionClassifier(pl.LightningModule):
         self.i_batch_val = 0
 
 
-class NoiseScheduler:
+class DiffusionSampler:
     """Sampling from DDPM"""
 
     def __init__(
         self,
         beta_schedule: Callable,
-        num_diff_steps,
+        num_diff_steps: int,
         posterior_variance="beta",
     ):
         self.num_timesteps = num_diff_steps
@@ -214,7 +214,9 @@ class NoiseScheduler:
 
             # Use the model to predict noise and use the noise to step back
             pred_noise = model(x_tm1, t_tensor)
-            x_tm1 = step_back(x_tm1, t, self.betas, self.alphas, self.alphas_bar, self.posterior_variance, pred_noise)
+            x_tm1 = sample_x_tm1_given_x_t(
+                x_tm1, t, self.betas, self.alphas, self.alphas_bar, self.posterior_variance, pred_noise
+            )
             steps.append(x_tm1.detach().cpu())
 
         return x_tm1.detach().cpu(), steps
@@ -239,7 +241,7 @@ def sample_x_t_given_x_0(x_0: th.Tensor, ts: th.Tensor, alphas_bar: th.Tensor, n
     return x_t
 
 
-def step_back(
+def sample_x_tm1_given_x_t(
     x_t: th.Tensor,
     t: int,
     betas: th.Tensor,

@@ -26,3 +26,19 @@ class ResNetInstantiation(unittest.TestCase):
         x = x.to(device)
         out = model(x)
         self.assertEqual(out.size(), th.Size((2, 10)))
+
+    def test_prob_distr(self):
+        image_channels = 1
+        image_size = 28
+        model_path = Path.cwd() / "models/resnet.pth.tar"
+        model = load_classifier(model_path)
+        # NB: This fails for device CPU
+        # There is something about the DataParallel super class which prevents CPU.
+        device = get_device(Device.GPU)
+        model.to(device)
+
+        batch_size = 2
+        x = th.rand((batch_size, image_channels, image_size, image_size))
+        x = x.to(device)
+        prob_vec = model.p_y_given_x(x)
+        self.assertEqual(prob_vec.size(), th.Size((2, 10)))

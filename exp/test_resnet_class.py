@@ -4,8 +4,10 @@
 from pathlib import Path
 import torch as th
 from src.model.resnet import load_classifier, load_classifier_t
-from src.diffusion.base import NoiseScheduler
+from src.diffusion.base import DiffusionSampler
 from src.diffusion.beta_schedules import improved_beta_schedule
+from src.data.mnist import get_mnist_data_loaders
+from src.model.resnet import load_classifier
 from src.data.mnist import get_mnist_data_loaders
 from src.utils.net import Device, get_device
 import matplotlib.pyplot as plt
@@ -25,7 +27,6 @@ def main():
     for batch_idx, batch in enumerate(val_loader):
         print(f"Batch {batch_idx}/{len(val_loader)}")
         x, y = batch["pixel_values"].to(device), batch["label"].to(device)
-        x = mnist_transform(x)
         logits = model(x)
         y_pred = logits_to_label(logits)
         batch_acc = accuracy(y, y_pred)
@@ -43,7 +44,7 @@ def test_classifier_t():
     model.eval()
 
     num_diff_steps = 1000
-    noise_scheduler = NoiseScheduler(improved_beta_schedule, num_diff_steps)
+    noise_scheduler = DiffusionSampler(improved_beta_schedule, num_diff_steps)
     n_points = 10
     ts = th.linspace(0, 999, n_points).type(th.int).numpy().tolist()
     batch_size = 256
@@ -69,6 +70,7 @@ def test_classifier_t():
         accs[t] = th.Tensor(accs[t].mean())
     plt.plot(ts, accs.values())
     plt.show()
+
 
 def mnist_transform(data):
     """Map MNIST pixel values from [-1,1] to [0, 1]"""
