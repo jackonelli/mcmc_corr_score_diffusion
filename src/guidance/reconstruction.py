@@ -1,9 +1,96 @@
-"""Reconstructoin guidance"""
+"""Reconstruction guidance"""
 from collections.abc import Callable
 import torch as th
 from torch import nn
+from src.diffusion.base import DiffusionSampler, extract
 import pytorch_lightning as pl
 from src.guidance.base import Guidance
+
+
+class ReconstructionSampler:
+    """Sampling from reconstruction guided DDPM"""
+
+    def __init__(
+        self,
+        diff_model: nn.Module,
+        classifier: nn.Module,
+        diff_proc: DiffusionSampler,
+    ):
+        self.diff_model = diff_model
+        self.classifier = classifier
+        self.diff_proc = diff_proc
+
+    def sample(self, num_samples: int, device: th.device, shape: tuple):
+        """Sampling from the backward process
+        Sample points from the data distribution
+
+        Args:
+            model (model to predict noise)
+            num_samples (number of samples)
+            device (the device the model is on)
+            shape (shape of data, e.g., (1, 28, 28))
+
+        Returns:
+            all x through the (predicted) reverse diffusion steps
+        """
+
+        # self.diff_model.eval()
+        steps = []
+        x_tm1 = th.randn((num_samples,) + shape).to(device)
+
+        for t in reversed(range(0, self.diff_proc.num_timesteps)):
+            t_tensor = th.full((x_tm1.shape[0],), t, device=device)
+
+            # Use the model to predict noise and use the noise to step back
+            pred_noise = self.diff_model(x_tm1, t_tensor)
+            x_tm1 = _sample_x_tm1_given_x_t(
+                x_tm1,
+                t,
+                self.diff_proc.betas,
+                self.diff_proc.alphas,
+                self.diff_proc.alphas_bar,
+                self.diff_proc.posterior_variance,
+                pred_noise,
+            )
+            steps.append(x_tm1.detach().cpu())
+
+        return x_tm1.detach().cpu(), steps
+
+
+def _sample_x_tm1_given_x_t(
+    x_t: th.Tensor,
+    t: int,
+    betas: th.Tensor,
+    alphas: th.Tensor,
+    alphas_bar: th.Tensor,
+    posterior_variance: th.Tensor,
+    pred_noise: th.Tensor,
+):
+    """Denoise the input tensor at a given timestep using the predicted noise
+
+    Args:
+        x_t (any shape),
+        t (timestep at which to denoise),
+        predicted_noise (noise predicted at the timestep)
+
+    Returns:
+        x_tm1 (x[t-1] denoised sample by one step - x_t.shape)
+    """
+
+    b_t = extract(betas, t, x_t)
+    a_t = extract(alphas, t, x_t)
+    a_bar_t = extract(alphas_bar, t, x_t)
+    post_var_t = extract(posterior_variance, t, x_t)
+
+    if t > 0:
+        z = th.randn_like(x_t)
+    else:
+        z = 0
+
+    m_tm1 = (x_t - b_t * pred_noise / (th.sqrt(1 - a_bar_t))) / a_t.sqrt()
+    noise = post_var_t.sqrt() * z
+    xtm1 = m_tm1 + noise
+    return xtm1
 
 
 class ReconstructionGuidance(Guidance):
