@@ -13,20 +13,23 @@ class ReconstructionSampler:
     def __init__(
         self,
         diff_model: nn.Module,
-        classifier: nn.Module,
         diff_proc: DiffusionSampler,
+        guidance: Guidance,
     ):
         self.diff_model = diff_model
-        self.classifier = classifier
+        self.diff_model.eval()
         self.diff_proc = diff_proc
+        self.guidance = guidance
 
-    def sample(self, num_samples: int, device: th.device, shape: tuple):
+    @th.no_grad()
+    def sample(self, num_samples: int, classes: th.Tensor, device: th.device, shape: tuple):
         """Sampling from the backward process
         Sample points from the data distribution
 
         Args:
             model (model to predict noise)
             num_samples (number of samples)
+            classes (num_samples, ): classes to condition on (on for each sample)
             device (the device the model is on)
             shape (shape of data, e.g., (1, 28, 28))
 
@@ -36,6 +39,7 @@ class ReconstructionSampler:
 
         # self.diff_model.eval()
         steps = []
+        classes = classes.to(device)
         x_tm1 = th.randn((num_samples,) + shape).to(device)
 
         for t in reversed(range(0, self.diff_proc.num_timesteps)):
@@ -43,54 +47,38 @@ class ReconstructionSampler:
 
             # Use the model to predict noise and use the noise to step back
             pred_noise = self.diff_model(x_tm1, t_tensor)
-            x_tm1 = _sample_x_tm1_given_x_t(
-                x_tm1,
-                t,
-                self.diff_proc.betas,
-                self.diff_proc.alphas,
-                self.diff_proc.alphas_bar,
-                self.diff_proc.posterior_variance,
-                pred_noise,
-            )
+            x_tm1 = self._sample_x_tm1_given_x_t(x_tm1, t, pred_noise)
             steps.append(x_tm1.detach().cpu())
 
         return x_tm1.detach().cpu(), steps
 
+    def _sample_x_tm1_given_x_t(self, x_t: th.Tensor, t: int, pred_noise: th.Tensor):
+        """Denoise the input tensor at a given timestep using the predicted noise
 
-def _sample_x_tm1_given_x_t(
-    x_t: th.Tensor,
-    t: int,
-    betas: th.Tensor,
-    alphas: th.Tensor,
-    alphas_bar: th.Tensor,
-    posterior_variance: th.Tensor,
-    pred_noise: th.Tensor,
-):
-    """Denoise the input tensor at a given timestep using the predicted noise
+        Args:
+            x_t (any shape),
+            t (timestep at which to denoise),
+            predicted_noise (noise predicted at the timestep)
 
-    Args:
-        x_t (any shape),
-        t (timestep at which to denoise),
-        predicted_noise (noise predicted at the timestep)
+        Returns:
+            x_tm1 (x[t-1] denoised sample by one step - x_t.shape)
+        """
+        b_t = extract(self.diff_proc.betas, t, x_t)
+        a_t = extract(self.diff_proc.alphas, t, x_t)
+        a_bar_t = extract(self.diff_proc.alphas_bar, t, x_t)
+        post_var_t = extract(self.diff_proc.posterior_variance, t, x_t)
 
-    Returns:
-        x_tm1 (x[t-1] denoised sample by one step - x_t.shape)
-    """
+        if t > 0:
+            z = th.randn_like(x_t)
+        else:
+            z = 0
 
-    b_t = extract(betas, t, x_t)
-    a_t = extract(alphas, t, x_t)
-    a_bar_t = extract(alphas_bar, t, x_t)
-    post_var_t = extract(posterior_variance, t, x_t)
-
-    if t > 0:
-        z = th.randn_like(x_t)
-    else:
-        z = 0
-
-    m_tm1 = (x_t - b_t * pred_noise / (th.sqrt(1 - a_bar_t))) / a_t.sqrt()
-    noise = post_var_t.sqrt() * z
-    xtm1 = m_tm1 + noise
-    return xtm1
+        class_score = self.guidance.grad(x_tm1, t_tensor, classes)
+        cond_noise = post_var_t * class_score
+        m_tm1 = (x_t - b_t / (th.sqrt(1 - a_bar_t)) * (pred_noise - cond_noise)) / a_t.sqrt()
+        noise = post_var_t.sqrt() * z
+        xtm1 = m_tm1 + noise
+        return xtm1
 
 
 class ReconstructionGuidance(Guidance):
@@ -111,16 +99,25 @@ class ReconstructionGuidance(Guidance):
         self.loss = loss
         self.alpha_bars = alpha_bars
 
+    @th.no_grad()
     def grad(self, x_t, t, y):
         """Compute score function for the classifier
 
         Estimates the score grad_x_t log p(y | x_t) by mapping x_t to x_0
         and then evaluating the given likelihood p(y | x_0)
         """
-        x_t.requires_grad = True
-        x_0 = self._map_to_x_0(x_t, t)
-        loss = self.loss(self.classifier(x_0), y)
-        return self.lambda_ * th.autograd.grad(loss, x_t, retain_graph=True)[0]
+        if self.lambda_ > 0.0:
+            th.set_grad_enabled(True)
+            # I do not know if this is correct, or even necessary.
+            x_t = x_t.clone().detach().requires_grad_(True)
+            x_0 = self._map_to_x_0(x_t, t)
+            logits = self.classifier(x_0)
+            loss = self.loss(logits, y)
+            grad_ = self.lambda_ * th.autograd.grad(loss, x_t, retain_graph=True)[0]
+            th.set_grad_enabled(False)
+        else:
+            grad_ = th.zeros_like(x_t)
+        return grad_
 
     def _map_to_x_0(self, x_t, t):
         """Map x_t to x_0

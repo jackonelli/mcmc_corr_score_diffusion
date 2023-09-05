@@ -2,36 +2,34 @@
 
 
 from pathlib import Path
-from functools import partial
 import torch as th
 import torch.nn.functional as F
-from src.guidance.reconstruction import ReconstructionGuidance
+from src.guidance.reconstruction import ReconstructionGuidance, ReconstructionSampler
 from src.model.resnet import load_classifier
 from src.utils.net import Device, get_device
 from src.diffusion.base import DiffusionSampler
 from src.diffusion.beta_schedules import improved_beta_schedule
-from src.model.unet import UNet
+from src.model.unet import load_mnist_diff
+from src.utils.vis import plot_samples
 
 
 def main():
     device = get_device(Device.GPU)
     models_dir = Path.cwd() / "models"
-    uncond_diff = _load_diff(models_dir / "uncond_unet_mnist.pt", device)
-    classifier = _load_class(models_dir / "resnet.pth.tar", device)
+    uncond_diff = load_mnist_diff(models_dir / "uncond_unet_mnist.pt", device)
+    classifier = _load_class(models_dir / "resnet_reconstruction_classifier_mnist.pt", device)
     T = 100
     diff_sampler = DiffusionSampler(improved_beta_schedule, num_diff_steps=T)
-    guidance = ReconstructionGuidance(uncond_diff, classifier, diff_sampler.alphas_bar.clone(), F.cross_entropy)
+    diff_sampler.to(device)
+    guidance = ReconstructionGuidance(
+        uncond_diff, classifier, diff_sampler.alphas_bar.clone(), F.cross_entropy, lambda_=0.0
+    )
+    reconstr_guided_sampler = ReconstructionSampler(uncond_diff, diff_sampler, guidance)
 
-
-def _load_diff(diff_path: Path, device):
-    image_size = 28
-    time_emb_dim = 112
-    channels = 1
-    unet = UNet(image_size, time_emb_dim, channels)
-    unet.load_state_dict(th.load(diff_path))
-    unet.to(device)
-    unet.eval()
-    return unet
+    num_samples = 100
+    classes = th.ones((num_samples,), dtype=th.int64)
+    samples, _ = reconstr_guided_sampler.sample(num_samples, classes, device, th.Size((1, 28, 28)))
+    plot_samples(samples)
 
 
 def _load_class(class_path: Path, device):

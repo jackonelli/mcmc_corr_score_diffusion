@@ -34,6 +34,12 @@ class DiffusionSampler(ABC):
         else:
             raise NotImplementedError
 
+    def to(self, device: th.device):
+        self.betas = self.betas.to(device)
+        self.alphas = self.alphas.to(device)
+        self.alphas_bar = self.alphas_bar.to(device)
+        self.posterior_variance = self.posterior_variance.to(device)
+
     def q_sample(self, x_0: th.Tensor, ts: th.Tensor, noise: th.Tensor):
         """
         Sampling from the forward process
@@ -65,7 +71,6 @@ class DiffusionSampler(ABC):
             all x through the (predicted) reverse diffusion steps
         """
 
-        model.eval()
         steps = []
         x_tm1 = th.randn((num_samples,) + shape).to(device)
 
@@ -74,12 +79,37 @@ class DiffusionSampler(ABC):
 
             # Use the model to predict noise and use the noise to step back
             pred_noise = model(x_tm1, t_tensor)
-            x_tm1 = _sample_x_tm1_given_x_t(
-                x_tm1, t, self.betas, self.alphas, self.alphas_bar, self.posterior_variance, pred_noise
-            )
+            x_tm1 = self._sample_x_tm1_given_x_t(x_tm1, t, pred_noise)
             steps.append(x_tm1.detach().cpu())
 
         return x_tm1.detach().cpu(), steps
+
+    def _sample_x_tm1_given_x_t(self, x_t: th.Tensor, t: int, pred_noise: th.Tensor):
+        """Denoise the input tensor at a given timestep using the predicted noise
+
+        Args:
+            x_t (any shape),
+            t (timestep at which to denoise),
+            predicted_noise (noise predicted at the timestep)
+
+        Returns:
+            x_tm1 (x[t-1] denoised sample by one step - x_t.shape)
+        """
+
+        b_t = extract(self.betas, t, x_t)
+        a_t = extract(self.alphas, t, x_t)
+        a_bar_t = extract(self.alphas_bar, t, x_t)
+        post_var_t = extract(self.posterior_variance, t, x_t)
+
+        if t > 0:
+            z = th.randn_like(x_t)
+        else:
+            z = 0
+
+        m_tm1 = (x_t - b_t / (th.sqrt(1 - a_bar_t)) * pred_noise) / a_t.sqrt()
+        noise = post_var_t.sqrt() * z
+        xtm1 = m_tm1 + noise
+        return xtm1
 
 
 def _sample_x_t_given_x_0(x_0: th.Tensor, ts: th.Tensor, alphas_bar: th.Tensor, noise: th.Tensor):
@@ -101,42 +131,6 @@ def _sample_x_t_given_x_0(x_0: th.Tensor, ts: th.Tensor, alphas_bar: th.Tensor, 
     return x_t
 
 
-def _sample_x_tm1_given_x_t(
-    x_t: th.Tensor,
-    t: int,
-    betas: th.Tensor,
-    alphas: th.Tensor,
-    alphas_bar: th.Tensor,
-    posterior_variance: th.Tensor,
-    pred_noise: th.Tensor,
-):
-    """Denoise the input tensor at a given timestep using the predicted noise
-
-    Args:
-        x_t (any shape),
-        t (timestep at which to denoise),
-        predicted_noise (noise predicted at the timestep)
-
-    Returns:
-        x_tm1 (x[t-1] denoised sample by one step - x_t.shape)
-    """
-
-    b_t = extract(betas, t, x_t)
-    a_t = extract(alphas, t, x_t)
-    a_bar_t = extract(alphas_bar, t, x_t)
-    post_var_t = extract(posterior_variance, t, x_t)
-
-    if t > 0:
-        z = th.randn_like(x_t)
-    else:
-        z = 0
-
-    m_tm1 = (x_t - b_t * pred_noise / (th.sqrt(1 - a_bar_t))) / a_t.sqrt()
-    noise = post_var_t.sqrt() * z
-    xtm1 = m_tm1 + noise
-    return xtm1
-
-
 def compute_alpha_bars(alphas):
     """Compute sequence of alpha_bar from sequence of alphas"""
     return th.cumprod(alphas, dim=0)
@@ -155,7 +149,9 @@ def extract(a: th.Tensor, t: Union[int, th.Tensor], x: th.Tensor):
     """
 
     batch_size = x.shape[0]
-    out = a.gather(-1, th.full((batch_size,), t) if isinstance(t, int) else t.cpu())
+    device = a.device
+    inds = th.full((batch_size,), t).to(device) if isinstance(t, int) else t.to(device)
+    out = a.gather(-1, inds)
     return out.reshape(batch_size, *((1,) * (len(x.shape) - 1))).to(x.device)
 
 

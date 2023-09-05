@@ -2,11 +2,24 @@
 
 Base diffusion model
 """
+from pathlib import Path
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 from einops.layers.torch import Rearrange
 from einops import rearrange, reduce
+
+
+def load_mnist_diff(diff_path: Path, device):
+    """Load UNet diffusion model for MNIST"""
+    image_size = 28
+    time_emb_dim = 112
+    channels = 1
+    unet = UNet(image_size, time_emb_dim, channels)
+    unet.load_state_dict(th.load(diff_path))
+    unet.to(device)
+    unet.eval()
+    return unet
 
 
 class UNet(nn.Module):
