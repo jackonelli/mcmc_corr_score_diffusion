@@ -1,6 +1,7 @@
 """Script for sampling with reconstruction guidance"""
 
 
+from argparse import ArgumentParser
 from pathlib import Path
 import torch as th
 import torch.nn.functional as F
@@ -14,6 +15,7 @@ from src.utils.vis import plot_samples
 
 
 def main():
+    args = parse_args()
     device = get_device(Device.GPU)
     models_dir = Path.cwd() / "models"
     uncond_diff = load_mnist_diff(models_dir / "uncond_unet_mnist.pt", device)
@@ -23,7 +25,7 @@ def main():
     diff_sampler.to(device)
 
     guidance = ReconstructionGuidance(
-        uncond_diff, classifier, diff_sampler.alphas_bar.clone(), F.cross_entropy, lambda_=0.0
+        uncond_diff, classifier, diff_sampler.alphas_bar.clone(), F.cross_entropy, lambda_=args.guid_scale
     )
     reconstr_guided_sampler = ReconstructionSampler(uncond_diff, diff_sampler, guidance, verbose=True)
 
@@ -38,6 +40,12 @@ def _load_class(class_path: Path, device):
     classifier.to(device)
     classifier.eval()
     return classifier
+
+
+def parse_args():
+    parser = ArgumentParser(prog="Sample with reconstruction guidance")
+    parser.add_argument("--guid_scale", default=1.0, type=float, help="Guidance scale")
+    return parser.parse_args()
 
 
 if __name__ == "__main__":

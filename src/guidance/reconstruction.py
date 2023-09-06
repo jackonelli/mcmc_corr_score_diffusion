@@ -39,7 +39,7 @@ class ReconstructionSampler:
         x_tm1 = th.randn((num_samples,) + shape).to(device)
 
         for t in reversed(range(0, self.diff_proc.num_diff_steps)):
-            if self.verbose and (t + 1) % 10 == 0:
+            if self.verbose and (t + 1) % 100 == 0:
                 print(f"Diffusion step {t+1}")
             t_tensor = th.full((x_tm1.shape[0],), t, device=device)
             # Use the model to predict noise and use the noise to step back
