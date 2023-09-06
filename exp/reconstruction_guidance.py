@@ -11,7 +11,7 @@ from src.utils.net import Device, get_device
 from src.diffusion.base import DiffusionSampler
 from src.diffusion.beta_schedules import improved_beta_schedule
 from src.model.unet import load_mnist_diff
-from src.utils.vis import plot_samples
+from src.utils.vis import plot_samples_grid
 
 
 def main():
@@ -32,7 +32,7 @@ def main():
     num_samples = 100
     classes = th.ones((num_samples,), dtype=th.int64)
     samples, _ = reconstr_guided_sampler.sample(num_samples, classes, device, th.Size((1, 28, 28)))
-    plot_samples(samples)
+    plot_samples_grid(samples)
 
 
 def _load_class(class_path: Path, device):

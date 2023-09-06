@@ -117,6 +117,11 @@ class ReconstructionGuidance(Guidance):
             grad_ = th.zeros_like(x_t)
         return grad_
 
+    def predict_x_0(self, x_t, t):
+        t_tensor = th.full((x_t.shape[0],), t, device=x_t.device)
+        pred_noise_t = self.noise_pred(x_t, t_tensor)
+        return self._map_to_x_0(x_t, t_tensor, pred_noise_t)
+
     def _map_to_x_0(self, x_t, t, pred_noise_t):
         """Map x_t to x_0
 
@@ -133,6 +138,7 @@ def mean_x_0_given_x_t(x_t: th.Tensor, noise_pred_t: th.Tensor, a_bar_t: th.Tens
 
     NB: This uses the noise prediction function eps_theta, not the score function s_theta.
     """
+    # TODO: Fix this
     assert all(a_bar_t == a_bar_t[0])
     _a = a_bar_t[0]
     return (x_t - th.sqrt(1.0 - _a) * noise_pred_t) / th.sqrt(_a)

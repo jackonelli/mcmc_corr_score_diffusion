@@ -84,7 +84,7 @@ class DiffusionSampler(ABC):
             # Use the model to predict noise and use the noise to step back
             pred_noise = model(x_tm1, t_tensor)
             x_tm1 = self._sample_x_tm1_given_x_t(x_tm1, t, pred_noise)
-            steps.append(x_tm1.detach().cpu())
+            steps.append((t, x_tm1.detach().cpu()))
 
         return x_tm1.detach().cpu(), steps
 

@@ -4,9 +4,9 @@
 from pathlib import Path
 from src.diffusion.base import DiffusionSampler
 from src.diffusion.beta_schedules import improved_beta_schedule
-from src.model.unet import UNet, load_mnist_diff
+from src.model.unet import load_mnist_diff
 from src.utils.net import get_device, Device
-from src.utils.vis import plot_samples
+from src.utils.vis import plot_samples_grid
 
 
 def main():
@@ -18,7 +18,7 @@ def main():
     diff_sampler = DiffusionSampler(improved_beta_schedule, num_diff_steps)
 
     samples, _ = diff_sampler.sample(unet, 100, device, (1, 28, 28))
-    plot_samples(samples)
+    plot_samples_grid(samples)
 
 
 if __name__ == "__main__":
