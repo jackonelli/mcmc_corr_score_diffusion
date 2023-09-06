@@ -18,13 +18,14 @@ def main():
     models_dir = Path.cwd() / "models"
     uncond_diff = load_mnist_diff(models_dir / "uncond_unet_mnist.pt", device)
     classifier = _load_class(models_dir / "resnet_reconstruction_classifier_mnist.pt", device)
-    T = 100
+    T = 1000
     diff_sampler = DiffusionSampler(improved_beta_schedule, num_diff_steps=T)
     diff_sampler.to(device)
+
     guidance = ReconstructionGuidance(
         uncond_diff, classifier, diff_sampler.alphas_bar.clone(), F.cross_entropy, lambda_=0.0
     )
-    reconstr_guided_sampler = ReconstructionSampler(uncond_diff, diff_sampler, guidance)
+    reconstr_guided_sampler = ReconstructionSampler(uncond_diff, diff_sampler, guidance, verbose=True)
 
     num_samples = 100
     classes = th.ones((num_samples,), dtype=th.int64)

@@ -10,16 +10,12 @@ from src.guidance.base import Guidance
 class ReconstructionSampler:
     """Sampling from reconstruction guided DDPM"""
 
-    def __init__(
-        self,
-        diff_model: nn.Module,
-        diff_proc: DiffusionSampler,
-        guidance: Guidance,
-    ):
+    def __init__(self, diff_model: nn.Module, diff_proc: DiffusionSampler, guidance: Guidance, verbose=False):
         self.diff_model = diff_model
         self.diff_model.eval()
         self.diff_proc = diff_proc
         self.guidance = guidance
+        self.verbose = verbose
 
     @th.no_grad()
     def sample(self, num_samples: int, classes: th.Tensor, device: th.device, shape: tuple):
@@ -42,17 +38,18 @@ class ReconstructionSampler:
         classes = classes.to(device)
         x_tm1 = th.randn((num_samples,) + shape).to(device)
 
-        for t in reversed(range(0, self.diff_proc.num_timesteps)):
+        for t in reversed(range(0, self.diff_proc.num_diff_steps)):
+            if self.verbose and (t + 1) % 10 == 0:
+                print(f"Diffusion step {t+1}")
             t_tensor = th.full((x_tm1.shape[0],), t, device=device)
-
             # Use the model to predict noise and use the noise to step back
             pred_noise = self.diff_model(x_tm1, t_tensor)
-            x_tm1 = self._sample_x_tm1_given_x_t(x_tm1, t, pred_noise)
+            x_tm1 = self._sample_x_tm1_given_x_t(x_tm1, t, pred_noise, classes)
             steps.append(x_tm1.detach().cpu())
 
         return x_tm1.detach().cpu(), steps
 
-    def _sample_x_tm1_given_x_t(self, x_t: th.Tensor, t: int, pred_noise: th.Tensor):
+    def _sample_x_tm1_given_x_t(self, x_t: th.Tensor, t: int, pred_noise: th.Tensor, classes: th.Tensor):
         """Denoise the input tensor at a given timestep using the predicted noise
 
         Args:
@@ -73,9 +70,10 @@ class ReconstructionSampler:
         else:
             z = 0
 
-        class_score = self.guidance.grad(x_tm1, t_tensor, classes)
-        cond_noise = post_var_t * class_score
-        m_tm1 = (x_t - b_t / (th.sqrt(1 - a_bar_t)) * (pred_noise - cond_noise)) / a_t.sqrt()
+        sigma_t = self.diff_proc.sigma_t(t, x_t)
+        t_tensor = th.full((x_t.shape[0],), t, device=x_t.device)
+        class_score = self.guidance.grad(x_t, t_tensor, classes, pred_noise)
+        m_tm1 = (x_t + b_t / (th.sqrt(1 - a_bar_t)) * (sigma_t * class_score - pred_noise)) / a_t.sqrt()
         noise = post_var_t.sqrt() * z
         xtm1 = m_tm1 + noise
         return xtm1
@@ -100,7 +98,7 @@ class ReconstructionGuidance(Guidance):
         self.alpha_bars = alpha_bars
 
     @th.no_grad()
-    def grad(self, x_t, t, y):
+    def grad(self, x_t, t, y, pred_noise):
         """Compute score function for the classifier
 
         Estimates the score grad_x_t log p(y | x_t) by mapping x_t to x_0
@@ -110,22 +108,22 @@ class ReconstructionGuidance(Guidance):
             th.set_grad_enabled(True)
             # I do not know if this is correct, or even necessary.
             x_t = x_t.clone().detach().requires_grad_(True)
-            x_0 = self._map_to_x_0(x_t, t)
+            x_0 = self._map_to_x_0(x_t, t, pred_noise)
             logits = self.classifier(x_0)
-            loss = self.loss(logits, y)
+            loss = -self.loss(logits, y)
             grad_ = self.lambda_ * th.autograd.grad(loss, x_t, retain_graph=True)[0]
             th.set_grad_enabled(False)
         else:
             grad_ = th.zeros_like(x_t)
         return grad_
 
-    def _map_to_x_0(self, x_t, t):
+    def _map_to_x_0(self, x_t, t, pred_noise_t):
         """Map x_t to x_0
 
         For reconstruction guidance, we assume that we only have access to the likelihood
         p(y | x_0); we approximate p(y | x_t) ~= p(y | x_0_hat(x_t))
         """
-        return mean_x_0_given_x_t(x_t, self.noise_pred(x_t, t), self.alpha_bars[t])
+        return mean_x_0_given_x_t(x_t, pred_noise_t, self.alpha_bars[t])
 
 
 def mean_x_0_given_x_t(x_t: th.Tensor, noise_pred_t: th.Tensor, a_bar_t: th.Tensor):
@@ -135,7 +133,9 @@ def mean_x_0_given_x_t(x_t: th.Tensor, noise_pred_t: th.Tensor, a_bar_t: th.Tens
 
     NB: This uses the noise prediction function eps_theta, not the score function s_theta.
     """
-    return (x_t - th.sqrt(1.0 - a_bar_t) * noise_pred_t) / th.sqrt(a_bar_t)
+    assert all(a_bar_t == a_bar_t[0])
+    _a = a_bar_t[0]
+    return (x_t - th.sqrt(1.0 - _a) * noise_pred_t) / th.sqrt(_a)
 
 
 class ReconstructionClassifier(pl.LightningModule):
