@@ -3,6 +3,7 @@
 
 from pathlib import Path
 import torch as th
+import matplotlib.pyplot as plt
 from src.model.resnet import load_classifier, load_classifier_t
 from src.diffusion.base import DiffusionSampler
 from src.diffusion.beta_schedules import improved_beta_schedule
@@ -10,7 +11,7 @@ from src.data.mnist import get_mnist_data_loaders
 from src.model.resnet import load_classifier
 from src.data.mnist import get_mnist_data_loaders
 from src.utils.net import Device, get_device
-import matplotlib.pyplot as plt
+from src.utils.classification import logits_to_label, accuracy
 
 
 @th.no_grad()
@@ -70,39 +71,6 @@ def test_classifier_t():
         accs[t] = th.Tensor(accs[t].mean())
     plt.plot(ts, accs.values())
     plt.show()
-
-
-def mnist_transform(data):
-    """Map MNIST pixel values from [-1,1] to [0, 1]"""
-    return (data + 1) / 2
-
-
-@th.no_grad()
-def accuracy(y_true: th.Tensor, y_pred: th.Tensor) -> float:
-    """Compute accuracy of class predictions
-
-    Args:
-        y_true: (batch_size,)
-        y_pred: (batch_size,)
-
-    Returns:
-        acc: average accuracy
-    """
-    accs = y_true == y_pred
-    return accs.float().mean().item()
-
-
-@th.no_grad()
-def logits_to_label(logits):
-    """Convert logits to hard label
-
-    Args:
-        logits: (batch_size, num_classes)
-
-    Returns:
-        labels: (batch_size, num_classes)
-    """
-    return th.argmax(logits, dim=1)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 """Visualisation"""
+from typing import Tuple
 import matplotlib.pyplot as plt
 
 
@@ -10,6 +11,20 @@ def plot_samples_grid(samples, grid=(10, 10)):
         for j in range(10):
             axes[i, j].imshow(samples[i * 10 + j].squeeze(), cmap="gray")
             axes[i, j].axis("off")
+    plt.show()
+
+
+def plot_accs(accs: list[Tuple[int, float, float]]):
+    """Plot comparison of classification accuracy for reconstruction
+
+    base: classifier p(y | x_t)
+    rec: classifer p(y | x_0_hat(x_t))
+    """
+    t, base, rec = zip(*accs)
+    _, ax = plt.subplots()
+    ax.plot(t, base, "-b", label="diff")
+    ax.plot(t, rec, "-r", label="rec")
+    ax.legend()
     plt.show()
 
 

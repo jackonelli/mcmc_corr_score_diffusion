@@ -47,7 +47,7 @@ class ReconstructionSampler:
             x_tm1 = self._sample_x_tm1_given_x_t(x_tm1, t, pred_noise, classes)
             steps.append(x_tm1.detach().cpu())
 
-        return x_tm1.detach().cpu(), steps
+        return x_tm1, steps
 
     def _sample_x_tm1_given_x_t(self, x_t: th.Tensor, t: int, pred_noise: th.Tensor, classes: th.Tensor):
         """Denoise the input tensor at a given timestep using the predicted noise
