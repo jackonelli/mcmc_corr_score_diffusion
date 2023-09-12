@@ -1,11 +1,11 @@
-import torch
+import torch as th
 import numpy as np
 from typing import Callable
 from abc import ABC, abstractmethod
 
 
 class Sampler(ABC):
-    def __init__(self, num_samples_per_step: int, step_sizes: torch.tensor, gradient_function: Callable):
+    def __init__(self, num_samples_per_step: int, step_sizes: th.Tensor, gradient_function: Callable):
         """
         @param num_samples_per_step: Number of MCMC steps per timestep t
         @param step_sizes: Step sizes for each t
@@ -25,7 +25,7 @@ class AnnealedULASampler(Sampler):
     Annealed Unadjusted-Langevin Algorithm
     """
 
-    def __init__(self, num_samples_per_step: int, step_sizes: torch.tensor, gradient_function: Callable):
+    def __init__(self, num_samples_per_step: int, step_sizes: th.Tensor, gradient_function: Callable):
         """
         @param num_samples_per_step: Number of ULA steps per timestep t
         @param step_sizes: Step sizes for each t
@@ -38,12 +38,12 @@ class AnnealedULASampler(Sampler):
         self._noise_function = None
         self._gradient_fn_unnorm = None
 
-    def sample_step(self, x: torch.tensor, t: int, text_embeddings: torch.tensor):
+    def sample_step(self, x: th.Tensor, t: int, text_embeddings: th.Tensor):
         for i in range(self._num_samples_per_step):
             ss = self._step_sizes[t]
             std = (2 * ss) ** 0.5
             grad = self._gradient_fn_unnorm(x, t, text_embeddings)
-            noise = torch.randn_like(x) * std
+            noise = th.randn_like(x) * std
             x = x + grad * ss + noise
         return x
 
@@ -79,37 +79,37 @@ class AnnealedLAScoreSampler(Sampler):
             ss = self._step_sizes[t]
             std = (2 * ss) ** 0.5
             grad = self._gradient_function(x, t, text_embeddings)
-            noise = torch.randn_like(x) * std
+            noise = th.randn_like(x) * std
             mean_x = x + grad * ss
             x_hat = mean_x + noise
             grad_hat = self._gradient_function(x_hat, t, text_embeddings)
             mean_x_hat = x_hat + grad_hat * ss
             # Correction
-            logp_reverse = -0.5 * torch.sum((x - mean_x_hat) ** 2) / std**2
-            logp_forward = -0.5 * torch.sum((x_hat - mean_x) ** 2) / std**2
+            logp_reverse = -0.5 * th.sum((x - mean_x_hat) ** 2) / std**2
+            logp_forward = -0.5 * th.sum((x_hat - mean_x) ** 2) / std**2
 
             def energy_s(ss_):
                 diff = x_hat - x
                 x_ = x + ss_[0] * diff
-                energy = torch.unsqueeze(torch.sum(self._gradient_fn_unnorm(x_, t, text_embeddings) * diff), dim=0)
+                energy = th.unsqueeze(th.sum(self._gradient_fn_unnorm(x_, t, text_embeddings) * diff), dim=0)
                 for j in range(1, len(ss_)):
                     x_ = x + ss_[j] * diff
-                    energy = torch.concatenate(
+                    energy = th.concatenate(
                         (
                             energy,
-                            torch.unsqueeze(torch.sum(self._gradient_fn_unnorm(x_, t, text_embeddings) * diff), dim=0),
+                            th.unsqueeze(th.sum(self._gradient_fn_unnorm(x_, t, text_embeddings) * diff), dim=0),
                         )
                     )
                 return energy
 
-            s = torch.linspace(0, 1, steps=self.n_trapets).cuda()
+            s = th.linspace(0, 1, steps=self.n_trapets).cuda()
             energys = energy_s(s)
-            diff_logp_x = torch.trapezoid(energys, s)
+            diff_logp_x = th.trapezoid(energys, s)
             logp_accept = diff_logp_x + logp_reverse - logp_forward
-            print("explogp_accept", torch.exp(logp_accept))
+            print("explogp_accept", th.exp(logp_accept))
 
-            u = torch.rand(1).cuda()
-            accept = int(u < torch.exp(logp_accept))
+            u = th.rand(1).cuda()
+            accept = int(u < th.exp(logp_accept))
             print("accept", accept)
             self.accepts.append(accept)
 
@@ -117,7 +117,7 @@ class AnnealedLAScoreSampler(Sampler):
                 self.accepts_t[t] = list()
                 self.explogp_t[t] = list()
             self.accepts_t[t].append(accept)
-            self.explogp_t[t].append(torch.exp(logp_accept).cpu().numpy())
+            self.explogp_t[t].append(th.exp(logp_accept).cpu().numpy())
             print("t_ratio", np.sum(self.accepts_t[t]) / len(self.accepts_t[t]))
             accept = 1.0
             x = accept * x_hat + (1 - accept) * x
@@ -134,9 +134,9 @@ class AnnealedHMCScoreSampler(Sampler):
     def __init__(
         self,
         num_samples_per_step: int,
-        step_sizes: torch.tensor,
+        step_sizes: th.Tensor,
         damping_coeff: float,
-        mass_diag_sqrt: torch.tensor,
+        mass_diag_sqrt: th.Tensor,
         num_leapfrog_steps: int,
         gradient_function: Callable,
     ):
@@ -171,11 +171,11 @@ class AnnealedHMCScoreSampler(Sampler):
         dims = x.dim()
 
         # Sample Momentum
-        v = torch.randn_like(x) * self._mass_diag_sqrt[t]
+        v = th.randn_like(x) * self._mass_diag_sqrt[t]
 
         for i in range(self._num_samples_per_step):
             # Partial Momentum Refreshment
-            eps = torch.randn_like(x)
+            eps = th.randn_like(x)
             v_prime = v * self._damping_coeff + np.sqrt(1.0 - self._damping_coeff**2) * eps * self._mass_diag_sqrt[t]
             x_next, v_next, xs, grads = self.leapfrog_step(x, v_prime, t, text_embeddings)
 
@@ -184,18 +184,18 @@ class AnnealedHMCScoreSampler(Sampler):
 
             def energy_steps(xs_, grads_):
                 e = (grads_[0] * (xs_[1] - xs_[0])).sum(dim=tuple(range(1, dims)))
-                e = torch.concatenate((e, (grads_[1] * (xs_[1] - xs_[0])).sum(dim=tuple(range(1, dims)))))
-                energy = torch.trapz(e)
+                e = th.concatenate((e, (grads_[1] * (xs_[1] - xs_[0])).sum(dim=tuple(range(1, dims)))))
+                energy = th.trapz(e)
                 for j in range(1, len(xs_) - 1):
                     e = (grads_[j] * (xs_[j + 1] - xs_[j])).sum(dim=tuple(range(1, dims)))
-                    e = torch.concatenate((e, (grads_[j + 1] * (xs_[j + 1] - xs_[j])).sum(dim=tuple(range(1, dims)))))
-                    energy += torch.trapz(e)
+                    e = th.concatenate((e, (grads_[j + 1] * (xs_[j + 1] - xs_[j])).sum(dim=tuple(range(1, dims)))))
+                    energy += th.trapz(e)
                 return energy
 
             diff_logp_x = energy_steps(xs, grads)
             logp_accept = logp_v - logp_v_p + diff_logp_x
-            u = torch.rand(x_next.shape[0]).to(x_next.device)
-            accept = (u < torch.exp(logp_accept)).to(torch.float32)
+            u = th.rand(x_next.shape[0]).to(x_next.device)
+            accept = (u < th.exp(logp_accept)).to(th.float32)
 
             # update samples
             x = accept[:, None] * x_next + (1 - accept[:, None]) * x
@@ -205,18 +205,18 @@ class AnnealedHMCScoreSampler(Sampler):
 
 
 def _leapfrog_step(
-    x_0: torch.tensor,
-    v_0: torch.tensor,
+    x_0: th.Tensor,
+    v_0: th.Tensor,
     gradient_target: Callable,
     step_size: float,
-    mass_diag_sqrt: torch.tensor,
+    mass_diag_sqrt: th.Tensor,
     num_steps: int,
 ):
     """Multiple leapfrog steps with"""
     x_k = x_0.clone()
     v_k = v_0.clone()
     if mass_diag_sqrt is None:
-        mass_diag_sqrt = torch.ones_like(x_k)
+        mass_diag_sqrt = th.ones_like(x_k)
 
     mass_diag = mass_diag_sqrt**2.0
     xs, grads = list(), list()

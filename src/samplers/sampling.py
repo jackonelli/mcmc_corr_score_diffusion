@@ -4,6 +4,23 @@ import torch as th
 from src.diffusion.base import compute_alpha_bars
 
 
+def noise_pred_to_score(x_t, t, noise_pred, sigma_t_get):
+    """Map noise pred function eps_theta to score function s_theta
+
+    where,
+    s_theta = log p_theta(x_t, t)
+
+    s_theta = - eps_theta(x_t, t) /sigma_t
+    """
+    eps = noise_pred(x_t, t)
+    sigma_t = sigma_t_get(t, x_t)
+    return -eps / sigma_t
+
+
+def langevin_sampling(score_fn, dim, alpha_ts):
+    pass
+
+
 def reverse_diffusion(noise_pred_fn, dim, alpha_ts, sigma_ts, store_traj=False):
     """Reverse diffusion sampling"""
     with th.no_grad():
