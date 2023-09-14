@@ -101,7 +101,7 @@ class ReconstructionGuidance(Guidance):
         Estimates the score grad_x_t log p(y | x_t) by mapping x_t to x_0
         and then evaluating the given likelihood p(y | x_0)
         """
-        if self.lambda_ > 0.0 and (t < 800).any():
+        if self.lambda_ > 0.0:
             th.set_grad_enabled(True)
             # I do not know if this is correct, or even necessary.
             x_t = x_t.clone().detach().requires_grad_(True)
@@ -111,8 +111,8 @@ class ReconstructionGuidance(Guidance):
             # Get the log. probabilites of the correct classes
             y_log_probs = log_p[th.arange(log_p.size(0)), y]
             avg_log = y_log_probs.mean()
-
-            grad_ = self.lambda_ * th.autograd.grad(avg_log, x_t, retain_graph=True)[0]
+            grad_ = th.autograd.grad(avg_log, x_t, retain_graph=True)[0]
+            grad_ = self.lambda_ * grad_ / grad_.norm()
             th.set_grad_enabled(False)
         else:
             grad_ = th.zeros_like(x_t)
