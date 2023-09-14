@@ -1,8 +1,10 @@
-"""Script for sampling with reconstruction guidance"""
+"""Script for sampling with Langevin sampler"""
+from functools import partial
 from pathlib import Path
 import torch as th
 import torch.nn.functional as F
-from src.guidance.reconstruction import ReconstructionGuidance
+from src.samplers.sampling import noise_pred_to_score
+from src.guidance.reconstruction import ReconstructionGuidance, ReconstructionSampler
 from src.model.resnet import load_classifier
 from src.utils.net import Device, get_device
 from src.diffusion.base import DiffusionSampler
@@ -17,19 +19,25 @@ def main():
     device = get_device(Device.GPU)
     models_dir = Path.cwd() / "models"
     uncond_diff = load_mnist_diff(models_dir / "uncond_unet_mnist.pt", device)
-    classifier = _load_class(models_dir / "resnet_reconstruction_classifier_mnist.pt", device)
+    # classifier = _load_class(models_dir / "resnet_reconstruction_classifier_mnist.pt", device)
     T = 1000
+    num_samples = 100
     diff_sampler = DiffusionSampler(improved_beta_schedule, num_diff_steps=T)
     diff_sampler.to(device)
-    num_samples = 100
+    # Dummy samples
+    # samples = 10 * [(12, th.randn((num_samples, 1, 28, 28)).to(device))]
+    print("Score function")
+    x_0 = th.randn((num_samples, 1, 28, 28)).to(device)
+    t = th.randint(0, T, (num_samples,)).to(device)
+    score_function = partial(noise_pred_to_score, noise_pred=uncond_diff, sigma_t_get=diff_sampler.sigma_t)
+    s_theta_t = score_function(x_0, t)
+
+    langevin_sampling(score_fn, dim, step_size, num_steps=1000)
     print("Sampling x_0:T")
     x_0, samples = diff_sampler.sample(uncond_diff, num_samples, device, th.Size((1, 28, 28)))
 
     guidance = ReconstructionGuidance(uncond_diff, classifier, diff_sampler.alphas_bar.clone(), F.cross_entropy)
     print("Reconstructing x_0")
-    # Dummy samples
-    # samples = 10 * [(12, th.randn((num_samples, 1, 28, 28)).to(device))]
-    # x_0 = th.randn((num_samples, 1, 28, 28)).to(device)
 
     single_samples = [(t, x_t_batch[0, :, :, :].reshape((1, 1, 28, 28))) for (t, x_t_batch) in samples]
     thinned_samples = every_nth_el(single_samples, every_nth=100)

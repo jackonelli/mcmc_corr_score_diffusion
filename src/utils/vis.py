@@ -7,9 +7,9 @@ def plot_samples_grid(samples, grid=(10, 10)):
     """Plot grid of images"""
     num_rows, num_cols = grid
     _, axes = plt.subplots(num_rows, num_cols, figsize=(8, 8))
-    for i in range(10):
-        for j in range(10):
-            axes[i, j].imshow(samples[i * 10 + j].squeeze(), cmap="gray")
+    for i in range(num_rows):
+        for j in range(num_cols):
+            axes[i, j].imshow(samples[i * num_cols + j].squeeze(), cmap="gray")
             axes[i, j].axis("off")
     plt.show()
 
@@ -22,8 +22,10 @@ def plot_accs(accs: list[Tuple[int, float, float]]):
     """
     t, base, rec = zip(*accs)
     _, ax = plt.subplots()
-    ax.plot(t, base, "-b", label="diff")
-    ax.plot(t, rec, "-r", label="rec")
+    ax.plot(t, base, "-b", label="$x_t$")
+    ax.plot(t, rec, "-r", label="$\hat{x}_0(x_t)$")
+    ax.set_xlabel("Diffusion step $T$")
+    ax.set_ylabel("Accuracy")
     ax.legend()
     plt.show()
 
