@@ -24,15 +24,13 @@ def main():
     diff_sampler = DiffusionSampler(improved_beta_schedule, num_diff_steps=T)
     diff_sampler.to(device)
 
-    guidance = ReconstructionGuidance(
-        uncond_diff, classifier, diff_sampler.alphas_bar.clone(), F.cross_entropy, lambda_=args.guid_scale
-    )
+    guidance = ReconstructionGuidance(uncond_diff, classifier, diff_sampler.alphas_bar.clone(), lambda_=args.guid_scale)
     reconstr_guided_sampler = ReconstructionSampler(uncond_diff, diff_sampler, guidance, verbose=True)
 
     num_samples = 100
     classes = th.ones((num_samples,), dtype=th.int64)
     samples, _ = reconstr_guided_sampler.sample(num_samples, classes, device, th.Size((1, 28, 28)))
-    plot_samples_grid(samples)
+    plot_samples_grid(samples.detach().cpu())
 
 
 def _load_class(class_path: Path, device):

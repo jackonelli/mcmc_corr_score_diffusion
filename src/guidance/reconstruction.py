@@ -5,6 +5,7 @@ from torch import nn
 from src.diffusion.base import DiffusionSampler, extract
 import pytorch_lightning as pl
 from src.guidance.base import Guidance
+from src.utils.classification import logits_to_log_prob
 
 
 class ReconstructionSampler:
@@ -82,19 +83,15 @@ class ReconstructionSampler:
 class ReconstructionGuidance(Guidance):
     """A class the computes the gradient used in reconstruction guidance"""
 
-    def __init__(
-        self, noise_pred: nn.Module, classifier: nn.Module, alpha_bars: th.Tensor, loss: nn.Module, lambda_: float = 1.0
-    ):
+    def __init__(self, noise_pred: nn.Module, classifier: nn.Module, alpha_bars: th.Tensor, lambda_: float = 1.0):
         """
         @param noise_pred: eps_theta(x_t, t), noise prediction model
         @param classifier: Classifier model p(y|x_0)
-        @param loss: Corresponding loss function for the classifier (e.g., CrossEntropy)
         @param lambda_: Magnitude of the gradient
         """
         super(ReconstructionGuidance, self).__init__(lambda_=lambda_)
         self.classifier = classifier
         self.noise_pred = noise_pred
-        self.loss = loss
         self.alpha_bars = alpha_bars
 
     @th.no_grad()
@@ -104,14 +101,18 @@ class ReconstructionGuidance(Guidance):
         Estimates the score grad_x_t log p(y | x_t) by mapping x_t to x_0
         and then evaluating the given likelihood p(y | x_0)
         """
-        if self.lambda_ > 0.0:
+        if self.lambda_ > 0.0 and (t < 800).any():
             th.set_grad_enabled(True)
             # I do not know if this is correct, or even necessary.
             x_t = x_t.clone().detach().requires_grad_(True)
             x_0 = self._map_to_x_0(x_t, t, pred_noise)
             logits = self.classifier(x_0)
-            loss = -self.loss(logits, y)
-            grad_ = self.lambda_ * th.autograd.grad(loss, x_t, retain_graph=True)[0]
+            log_p = logits_to_log_prob(logits)
+            # Get the log. probabilites of the correct classes
+            y_log_probs = log_p[th.arange(log_p.size(0)), y]
+            avg_log = y_log_probs.mean()
+
+            grad_ = self.lambda_ * th.autograd.grad(avg_log, x_t, retain_graph=True)[0]
             th.set_grad_enabled(False)
         else:
             grad_ = th.zeros_like(x_t)

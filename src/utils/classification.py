@@ -1,5 +1,6 @@
 """Classification utils"""
 import torch as th
+import torch.nn.functional as F
 
 
 @th.no_grad()
@@ -29,6 +30,18 @@ def entropy(prob_vec: th.Tensor) -> float:
     """
     entropy = -th.sum(prob_vec * th.log(prob_vec), dim=1)
     return entropy.mean().item()
+
+
+def logits_to_log_prob(logits):
+    """Convert logits to log probability vector
+
+    Args:
+        logits: (batch_size, num_classes) in R^n
+
+    Returns:
+        log_prob_vec: (batch_size, num_classes)
+    """
+    return F.log_softmax(logits, dim=1)
 
 
 @th.no_grad()
