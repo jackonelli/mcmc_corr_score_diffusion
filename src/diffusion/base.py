@@ -17,7 +17,7 @@ class DiffusionSampler(ABC):
         num_diff_steps: int,
         posterior_variance="beta",
     ):
-        self.num_diff_steps = num_diff_steps
+        self.num_timesteps = num_diff_steps
 
         # define beta
         self.betas = beta_schedule(num_timesteps=num_diff_steps)
@@ -78,7 +78,7 @@ class DiffusionSampler(ABC):
         steps = []
         x_tm1 = th.randn((num_samples,) + shape).to(device)
 
-        for t in reversed(range(0, self.num_diff_steps)):
+        for t in reversed(range(0, self.num_timesteps)):
             t_tensor = th.full((x_tm1.shape[0],), t, device=device)
 
             # Use the model to predict noise and use the noise to step back

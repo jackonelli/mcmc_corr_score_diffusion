@@ -17,9 +17,12 @@ from abc import ABC
 ARCH = "resnet50_mnist"
 
 
-def load_classifier(resnet_model_path: Path):
+def load_classifier(resnet_model_path: Path, time_emb=False):
     """Helper function to load default classifier with pre-trained weights"""
-    model = ResNet(Bottleneck, [3, 4, 6, 3], num_classes=10, num_channels=1)
+    if time_emb:
+        model = ResNetTimeEmbedding(BottleneckTimeEmb, [3, 4, 6, 3], 112, num_classes=10, num_channels=1)
+    else:
+        model = ResNet(Bottleneck, [3, 4, 6, 3], num_classes=10, num_channels=1)
     model.load_state_dict(th.load(resnet_model_path))
     return model
 

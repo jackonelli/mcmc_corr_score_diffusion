@@ -28,7 +28,7 @@ def main():
     unet.train()
     diff_sampler = DiffusionSampler(improved_beta_schedule, num_diff_steps)
 
-    diffm = DiffusionModel(noise_pred_model=unet, loss_f=F.mse_loss, diff_sampler=diff_sampler)
+    diffm = DiffusionModel(model=unet, loss_f=F.mse_loss, noise_scheduler=diff_sampler)
 
     diffm.to(dev)
     trainer = pl.Trainer(max_epochs=20, num_sanity_val_steps=0, accelerator="gpu", devices=1)
