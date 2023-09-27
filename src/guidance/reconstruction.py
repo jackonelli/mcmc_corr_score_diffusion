@@ -2,10 +2,10 @@
 from collections.abc import Callable
 import torch as th
 from torch import nn
-from src.diffusion.base import DiffusionSampler, extract
 import pytorch_lightning as pl
 from src.guidance.base import Guidance
 from src.utils.classification import logits_to_log_prob
+from src.utils.net import batch_grad
 
 
 class ReconstructionGuidance(Guidance):
@@ -31,28 +31,14 @@ class ReconstructionGuidance(Guidance):
         """
         if self.lambda_ > 0.0:
             th.set_grad_enabled(True)
-            expectation = False
-
-            if expectation:
-                # I do not know if this is correct, or even necessary.
-                x_t = x_t.clone().detach().requires_grad_(True)
-                x_0 = self._map_to_x_0(x_t, t, pred_noise)
-                logits = self.classifier(x_0)
-                log_p = logits_to_log_prob(logits)
-                # Get the log. probabilities of the correct classes
-                y_log_probs = log_p[th.arange(log_p.size(0)), y]
-                avg_log = y_log_probs.mean()
-                grad_ = th.autograd.grad(avg_log, x_t, retain_graph=True)[0]
-            else:
-                grad_ = th.empty(x_t.shape, device=x_t.device)
-                for i in range(grad_.shape[0]):
-                    x_t_i = x_t[i : i + 1].clone().detach().requires_grad_(True)
-                    x_0_i = self._map_to_x_0(x_t_i, t[i : i + 1], pred_noise[i : i + 1])
-                    logits = self.classifier(x_0_i)
-                    log_p = logits_to_log_prob(logits)
-                    y_log_probs = log_p[th.arange(log_p.size(0)), y[i : i + 1]]
-                    grad_[i] = th.autograd.grad(y_log_probs, x_t_i, retain_graph=True)[0]
-
+            x_t = x_t.clone().detach().requires_grad_(True)
+            x_0 = self._map_to_x_0(x_t, t, pred_noise)
+            logits = self.classifier(x_0)
+            log_p = logits_to_log_prob(logits)
+            # Get the log. probabilities of the correct classes
+            y_log_probs = log_p[th.arange(log_p.size(0)), y]
+            y_log_probs = log_p[th.arange(log_p.size(0)), y]
+            grad_ = batch_grad(y_log_probs, x_t)
             s = 1.0
             if scale:
                 s = th.norm(pred_noise) / grad_.norm()

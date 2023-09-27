@@ -2,8 +2,7 @@
 from abc import ABC, abstractmethod
 import torch as th
 import torch.nn as nn
-
-from src.diffusion.base import DiffusionSampler
+from src.diffusion.base import extract, DiffusionSampler
 
 
 class Guidance(ABC):
