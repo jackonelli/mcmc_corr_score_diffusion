@@ -12,6 +12,23 @@ import torch as th
 import torch.nn as nn
 
 
+def batch_grad(outputs: th.Tensor, inputs: th.Tensor):
+    """Compute gradient w.r.t. to every input
+
+    Rather than computing an average gradient for all inputs x_i, this treats each row in inputs
+    as independent samples and computes the gradient of every output w.r.t to the corresponding input.
+
+    d f_i(x_i) / d x_i
+
+    Args:
+        outputs (B,) or (B, 1): function values: {f_i(x_i)}_i=1^B.
+        inputs (B, D_x): batch of input values {x_i}_i=1^B
+    """
+    grads = th.autograd.grad(outputs, inputs, grad_outputs=th.ones_like(outputs))
+    # grad returns a Tuple[Tensor] (I don't know why)
+    return grads[0]
+
+
 # PyTorch 1.7 has SiLU, but we support PyTorch 1.5.
 class SiLU(nn.Module):
     def forward(self, x):
@@ -115,9 +132,9 @@ def timestep_embedding(timesteps, dim, max_period=10000):
     :return: an [N x dim] Tensor of positional embeddings.
     """
     half = dim // 2
-    freqs = th.exp(
-        -math.log(max_period) * th.arange(start=0, end=half, dtype=th.float32) / half
-    ).to(device=timesteps.device)
+    freqs = th.exp(-math.log(max_period) * th.arange(start=0, end=half, dtype=th.float32) / half).to(
+        device=timesteps.device
+    )
     args = timesteps[:, None].float() * freqs[None]
     embedding = th.cat([th.cos(args), th.sin(args)], dim=-1)
     if dim % 2:
