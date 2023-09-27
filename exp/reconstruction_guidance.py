@@ -4,8 +4,8 @@
 from argparse import ArgumentParser
 from pathlib import Path
 import torch as th
-import torch.nn.functional as F
-from src.guidance.reconstruction import ReconstructionGuidance, ReconstructionSampler
+from src.guidance.reconstruction import ReconstructionGuidance
+from src.guidance.base import GuidanceSampler
 from src.model.resnet import load_classifier
 from src.utils.net import Device, get_device
 from src.diffusion.base import DiffusionSampler
@@ -25,7 +25,7 @@ def main():
     diff_sampler.to(device)
 
     guidance = ReconstructionGuidance(uncond_diff, classifier, diff_sampler.alphas_bar.clone(), lambda_=args.guid_scale)
-    reconstr_guided_sampler = ReconstructionSampler(uncond_diff, diff_sampler, guidance, verbose=True)
+    reconstr_guided_sampler = GuidanceSampler(uncond_diff, diff_sampler, guidance, verbose=True)
 
     num_samples = 100
     classes = th.ones((num_samples,), dtype=th.int64)
