@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 import torch as th
 import torch.nn as nn
 from src.diffusion.base import extract, DiffusionSampler
+from src.samplers.mcmc import MCMCSampler
 
 
 class Guidance(ABC):
@@ -90,3 +91,59 @@ class GuidanceSampler:
         noise = post_var_t.sqrt() * z
         xtm1 = m_tm1 + noise
         return xtm1
+
+
+class MCMCGuidanceSampler(GuidanceSampler):
+
+    def __init__(self, diff_model: nn.Module, diff_proc: DiffusionSampler, guidance: Guidance, mcmc_sampler: MCMCSampler,
+                 reverse=True, verbose=False):
+        super().__init__(
+            diff_model=diff_model, diff_proc=diff_proc, guidance=guidance, verbose=verbose
+        )
+        self.mcmc_sampler = mcmc_sampler
+        self.mcmc_sampler.set_gradient_function(self.grad)
+        self.reverse = reverse
+
+    def grad(self, x_t, t, classes):
+        sigma_t = self.diff_proc.sigma_t(t, x_t)
+        t_tensor = th.full((x_t.shape[0],), t, device=x_t.device)
+        pred_noise = self.diff_model(x_t, t_tensor)
+        class_score = self.guidance.grad(x_t, t_tensor, classes, pred_noise)
+        return class_score - pred_noise/sigma_t
+
+    @th.no_grad()
+    def sample(self, num_samples: int, classes: th.Tensor, device: th.device, shape: tuple):
+        """Sampling from the backward process
+        Sample points from the data distribution
+
+        Args:
+            model (model to predict noise)
+            num_samples (number of samples)
+            classes (num_samples, ): classes to condition on (on for each sample)
+            device (the device the model is on)
+            shape (shape of data, e.g., (1, 28, 28))
+
+        Returns:
+            all x through the (predicted) reverse diffusion steps
+        """
+
+        # self.diff_model.eval()
+        steps = []
+        classes = classes.to(device)
+        x_tm1 = th.randn((num_samples,) + shape).to(device)
+
+        for t in reversed(range(0, self.diff_proc.num_timesteps)):
+            if self.verbose and (t + 1) % 100 == 0:
+                print(f"Diffusion step {t + 1}")
+
+            if self.reverse:
+                # Use the model to predict noise and use the noise to step back
+                t_tensor = th.full((x_tm1.shape[0],), t, device=device)
+                pred_noise = self.diff_model(x_tm1, t_tensor)
+                x_tm1 = self._sample_x_tm1_given_x_t(x_tm1, t, pred_noise, classes)
+
+            if t > 0:
+                x_tm1 = self.mcmc_sampler.sample_step(x_tm1, t-1, classes)
+            steps.append(x_tm1.detach().cpu())
+
+        return x_tm1, steps

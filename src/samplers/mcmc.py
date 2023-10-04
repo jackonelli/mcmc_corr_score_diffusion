@@ -4,7 +4,7 @@ from typing import Callable
 from abc import ABC, abstractmethod
 
 
-class Sampler(ABC):
+class MCMCSampler(ABC):
     def __init__(self, num_samples_per_step: int, step_sizes: th.Tensor, gradient_function: Callable):
         """
         @param num_samples_per_step: Number of MCMC steps per timestep t
@@ -19,8 +19,30 @@ class Sampler(ABC):
     def sample_step(self, *args, **kwargs):
         raise NotImplementedError
 
+    def set_gradient_function(self, *args, **kwargs):
+        raise NotImplementedError
 
-class AnnealedULASampler(Sampler):
+
+class BaseMCMCSampler(MCMCSampler):
+
+    def __init__(self, num_samples_per_step: int, step_sizes: th.Tensor, gradient_function: Callable):
+        """
+        @param num_samples_per_step: Number of MCMC steps per timestep t
+        @param step_sizes: Step sizes for each t
+        @param gradient_function: Function that returns the score for a given x, t, and text_embedding
+        """
+        super().__init__(
+            num_samples_per_step=num_samples_per_step, step_sizes=step_sizes, gradient_function=gradient_function
+        )
+
+    def sample_step(self, *args, **kwargs):
+        raise NotImplementedError
+
+    def set_gradient_function(self, gradient_function):
+        self._gradient_function = gradient_function
+
+
+class AnnealedULASampler(BaseMCMCSampler):
     """
     Annealed Unadjusted-Langevin Algorithm
     """
@@ -48,7 +70,7 @@ class AnnealedULASampler(Sampler):
         return x
 
 
-class AnnealedLAScoreSampler(Sampler):
+class AnnealedLAScoreSampler(BaseMCMCSampler):
     """Annealed Metropolis-Hasting Adjusted Langevin Algorithm
 
     A straight line is used to compute the trapezoidal rule
@@ -125,7 +147,7 @@ class AnnealedLAScoreSampler(Sampler):
         return x
 
 
-class AnnealedHMCScoreSampler(Sampler):
+class AnnealedHMCScoreSampler(BaseMCMCSampler):
     """Annealed Metropolis-Hasting Adjusted Hamiltonian Monte Carlo
 
     Trapezoidal rule is computed with the intermediate steps of HMC (leapfrog steps)
@@ -155,6 +177,7 @@ class AnnealedHMCScoreSampler(Sampler):
         self._mass_diag_sqrt = mass_diag_sqrt
         self._num_leapfrog_steps = num_leapfrog_steps
         self._sync_function = None
+        self.accepts = dict()
 
     def leapfrog_step(self, x, v, i, text_embeddings):
         step_size = self._step_sizes[i]
@@ -172,6 +195,7 @@ class AnnealedHMCScoreSampler(Sampler):
 
         # Sample Momentum
         v = th.randn_like(x) * self._mass_diag_sqrt[t]
+        self.accepts[t] = list()
 
         for i in range(self._num_samples_per_step):
             # Partial Momentum Refreshment
@@ -183,24 +207,24 @@ class AnnealedHMCScoreSampler(Sampler):
             logp_v = -0.5 * (v_next**2 / self._mass_diag_sqrt[t] ** 2).sum(dim=tuple(range(1, dims)))
 
             def energy_steps(xs_, grads_):
-                e = (grads_[0] * (xs_[1] - xs_[0])).sum(dim=tuple(range(1, dims)))
-                e = th.concatenate((e, (grads_[1] * (xs_[1] - xs_[0])).sum(dim=tuple(range(1, dims)))))
+                e = (grads_[0] * (xs_[1] - xs_[0])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)
+                e = th.cat((e, (grads_[1] * (xs_[1] - xs_[0])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)), 1)
                 energy = th.trapz(e)
                 for j in range(1, len(xs_) - 1):
-                    e = (grads_[j] * (xs_[j + 1] - xs_[j])).sum(dim=tuple(range(1, dims)))
-                    e = th.concatenate((e, (grads_[j + 1] * (xs_[j + 1] - xs_[j])).sum(dim=tuple(range(1, dims)))))
+                    e = (grads_[j] * (xs_[j + 1] - xs_[j])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)
+                    e = th.cat((e, (grads_[j + 1] * (xs_[j + 1] - xs_[j])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)), 1)
                     energy += th.trapz(e)
                 return energy
 
             diff_logp_x = energy_steps(xs, grads)
             logp_accept = logp_v - logp_v_p + diff_logp_x
             u = th.rand(x_next.shape[0]).to(x_next.device)
-            accept = (u < th.exp(logp_accept)).to(th.float32)
+            accept = (u < th.exp(logp_accept)).to(th.float32).reshape((x_next.shape[0], ) + tuple(([1 for _ in range(dims-1)])))
 
             # update samples
-            x = accept[:, None] * x_next + (1 - accept[:, None]) * x
-            v = accept[:, None] * v_next + (1 - accept[:, None]) * v_prime
-
+            x = accept * x_next + (1 - accept) * x
+            v = accept * v_next + (1 - accept) * v_prime
+            self.accepts[t].append((th.sum(accept) / accept.shape[0]).detach().cpu().item())
         return x
 
 

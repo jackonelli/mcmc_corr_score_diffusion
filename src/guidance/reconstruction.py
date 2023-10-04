@@ -37,7 +37,6 @@ class ReconstructionGuidance(Guidance):
             log_p = logits_to_log_prob(logits)
             # Get the log. probabilities of the correct classes
             y_log_probs = log_p[th.arange(log_p.size(0)), y]
-            y_log_probs = log_p[th.arange(log_p.size(0)), y]
             grad_ = batch_grad(y_log_probs, x_t)
             s = 1.0
             if scale:
@@ -78,7 +77,8 @@ def mean_x_0_given_x_t(x_t: th.Tensor, noise_pred_t: th.Tensor, a_bar_t: th.Tens
 class ReconstructionClassifier(pl.LightningModule):
     """Train classifier for reconstruction guidance."""
 
-    def __init__(self, model: nn.Module, loss_f: Callable):
+    def __init__(self, model: nn.Module, loss_f: Callable, lr: float = 1e-3):
+        self.lr = lr
         super().__init__()
         self.model = model
         self.loss_f = loss_f
@@ -108,7 +108,7 @@ class ReconstructionClassifier(pl.LightningModule):
         self.i_epoch += 1
 
     def configure_optimizers(self):
-        optimizer = th.optim.Adam(self.parameters(), lr=1e-3)
+        optimizer = th.optim.Adam(self.parameters(), lr=self.lr)
         scheduler = th.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.99)
         return [optimizer], [scheduler]
 

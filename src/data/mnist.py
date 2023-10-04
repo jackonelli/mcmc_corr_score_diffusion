@@ -3,6 +3,40 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 from torchvision.transforms import Compose
 import matplotlib.pyplot as plt
+import torch as th
+
+
+class NoiseDataset(Dataset):
+    def __init__(self, examples):
+        self.examples = examples
+
+    def __getitem__(self, index):
+        x = self.examples['pixel_values'][index]
+        y = self.examples['label'][index]
+
+        return {'pixel_values': x, 'label': y}
+
+    def __len__(self):
+        return len(self.examples['label'])
+
+
+def get_noise_mnist_data_loader(dataset_size: int, batch_size: int):
+    examples = dict()
+    examples["pixel_values"] = th.randn((dataset_size, 1, 28, 28))
+    examples['label'] = th.randint(0, 10, (dataset_size, ))
+    dataset = NoiseDataset(examples)
+
+    # create dataloader
+    dataloader_train = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        drop_last=True,
+        pin_memory=True,
+        num_workers=8,
+    )
+    return dataloader_train
+
 
 
 def get_mnist_data_loaders(batch_size: int):
