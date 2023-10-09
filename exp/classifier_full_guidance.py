@@ -27,7 +27,7 @@ def main():
     guidance = ClassifierFullGuidance(classifier, lambda_=args.guid_scale)
     reconstr_guided_sampler = GuidanceSampler(uncond_diff, diff_sampler, guidance, verbose=True)
 
-    num_samples = 100
+    num_samples = args.num_samples
     classes = th.ones((num_samples,), dtype=th.int64)
     samples, _ = reconstr_guided_sampler.sample(num_samples, classes, device, th.Size((1, 28, 28)))
     plot_samples_grid(samples.detach().cpu())
@@ -43,6 +43,7 @@ def _load_class(class_path: Path, device):
 def parse_args():
     parser = ArgumentParser(prog="Sample with classifier-full guidance")
     parser.add_argument("--guid_scale", default=1.0, type=float, help="Guidance scale")
+    parser.add_argument("--num_samples", default=100, type=int, help="Num samples (batch size to run in parallell)")
     return parser.parse_args()
 
 
