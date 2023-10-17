@@ -1,5 +1,5 @@
 from datasets import load_dataset
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 from torchvision.transforms import Compose
 import matplotlib.pyplot as plt

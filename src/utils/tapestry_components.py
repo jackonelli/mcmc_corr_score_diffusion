@@ -1013,7 +1013,7 @@ class IFPipeline(DiffusionPipeline, LoraLoaderMixin):
             noise = extract_latents(noise_canvas, sizes)
             return noise
 
-        sampler._gradient_function = gradient_fn_unnorm
+        sampler.gradient_function = gradient_fn_unnorm
         sampler._sync_function = sync_fn
         sampler._noise_function = noise_fn
         sampler._gradient_fn_unnorm = gradient_fn_unnorm

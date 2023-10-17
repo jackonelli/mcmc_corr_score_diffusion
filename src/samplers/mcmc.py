@@ -1,3 +1,4 @@
+import torch
 import torch as th
 import numpy as np
 from typing import Callable
@@ -11,15 +12,12 @@ class MCMCSampler(ABC):
         @param step_sizes: Step sizes for each t
         @param gradient_function: Function that returns the score for a given x, t, and text_embedding
         """
-        self._step_sizes = step_sizes
-        self._num_samples_per_step = num_samples_per_step
-        self._gradient_function = gradient_function
+        self.step_sizes = step_sizes
+        self.num_samples_per_step = num_samples_per_step
+        self.gradient_function = gradient_function
 
     @abstractmethod
     def sample_step(self, *args, **kwargs):
-        raise NotImplementedError
-
-    def set_gradient_function(self, *args, **kwargs):
         raise NotImplementedError
 
 
@@ -39,7 +37,24 @@ class BaseMCMCSampler(MCMCSampler):
         raise NotImplementedError
 
     def set_gradient_function(self, gradient_function):
-        self._gradient_function = gradient_function
+        self.gradient_function = gradient_function
+
+
+class BaseMHAcceptanceMCMCSampler(MCMCSampler):
+
+    def __init__(self, num_samples_per_step: int, step_sizes: th.Tensor, gradient_function: Callable):
+        """
+        @param num_samples_per_step: Number of MCMC steps per timestep t
+        @param step_sizes: Step sizes for each t
+        @param gradient_function: Function that returns the score for a given x, t, and text_embedding
+        """
+        super().__init__(
+            num_samples_per_step=num_samples_per_step, step_sizes=step_sizes, gradient_function=gradient_function
+        )
+        self.accepts = dict()
+
+    def sample_step(self, *args, **kwargs):
+        raise NotImplementedError
 
 
 class AnnealedULASampler(BaseMCMCSampler):
@@ -61,8 +76,8 @@ class AnnealedULASampler(BaseMCMCSampler):
         self._gradient_fn_unnorm = None
 
     def sample_step(self, x: th.Tensor, t: int, text_embeddings: th.Tensor):
-        for i in range(self._num_samples_per_step):
-            ss = self._step_sizes[t]
+        for i in range(self.num_samples_per_step):
+            ss = self.step_sizes[t]
             std = (2 * ss) ** 0.5
             grad = self._gradient_fn_unnorm(x, t, text_embeddings)
             noise = th.randn_like(x) * std
@@ -70,7 +85,7 @@ class AnnealedULASampler(BaseMCMCSampler):
         return x
 
 
-class AnnealedLAScoreSampler(BaseMCMCSampler):
+class AnnealedLAScoreSampler(BaseMHAcceptanceMCMCSampler):
     """Annealed Metropolis-Hasting Adjusted Langevin Algorithm
 
     A straight line is used to compute the trapezoidal rule
@@ -97,14 +112,14 @@ class AnnealedLAScoreSampler(BaseMCMCSampler):
     def sample_step(self, x, t, text_embeddings=None):
         print("t", t)
 
-        for i in range(self._num_samples_per_step):
-            ss = self._step_sizes[t]
+        for i in range(self.num_samples_per_step):
+            ss = self.step_sizes[t]
             std = (2 * ss) ** 0.5
-            grad = self._gradient_function(x, t, text_embeddings)
+            grad = self.gradient_function(x, t, text_embeddings)
             noise = th.randn_like(x) * std
             mean_x = x + grad * ss
             x_hat = mean_x + noise
-            grad_hat = self._gradient_function(x_hat, t, text_embeddings)
+            grad_hat = self.gradient_function(x_hat, t, text_embeddings)
             mean_x_hat = x_hat + grad_hat * ss
             # Correction
             logp_reverse = -0.5 * th.sum((x - mean_x_hat) ** 2) / std**2
@@ -147,7 +162,7 @@ class AnnealedLAScoreSampler(BaseMCMCSampler):
         return x
 
 
-class AnnealedHMCScoreSampler(BaseMCMCSampler):
+class AnnealedHMCScoreSampler(BaseMHAcceptanceMCMCSampler):
     """Annealed Metropolis-Hasting Adjusted Hamiltonian Monte Carlo
 
     Trapezoidal rule is computed with the intermediate steps of HMC (leapfrog steps)
@@ -177,14 +192,13 @@ class AnnealedHMCScoreSampler(BaseMCMCSampler):
         self._mass_diag_sqrt = mass_diag_sqrt
         self._num_leapfrog_steps = num_leapfrog_steps
         self._sync_function = None
-        self.accepts = dict()
 
     def leapfrog_step(self, x, v, i, text_embeddings):
-        step_size = self._step_sizes[i]
+        step_size = self.step_sizes[i]
         return _leapfrog_step(
             x,
             v,
-            lambda _x: self._gradient_function(_x, i, text_embeddings),
+            lambda _x: self.gradient_function(_x, i, text_embeddings),
             step_size,
             self._mass_diag_sqrt[i],
             self._num_leapfrog_steps,
@@ -197,7 +211,7 @@ class AnnealedHMCScoreSampler(BaseMCMCSampler):
         v = th.randn_like(x) * self._mass_diag_sqrt[t]
         self.accepts[t] = list()
 
-        for i in range(self._num_samples_per_step):
+        for i in range(self.num_samples_per_step):
             # Partial Momentum Refreshment
             eps = th.randn_like(x)
             v_prime = v * self._damping_coeff + np.sqrt(1.0 - self._damping_coeff**2) * eps * self._mass_diag_sqrt[t]
@@ -256,3 +270,63 @@ def _leapfrog_step(
         grads.append(grad.clone())
         v_k += 0.5 * step_size * grad  # half step in v
     return x_k, v_k, xs, grads
+
+
+class AdaptiveStepSizeMCMCSamplerWrapper(BaseMHAcceptanceMCMCSampler):
+
+    def __init__(self, sampler: BaseMHAcceptanceMCMCSampler, accept_rate_bound: list, max_iter: int = 10):
+        super().__init__(
+            num_samples_per_step=sampler.num_samples_per_step,
+            step_sizes=sampler.step_sizes,
+            gradient_function=sampler.gradient_function
+        )
+        self.sampler = sampler
+        self.accept_rate_bound = accept_rate_bound
+        self.max_iter = max_iter
+        self.T = self.sampler.step_sizes.shape[0]
+        self.res = {i: {'accepts': [], 'step_sizes': []} for i in range(self.T)}
+
+    def sample_step(self, x, t, text_embeddings=None):
+        state = torch.get_rng_state()
+        step_found = False
+        upper = {'stepsize': None, 'accept': 1}
+        lower = {'stepsize': None, 'accept': 0}
+        if t < self.T-2:
+            self.sampler.step_sizes[t] = self.res[t+1]['step_sizes'][-1]
+
+        i = 0
+        x_ = None
+        while not step_found and i < self.max_iter:
+            torch.manual_seed(t)
+            x_ = self.sampler.sample_step(x, t, text_embeddings)
+            a_rate = np.mean(self.sampler.accepts[t])
+            step_s = self.sampler.step_sizes[t].clone()
+            self.res[t]['accepts'].append(a_rate)
+            self.res[t]['step_sizes'].append(step_s)
+            if self.accept_rate_bound[0] <= a_rate <= self.accept_rate_bound[1]:
+                step_found = True
+            else:
+                # Update best bound so far
+                if self.accept_rate_bound[1] < a_rate <= upper['accept']:
+                    upper['accept'] = a_rate
+                    upper['stepsize'] = step_s
+                if lower['accept'] <= a_rate < self.accept_rate_bound[0]:
+                    lower['accept'] = a_rate
+                    lower['stepsize'] = step_s
+
+                # New step size
+                new_step_s = step_s.clone()
+                if upper['stepsize'] is None:
+                    new_step_s /= 10
+                elif lower['stepsize'] is None:
+                    new_step_s *= 10
+                else:
+                    new_step_s = torch.exp((torch.log(upper['stepsize']) + torch.log(lower['stepsize']))/2)
+
+                self.sampler.step_sizes[t] = new_step_s
+            i += 1
+        torch.set_rng_state(state)
+        return x_
+
+    def set_gradient_function(self, gradient_function):
+        self.sampler.set_gradient_function(gradient_function)

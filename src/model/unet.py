@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops.layers.torch import Rearrange
 from einops import rearrange, reduce
+from src.model.base import EnergyModel
 
 
 def load_mnist_diff(diff_path: Path, device):
@@ -179,6 +180,26 @@ class UNet(nn.Module):
 
         x = self.final_res_block(x, t)
         return self.final_conv(x)
+
+
+class UNetEnergy(UNet, EnergyModel):
+
+    def __init__(
+        self,
+        dim: int,
+        time_emb_dim: int,
+        channels: int,
+    ):
+        UNet.__init__(self, dim=dim, time_emb_dim=time_emb_dim, channels=channels)
+        EnergyModel.__init__(self)
+
+    def energy(self, x: th.Tensor, time: th.Tensor):
+        score = super().forward(x, time)
+        return ((score - x) ** 2).sum(dim=tuple(i for i in range(1, x.dim())))
+
+    def forward(self, x: th.Tensor, time: th.Tensor):
+        energy = self.energy(x, time)
+        return th.autograd.grad(energy, x, grad_outputs=th.ones_like(energy), create_graph=True)[0]
 
 
 def upsample(dim, dim_out):
