@@ -6,6 +6,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
+from src.model.base import EnergyModel
 
 
 class DiffusionSampler(ABC):
@@ -173,6 +174,10 @@ class DiffusionModel(pl.LightningModule):
         self.i_batch_val = 0
         self.i_epoch = 0
 
+        self.require_g = False
+        if isinstance(self.model, EnergyModel):
+            self.require_g = True
+
     def training_step(self, batch, batch_idx):
         batch_size = batch["pixel_values"].shape[0]
         x = batch["pixel_values"].to(self.device)
@@ -182,6 +187,8 @@ class DiffusionModel(pl.LightningModule):
 
         noise = th.randn_like(x)
         x_noisy = self.noise_scheduler.q_sample(x_0=x, ts=ts, noise=noise)
+        if self.require_g:
+            x_noisy = x_noisy.requires_grad_(True)
         predicted_noise = self.model(x_noisy, ts)
 
         loss = self.loss_f(noise, predicted_noise)
@@ -215,6 +222,8 @@ class DiffusionModel(pl.LightningModule):
         th.set_rng_state(rng_state)
 
         x_noisy = self.noise_scheduler.q_sample(x_0=x, ts=ts, noise=noise)
+        if self.require_g:
+            x_noisy = x_noisy.requires_grad_(True)
         predicted_noise = self.model(x_noisy, ts)
 
         loss = self.loss_f(noise, predicted_noise)

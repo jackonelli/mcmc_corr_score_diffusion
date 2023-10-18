@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 import torch as th
 import torch.nn as nn
 from src.diffusion.base import extract, DiffusionSampler
-from src.samplers.mcmc import MCMCSampler
+from src.samplers.mcmc import BaseMCMCSampler
 
 
 class Guidance(ABC):
@@ -95,8 +95,8 @@ class GuidanceSampler:
 
 class MCMCGuidanceSampler(GuidanceSampler):
 
-    def __init__(self, diff_model: nn.Module, diff_proc: DiffusionSampler, guidance: Guidance, mcmc_sampler: MCMCSampler,
-                 reverse=True, verbose=False):
+    def __init__(self, diff_model: nn.Module, diff_proc: DiffusionSampler, guidance: Guidance,
+                 mcmc_sampler: BaseMCMCSampler, reverse=True, verbose=False):
         super().__init__(
             diff_model=diff_model, diff_proc=diff_proc, guidance=guidance, verbose=verbose
         )
