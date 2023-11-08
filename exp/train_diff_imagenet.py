@@ -6,9 +6,9 @@ import torch as th
 import torch.nn.functional as F
 import pytorch_lightning as pl
 from src.data.imagenet import get_imagenet_data_loaders
-from src.diffusion.base import DiffusionModel, DiffusionSampler
+from src.diffusion.base import DiffusionSampler
 from src.diffusion.beta_schedules import improved_beta_schedule
-from src.model.imagenet import UNet
+from src.model.imagenet import UNet, DiffusionModel
 from src.utils.net import get_device, Device
 
 
@@ -18,6 +18,8 @@ def main():
     channels = 3
     num_diff_steps = 1000
     batch_size = 128
+    dataloader_train, dataloader_val = get_imagenet_data_loaders(Path("data/small-imagenet"), image_size, batch_size)
+
     model_path = Path.cwd() / "models" / "uncond_unet_imagenet.pt"
     if not model_path.parent.exists():
         print(f"Save dir. '{model_path.parent}' does not exist.")
@@ -33,13 +35,10 @@ def main():
     diffm.to(dev)
     trainer = pl.Trainer(max_epochs=20, num_sanity_val_steps=0, accelerator="gpu", devices=1)
 
-    dataloader_train, dataloader_val = get_imagenet_data_loaders(
-        Path("/home/jakob/data/small-imagenet/"), image_size, batch_size
-    )
     trainer.fit(diffm, dataloader_train, dataloader_val)
 
     print("Saving model")
-    model_path = Path.cwd() / "models" / "uncond_unet_mnist.pt"
+    model_path = Path.cwd() / "models" / "imagenet_diff.pt"
     th.save(unet.state_dict(), model_path)
 
 
