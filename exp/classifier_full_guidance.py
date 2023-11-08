@@ -20,7 +20,7 @@ def main():
     models_dir = Path.cwd() / "models"
     uncond_diff = load_mnist_diff(models_dir / "uncond_unet_mnist.pt", device)
     classifier = _load_class(models_dir / "resnet_classifier_t_mnist.pt", device)
-    T = 1000
+    T = args.num_diff_steps
     diff_sampler = DiffusionSampler(improved_beta_schedule, num_diff_steps=T)
     diff_sampler.to(device)
 
@@ -44,6 +44,7 @@ def parse_args():
     parser = ArgumentParser(prog="Sample with classifier-full guidance")
     parser.add_argument("--guid_scale", default=1.0, type=float, help="Guidance scale")
     parser.add_argument("--num_samples", default=100, type=int, help="Num samples (batch size to run in parallell)")
+    parser.add_argument("--num_diff_steps", default=1000, type=int, help="Num diffusion steps")
     return parser.parse_args()
 
 
