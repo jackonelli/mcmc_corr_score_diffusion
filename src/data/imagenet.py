@@ -1,14 +1,12 @@
 from pathlib import Path
 import json
 from copy import deepcopy
-from datasets import load_dataset
 from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms import Compose, ToTensor, Resize
 import matplotlib.pyplot as plt
-import torch as th
 from torch.utils.data import Dataset
-from torchvision.io import read_image
 from PIL import Image
+from src.data.utils import collate_fn
 
 
 def test():
@@ -35,6 +33,11 @@ class ImageNet100(Dataset):
         img_path = self.root / img_path
         # image = read_image(str(img_path))
         image = Image.open(str(img_path))
+        # Apparently there are some grayscale and RGBA images in ImageNet100.
+        if image.mode != "RGB":
+            rgb = Image.new("RGB", image.size)
+            rgb.paste(image)
+            image = rgb
         if self.transform:
             image = self.transform(image)
         return image, label
@@ -69,8 +72,15 @@ def get_imagenet_data_loaders(root: Path, img_size: int, batch_size: int):
         drop_last=True,
         pin_memory=True,
         num_workers=8,
+        collate_fn=collate_fn,
     )
-    dataloader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, num_workers=4)
+    dataloader_val = DataLoader(
+        dataset_val,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=4,
+        collate_fn=collate_fn,
+    )
     return dataloader_train, dataloader_val
 
 
