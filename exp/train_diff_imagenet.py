@@ -1,6 +1,9 @@
 """Script for training a UNet-based unconditional diffusion model for MNIST"""
 
 
+import sys
+
+sys.path.append(".")
 from pathlib import Path
 import torch as th
 import torch.nn.functional as F

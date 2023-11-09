@@ -1,4 +1,7 @@
 """Script for sampling with classifier-full guidance with MCMC"""
+import sys
+
+sys.path.append(".")
 from argparse import ArgumentParser
 from pathlib import Path
 import torch as th

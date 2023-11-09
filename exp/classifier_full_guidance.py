@@ -1,6 +1,9 @@
 """Script for sampling with reconstruction guidance"""
 
 
+import sys
+
+sys.path.append(".")
 from argparse import ArgumentParser
 from pathlib import Path
 import torch as th
