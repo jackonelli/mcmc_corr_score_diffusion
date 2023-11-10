@@ -209,6 +209,7 @@ class DiffusionModel(pl.LightningModule):
         return [optimizer], [scheduler]
 
     def validation_step(self, batch, batch_idx):
+        th.set_grad_enabled(True)
         batch_size = batch["pixel_values"].shape[0]
         x = batch["pixel_values"].to(self.device)
 

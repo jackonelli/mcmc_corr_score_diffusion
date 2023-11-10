@@ -39,7 +39,7 @@ def main():
     diffm = DiffusionModel(model=unet, loss_f=F.mse_loss, noise_scheduler=diff_sampler)
 
     diffm.to(dev)
-    trainer = pl.Trainer(max_epochs=20, num_sanity_val_steps=0, accelerator="gpu", devices=1)
+    trainer = pl.Trainer(max_epochs=20, num_sanity_val_steps=0, accelerator="gpu", devices=1, inference_mode=False)
 
     dataloader_train, dataloader_val = get_mnist_data_loaders(batch_size)
     trainer.fit(diffm, dataloader_train, dataloader_val)
