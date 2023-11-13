@@ -18,9 +18,12 @@ def main():
     device = get_device(Device.GPU)
     models_dir = Path.cwd() / "models"
     unet = load_mnist_diff(models_dir / "uncond_unet_mnist.pt", device)
-    diff_sampler = DiffusionSampler(improved_beta_schedule, args.num_diff_steps)
+    diff_sampler = DiffusionSampler(improved_beta_schedule, 1000)
 
-    samples, _ = diff_sampler.sample(unet, 100, device, (1, 28, 28))
+    T = args.num_diff_steps
+    diff_steps = range(0, 1000, 1000 // T)
+    # diff_sampler.sample(unet, 100, device, (1, 28, 28))
+    samples, _ = diff_sampler.sample_sparse(unet, diff_steps, device, (1, 28, 28))
     if args.plot:
         plot_samples_grid(samples.detach().cpu().numpy())
 

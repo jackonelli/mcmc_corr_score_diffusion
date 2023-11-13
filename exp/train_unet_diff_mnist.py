@@ -20,8 +20,8 @@ def main():
     channels = 1
     num_diff_steps = 1000
     batch_size = 128
-    name = ''
-    if args.type == 'energy':
+    name = ""
+    if args.type == "energy":
         name = args.type
     model_path = Path.cwd() / "models" / "{}uncond_unet_mnist.pt".format(name)
     if not model_path.parent.exists():
@@ -29,7 +29,7 @@ def main():
         return
 
     dev = get_device(Device.GPU)
-    if args.type == 'score':
+    if args.type == "score":
         unet = UNet(image_size, time_emb_dim, channels).to(dev)
     else:
         unet = UNetEnergy(image_size, time_emb_dim, channels).to(dev)
@@ -51,7 +51,7 @@ def main():
 
 def parse_args():
     parser = ArgumentParser(prog="Train unconditional diffusion model (score or energy)")
-    parser.add_argument("--type", default='energy', type=str, choices=['score', 'energy'])
+    parser.add_argument("--type", default="energy", type=str, choices=["score", "energy"])
     return parser.parse_args()
 
 

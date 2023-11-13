@@ -2,6 +2,7 @@
 import sys
 
 sys.path.append(".")
+import pickle
 from argparse import ArgumentParser
 from pathlib import Path
 import torch as th
@@ -55,7 +56,6 @@ def main():
     classes = th.randint(10, (num_samples,), dtype=th.int64)
     # classes = th.ones((num_samples,), dtype=th.int64)
     samples, _ = guided_sampler.sample(num_samples, classes, device, th.Size((1, 28, 28)))
-    import pickle
 
     run = 4
     data = dict()
