@@ -15,24 +15,9 @@ class MCMCSampler(ABC):
         self.step_sizes = step_sizes
         self.num_samples_per_step = num_samples_per_step
         self.gradient_function = gradient_function
+        self.accepts = dict()
 
     @abstractmethod
-    def sample_step(self, *args, **kwargs):
-        raise NotImplementedError
-
-
-class BaseMCMCSampler(MCMCSampler):
-
-    def __init__(self, num_samples_per_step: int, step_sizes: th.Tensor, gradient_function: Callable):
-        """
-        @param num_samples_per_step: Number of MCMC steps per timestep t
-        @param step_sizes: Step sizes for each t
-        @param gradient_function: Function that returns the score for a given x, t, and text_embedding
-        """
-        super().__init__(
-            num_samples_per_step=num_samples_per_step, step_sizes=step_sizes, gradient_function=gradient_function
-        )
-
     def sample_step(self, *args, **kwargs):
         raise NotImplementedError
 
@@ -40,24 +25,7 @@ class BaseMCMCSampler(MCMCSampler):
         self.gradient_function = gradient_function
 
 
-class BaseMHAcceptanceMCMCSampler(MCMCSampler):
-
-    def __init__(self, num_samples_per_step: int, step_sizes: th.Tensor, gradient_function: Callable):
-        """
-        @param num_samples_per_step: Number of MCMC steps per timestep t
-        @param step_sizes: Step sizes for each t
-        @param gradient_function: Function that returns the score for a given x, t, and text_embedding
-        """
-        super().__init__(
-            num_samples_per_step=num_samples_per_step, step_sizes=step_sizes, gradient_function=gradient_function
-        )
-        self.accepts = dict()
-
-    def sample_step(self, *args, **kwargs):
-        raise NotImplementedError
-
-
-class AnnealedULASampler(BaseMCMCSampler):
+class AnnealedULASampler(MCMCSampler):
     """
     Annealed Unadjusted-Langevin Algorithm
     """
@@ -85,7 +53,7 @@ class AnnealedULASampler(BaseMCMCSampler):
         return x
 
 
-class AnnealedLAScoreSampler(BaseMHAcceptanceMCMCSampler):
+class AnnealedLAScoreSampler(MCMCSampler):
     """Annealed Metropolis-Hasting Adjusted Langevin Algorithm
 
     A straight line is used to compute the trapezoidal rule
@@ -162,7 +130,7 @@ class AnnealedLAScoreSampler(BaseMHAcceptanceMCMCSampler):
         return x
 
 
-class AnnealedHMCScoreSampler(BaseMHAcceptanceMCMCSampler):
+class AnnealedHMCScoreSampler(MCMCSampler):
     """Annealed Metropolis-Hasting Adjusted Hamiltonian Monte Carlo
 
     Trapezoidal rule is computed with the intermediate steps of HMC (leapfrog steps)
@@ -226,14 +194,20 @@ class AnnealedHMCScoreSampler(BaseMHAcceptanceMCMCSampler):
                 energy = th.trapz(e)
                 for j in range(1, len(xs_) - 1):
                     e = (grads_[j] * (xs_[j + 1] - xs_[j])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)
-                    e = th.cat((e, (grads_[j + 1] * (xs_[j + 1] - xs_[j])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)), 1)
+                    e = th.cat(
+                        (e, (grads_[j + 1] * (xs_[j + 1] - xs_[j])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)), 1
+                    )
                     energy += th.trapz(e)
                 return energy
 
             diff_logp_x = energy_steps(xs, grads)
             logp_accept = logp_v - logp_v_p + diff_logp_x
             u = th.rand(x_next.shape[0]).to(x_next.device)
-            accept = (u < th.exp(logp_accept)).to(th.float32).reshape((x_next.shape[0], ) + tuple(([1 for _ in range(dims-1)])))
+            accept = (
+                (u < th.exp(logp_accept))
+                .to(th.float32)
+                .reshape((x_next.shape[0],) + tuple(([1 for _ in range(dims - 1)])))
+            )
 
             # update samples
             x = accept * x_next + (1 - accept) * x
@@ -272,27 +246,26 @@ def _leapfrog_step(
     return x_k, v_k, xs, grads
 
 
-class AdaptiveStepSizeMCMCSamplerWrapper(BaseMHAcceptanceMCMCSampler):
-
-    def __init__(self, sampler: BaseMHAcceptanceMCMCSampler, accept_rate_bound: list, max_iter: int = 10):
+class AdaptiveStepSizeMCMCSamplerWrapper(MCMCSampler):
+    def __init__(self, sampler: MCMCSampler, accept_rate_bound: list, max_iter: int = 10):
         super().__init__(
             num_samples_per_step=sampler.num_samples_per_step,
             step_sizes=sampler.step_sizes,
-            gradient_function=sampler.gradient_function
+            gradient_function=sampler.gradient_function,
         )
         self.sampler = sampler
         self.accept_rate_bound = accept_rate_bound
         self.max_iter = max_iter
         self.T = self.sampler.step_sizes.shape[0]
-        self.res = {i: {'accepts': [], 'step_sizes': []} for i in range(self.T)}
+        self.res = {i: {"accepts": [], "step_sizes": []} for i in range(self.T)}
 
     def sample_step(self, x, t, text_embeddings=None):
         state = torch.get_rng_state()
         step_found = False
-        upper = {'stepsize': None, 'accept': 1}
-        lower = {'stepsize': None, 'accept': 0}
-        if t < self.T-2:
-            self.sampler.step_sizes[t] = self.res[t+1]['step_sizes'][-1]
+        upper = {"stepsize": None, "accept": 1}
+        lower = {"stepsize": None, "accept": 0}
+        if t < self.T - 2:
+            self.sampler.step_sizes[t] = self.res[t + 1]["step_sizes"][-1]
 
         i = 0
         x_ = None
@@ -301,27 +274,27 @@ class AdaptiveStepSizeMCMCSamplerWrapper(BaseMHAcceptanceMCMCSampler):
             x_ = self.sampler.sample_step(x, t, text_embeddings)
             a_rate = np.mean(self.sampler.accepts[t])
             step_s = self.sampler.step_sizes[t].clone()
-            self.res[t]['accepts'].append(a_rate)
-            self.res[t]['step_sizes'].append(step_s)
+            self.res[t]["accepts"].append(a_rate)
+            self.res[t]["step_sizes"].append(step_s)
             if self.accept_rate_bound[0] <= a_rate <= self.accept_rate_bound[1]:
                 step_found = True
             else:
                 # Update best bound so far
-                if self.accept_rate_bound[1] < a_rate <= upper['accept']:
-                    upper['accept'] = a_rate
-                    upper['stepsize'] = step_s
-                if lower['accept'] <= a_rate < self.accept_rate_bound[0]:
-                    lower['accept'] = a_rate
-                    lower['stepsize'] = step_s
+                if self.accept_rate_bound[1] < a_rate <= upper["accept"]:
+                    upper["accept"] = a_rate
+                    upper["stepsize"] = step_s
+                if lower["accept"] <= a_rate < self.accept_rate_bound[0]:
+                    lower["accept"] = a_rate
+                    lower["stepsize"] = step_s
 
                 # New step size
                 new_step_s = step_s.clone()
-                if upper['stepsize'] is None:
+                if upper["stepsize"] is None:
                     new_step_s /= 10
-                elif lower['stepsize'] is None:
+                elif lower["stepsize"] is None:
                     new_step_s *= 10
                 else:
-                    new_step_s = torch.exp((torch.log(upper['stepsize']) + torch.log(lower['stepsize']))/2)
+                    new_step_s = torch.exp((torch.log(upper["stepsize"]) + torch.log(lower["stepsize"])) / 2)
 
                 self.sampler.step_sizes[t] = new_step_s
             i += 1
