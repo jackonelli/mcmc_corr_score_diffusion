@@ -45,3 +45,18 @@ def test_improved_beta_schedule(schedule):
     betas = torch.tensor([0.1012940794, 0.2795438460, 0.4736353534, 0.7240523691, 0.9990000000])
     assert torch.all(torch.isclose(schedule(5), betas))
     print("\033[92m\033[1m✓ Value test passed! \033[0m")
+
+
+def sparse_beta_schedule(og_betas: th.Tensor, sparse_factor: int) -> th.Tensor:
+    """Schedule for sparse sampling"""
+    T = og_betas.size(0)
+    alphas = og_betas
+    new_alphas = th.empty((T // sparse_factor,))
+    for t_sparse, t in enumerate(range(0, T, sparse_factor)):
+        new_alphas[t_sparse] = th.prod(alphas[t : t + sparse_factor])
+    return 1 - new_alphas
+
+
+if __name__ == "__main__":
+    betas = linear_beta_schedule(num_timesteps=20)
+    sparse_beta_schedule(betas, 4)
