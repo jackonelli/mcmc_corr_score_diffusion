@@ -6,8 +6,10 @@ import sys
 sys.path.append(".")
 from pathlib import Path
 from argparse import ArgumentParser
+from functools import partial
+import torch as th
 from src.diffusion.base import DiffusionSampler
-from src.diffusion.beta_schedules import improved_beta_schedule
+from src.diffusion.beta_schedules import improved_beta_schedule, sparse_beta_schedule
 from src.model.unet import load_mnist_diff
 from src.utils.net import get_device, Device
 from src.utils.vis import plot_samples_grid
@@ -18,14 +20,20 @@ def main():
     device = get_device(Device.GPU)
     models_dir = Path.cwd() / "models"
     unet = load_mnist_diff(models_dir / "uncond_unet_mnist.pt", device)
-    diff_sampler = DiffusionSampler(improved_beta_schedule, 1000)
-
     T = args.num_diff_steps
-    diff_steps = range(0, 1000, 1000 // T)
-    # diff_sampler.sample(unet, 100, device, (1, 28, 28))
-    samples, _ = diff_sampler.sample_sparse(unet, diff_steps, device, (1, 28, 28))
+    diff_sampler = DiffusionSampler(
+        partial(_sparse_betas, og_schedule=improved_beta_schedule, og_num_diff_steps=1000), T
+    )
+
+    samples, _ = diff_sampler.sample(unet, 100, device, (1, 28, 28))
     if args.plot:
         plot_samples_grid(samples.detach().cpu().numpy())
+
+
+def _sparse_betas(num_timesteps: int, og_schedule, og_num_diff_steps: int) -> th.Tensor:
+    """Helper function that generate a beta schedule"""
+    og_betas = og_schedule(og_num_diff_steps)
+    return sparse_beta_schedule(og_betas, og_num_diff_steps // num_timesteps)
 
 
 def parse_args():
