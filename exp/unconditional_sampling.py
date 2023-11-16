@@ -7,7 +7,6 @@ import sys
 sys.path.append(".")
 from pathlib import Path
 from argparse import ArgumentParser
-from functools import partial
 import torch as th
 from src.diffusion.base import DiffusionSampler
 from src.diffusion.beta_schedules import improved_beta_schedule, sparse_beta_schedule
@@ -37,7 +36,9 @@ def main():
     beta_schedule = improved_beta_schedule
     diff_sampler = DiffusionSampler(beta_schedule, T)
 
-    samples, _ = diff_sampler.sample(diff_model, 1, device, (channels, image_size, image_size))
+    samples, _ = diff_sampler.sample(
+        diff_model, args.num_samples, device, (channels, image_size, image_size), verbose=True
+    )
     if args.plot:
         plot_samples_grid(samples.detach().cpu().numpy())
 

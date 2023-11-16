@@ -65,7 +65,7 @@ class DiffusionSampler(ABC):
         return x_t
 
     @th.no_grad()
-    def sample(self, model: nn.Module, num_samples: int, device: th.device, shape: tuple):
+    def sample(self, model: nn.Module, num_samples: int, device: th.device, shape: tuple, verbose=False):
         """Sampling from the backward process
         Sample points from the data distribution
 
@@ -84,6 +84,8 @@ class DiffusionSampler(ABC):
 
         for t in reversed(range(0, self.num_timesteps)):
             t_tensor = th.full((x_tm1.shape[0],), t, device=device)
+            if verbose and t % 10 == 0:
+                print("Diff step", t)
 
             # Use the model to predict noise and use the noise to step back
             pred_noise = model(x_tm1, t_tensor)
