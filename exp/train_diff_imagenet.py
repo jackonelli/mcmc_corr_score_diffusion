@@ -1,6 +1,8 @@
 """Script for training a UNet-based unconditional diffusion model for MNIST"""
 
 
+import sys
+sys.path.append(".")
 from pathlib import Path
 import torch as th
 import torch.nn.functional as F
@@ -13,12 +15,12 @@ from src.utils.net import get_device, Device
 
 
 def main():
-    image_size = 224
+    image_size = 112#224
     time_emb_dim = 112
     channels = 3
     num_diff_steps = 1000
-    batch_size = 128
-    dataloader_train, dataloader_val = get_imagenet_data_loaders(Path("data/small-imagenet"), image_size, batch_size)
+    batch_size = 64
+    dataloader_train, dataloader_val = get_imagenet_data_loaders(Path("/data/small-imagenet"), image_size, batch_size)
 
     model_path = Path.cwd() / "models" / "uncond_unet_imagenet.pt"
     if not model_path.parent.exists():
