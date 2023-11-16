@@ -15,7 +15,7 @@ from src.utils.net import get_device, Device
 
 
 def main():
-    image_size = 112#224
+    image_size = 112 #224
     time_emb_dim = 112
     channels = 3
     num_diff_steps = 1000

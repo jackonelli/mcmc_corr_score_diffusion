@@ -14,6 +14,9 @@ class DiffusionSampler(ABC):
 
     def __init__(
         self,
+        # TODO: this should be a list of betas instead?
+        # No reason to have a function, which is immediately called,
+        # e.g., for sparse diff steps.
         beta_schedule: Callable,
         num_diff_steps: int,
         posterior_variance="beta",

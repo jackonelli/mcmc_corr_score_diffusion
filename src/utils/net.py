@@ -196,6 +196,10 @@ class Device(Enum):
     GPU = 2
 
 
+def model_parameter_count(model):
+    return sum(p.numel() for p in model.parameters())
+
+
 def get_device(target: Optional[Enum] = None):
     """
     Get the device to use for torch

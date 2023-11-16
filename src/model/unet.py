@@ -11,9 +11,8 @@ from einops import rearrange, reduce
 from src.model.base import EnergyModel
 
 
-def load_mnist_diff(diff_path: Path, device):
+def load_mnist_diff(diff_path: Path, device, image_size: int = 28):
     """Load UNet diffusion model for MNIST"""
-    image_size = 28
     time_emb_dim = 112
     channels = 1
     unet = UNet(image_size, time_emb_dim, channels)
@@ -183,7 +182,6 @@ class UNet(nn.Module):
 
 
 class UNetEnergy(UNet, EnergyModel):
-
     def __init__(
         self,
         dim: int,

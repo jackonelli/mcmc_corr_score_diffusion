@@ -18,9 +18,8 @@ def test():
     ImageNet("~/data/small-imagenet", download=False)
 
 
-def load_imagenet_diff(diff_path: Path, device):
+def load_imagenet_diff(diff_path: Path, device, image_size: int = 112):
     """Load UNet diffusion model for MNIST"""
-    image_size = 224
     time_emb_dim = 112
     channels = 3
     unet = UNet(image_size, time_emb_dim, channels)
