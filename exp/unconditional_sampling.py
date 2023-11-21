@@ -52,7 +52,7 @@ def _sparse_betas(num_timesteps: int, og_schedule, og_num_diff_steps: int) -> th
 
 
 def parse_args():
-    parser = ArgumentParser(prog="Train reconstruction classifier")
+    parser = ArgumentParser(prog="Sample from unconditional diff. model")
     parser.add_argument("--num_samples", default=100, type=int, help="Number of samples")
     parser.add_argument("--num_diff_steps", default=1000, type=int, help="Number of diffusion steps")
     parser.add_argument("--model", type=str, help="Model file (withouth '.pt' extension)")
