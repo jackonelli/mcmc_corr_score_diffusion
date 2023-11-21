@@ -136,3 +136,4 @@ dependencies:
       - zipp==3.15.0
       - jupyter
       - ipykernel
+      - mpi4py
