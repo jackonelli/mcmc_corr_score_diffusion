@@ -84,7 +84,7 @@ class DiffusionSampler(ABC):
 
         for t in reversed(range(0, self.num_timesteps)):
             t_tensor = th.full((x_tm1.shape[0],), t, device=device)
-            if verbose and t % 10 == 0:
+            if verbose and t % 100 == 0:
                 print("Diff step", t)
 
             # Use the model to predict noise and use the noise to step back
