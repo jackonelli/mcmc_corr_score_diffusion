@@ -2,6 +2,7 @@
 
 Base diffusion model
 """
+from collections import OrderedDict
 from collections.abc import Callable
 from pathlib import Path
 import torch as th
@@ -20,13 +21,38 @@ def test():
 
 def load_imagenet_diff(diff_path: Path, device, image_size: int = 112):
     """Load UNet diffusion model for MNIST"""
+    unet.load_state_dict(th.load(diff_path))
     time_emb_dim = 112
     channels = 3
     unet = UNet(image_size, time_emb_dim, channels)
-    unet.load_state_dict(th.load(diff_path))
     unet.to(device)
     unet.eval()
     return unet
+
+
+def load_imagenet_diff_from_checkpoint(chkpt_path: Path, device, image_size: int = 112):
+    """Load UNet diffusion model for MNIST"""
+    time_emb_dim = 112
+    channels = 3
+    unet = UNet(image_size, time_emb_dim, channels)
+    state_dict = parse_chkpt_dict(th.load(chkpt_path)["state_dict"])
+    unet.load_state_dict(state_dict)
+    unet.to(device)
+    unet.eval()
+    return unet
+
+
+def parse_chkpt_dict(state_dict):
+    """Parse checkpoint state dict from pl logs
+
+    Lightning appends "model." to all keys in state dict.
+    This helper modifies the keys to remove this prefix.
+    """
+    trimmed = OrderedDict()
+    for key, val in state_dict.items():
+        trimmed_key = key[6:]
+        trimmed[trimmed_key] = val
+    return trimmed
 
 
 class UNet(nn.Module):
