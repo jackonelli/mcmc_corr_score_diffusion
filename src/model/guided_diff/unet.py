@@ -1,3 +1,8 @@
+"""Diffusion model from
+
+https://github.com/openai/guided-diffusion
+
+"""
 from abc import abstractmethod
 from typing import Optional
 from pathlib import Path
@@ -22,20 +27,6 @@ from src.model.guided_diff.nn import (
 )
 
 NUM_CLASSES = 1000
-
-
-@th.no_grad()
-def test():
-    dev = dist_util.dev()
-    model = load_guided_diff_unet(model_path=Path.cwd() / "models" / "256x256_diffusion.pt", dev=dev)
-    model.eval()
-    B = 4
-    test_xs = th.randn(B, 3, 256, 256).to(dev)
-    test_ts = th.randint(low=0, high=1000, size=(B,)).to(dev)
-    test_ys = th.randint(low=0, high=NUM_CLASSES, size=(B,)).to(dev)
-    print("Forward...")
-    eps = model(test_xs, test_ts, y=test_ys)
-    print("eps", eps.size())
 
 
 def load_guided_diff_unet(
@@ -959,6 +950,20 @@ class QKVAttention(nn.Module):
 #         else:
 #             h = h.type(x.dtype)
 #             return self.out(h)
+
+
+@th.no_grad()
+def test():
+    dev = dist_util.dev()
+    model = load_guided_diff_unet(model_path=Path.cwd() / "models" / "256x256_diffusion.pt", dev=dev)
+    model.eval()
+    B = 4
+    test_xs = th.randn(B, 3, 256, 256).to(dev)
+    test_ts = th.randint(low=0, high=1000, size=(B,)).to(dev)
+    test_ys = th.randint(low=0, high=NUM_CLASSES, size=(B,)).to(dev)
+    print("Forward...")
+    eps = model(test_xs, test_ts, y=test_ys)
+    print("eps", eps.size())
 
 
 if __name__ == "__main__":
