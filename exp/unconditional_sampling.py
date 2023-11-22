@@ -11,7 +11,7 @@ import torch as th
 from src.diffusion.base import DiffusionSampler
 from src.diffusion.beta_schedules import improved_beta_schedule, sparse_beta_schedule
 from src.model.unet import load_mnist_diff
-from src.model.imagenet import load_imagenet_diff
+from src.model.imagenet import load_imagenet_diff, load_imagenet_diff_from_checkpoint
 from src.utils.net import get_device, Device
 from src.utils.vis import plot_samples_grid
 
@@ -26,6 +26,9 @@ def main():
     if "imagenet" in args.model:
         diff_model = load_imagenet_diff(model_path, device)
         channels, image_size = 3, 112
+    if "cifar10" in args.model:
+        diff_model = load_imagenet_diff(model_path, device, image_size=32)
+        channels, image_size = 3, 32
     elif "mnist" in args.model:
         diff_model = load_mnist_diff(model_path, device)
         channels, image_size = 1, 28
