@@ -24,59 +24,41 @@ from src.model.guided_diff.nn import (
 NUM_CLASSES = 1000
 
 
+@th.no_grad()
 def test():
-    # args = {
-    #    "attention_resolutions": "32,16,8",
-    #    "channel_mult": "",
-    #    "class_cond": True,
-    #    "diffusion_steps": 1000,
-    #    "dropout": 0.0,
-    #    "image_size": 256,
-    #    "learn_sigma": True,
-    #    "noise_schedule": "linear",
-    #    "num_channels": 256,
-    #    "num_head_channels": 64,
-    #    "num_heads": 4,
-    #    "num_heads_upsample": -1,
-    #    "num_res_blocks": 2,
-    #    "predict_xstart": False,
-    #    "resblock_updown": True,
-    #    "rescale_learned_sigmas": False,
-    #    "rescale_timesteps": False,
-    #    "timestep_respacing": "250",
-    #    "use_checkpoint": False,
-    #    "use_fp16": True,
-    #    "use_kl": False,
-    #    "use_new_attention_order": False,
-    #    "use_scale_shift_norm": True,
-    # }
-    # Diff args
-    # diffusion_steps = 1000
-    # noise_schedule = "linear"
-    # predict_xstart = False
-    # rescale_learned_sigmas = False
-    # rescale_timesteps = False
-    # timestep_respacing = "250"
-    # use_kl = False
-    dist_util.setup_dist()
+    dev = dist_util.dev()
+    model = load_guided_diff_unet(model_path=Path.cwd() / "models" / "256x256_diffusion.pt", dev=dev)
+    model.eval()
+    B = 4
+    test_xs = th.randn(B, 3, 256, 256).to(dev)
+    test_ts = th.randint(low=0, high=1000, size=(B,)).to(dev)
+    test_ys = th.randint(low=0, high=NUM_CLASSES, size=(B,)).to(dev)
+    print("Forward...")
+    eps = model(test_xs, test_ts, y=test_ys)
+    print("eps", eps.size())
 
-    model_path = Path.cwd() / "models" / "256x256_diffusion.pt"
-    attention_resolutions = (32, 16, 8)
-    channel_mult = None
-    class_cond = True
-    dropout = 0.0
-    image_size = 256
-    learn_sigma = True
-    num_channels = 256
-    num_head_channels = 64
-    num_heads = 4
-    num_heads_upsample = -1
-    num_res_blocks = 2
-    resblock_updown = True
-    use_checkpoint = False
-    use_fp16 = True
-    use_new_attention_order = False
-    use_scale_shift_norm = True
+
+def load_guided_diff_unet(
+    model_path: Path,
+    dev,
+    attention_resolutions=(32, 16, 8),
+    channel_mult=None,
+    class_cond=True,
+    dropout=0.0,
+    image_size=256,
+    learn_sigma=True,
+    num_channels=256,
+    num_head_channels=64,
+    num_heads=4,
+    num_heads_upsample=-1,
+    num_res_blocks=2,
+    resblock_updown=True,
+    use_checkpoint=False,
+    use_fp16=True,
+    use_new_attention_order=False,
+    use_scale_shift_norm=True,
+):
+    dist_util.setup_dist()
 
     model = UNetModel(
         image_size=image_size,
@@ -97,18 +79,11 @@ def test():
         resblock_updown=resblock_updown,
         use_new_attention_order=use_new_attention_order,
     )
-    dev = dist_util.dev()
     model.load_state_dict(dist_util.load_state_dict(str(model_path), map_location="cpu"))
     model.to(dev)
-    model.convert_to_fp16()
-    model.eval()
-    B = 2
-    test_xs = th.randn(1, 3, 256, 256).to(dev)
-    test_ts = th.randint(low=0, high=1000, size=(1,)).to(dev)
-    test_ys = th.randint(low=0, high=NUM_CLASSES, size=(1,)).to(dev)
-    print("Forward...")
-    eps = model(test_xs, test_ts, y=test_ys)
-    print("eps", eps.size())
+    if use_fp16:
+        model.convert_to_fp16()
+    return model
 
 
 def attention_ds(attention_resolutions, image_size):
