@@ -134,5 +134,6 @@ dependencies:
       - termcolor==2.3.0
       - tqdm==4.65.0
       - zipp==3.15.0
+      - pytorch-fid==0.3.0
       - jupyter
       - ipykernel
