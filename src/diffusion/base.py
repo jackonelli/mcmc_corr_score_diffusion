@@ -3,7 +3,6 @@ from enum import Enum
 from collections.abc import Callable
 from abc import ABC
 from typing import Union
-import numpy as np
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
@@ -126,7 +125,7 @@ class DiffusionSampler(ABC):
 
     def _clip_var(self, x, t, model_var_values):
         min_log = _extract_into_tensor(self.posterior_log_variance_clipped, t, x.shape)
-        max_log = _extract_into_tensor(np.log(self.betas), t, x.shape)
+        max_log = _extract_into_tensor(th.log(self.betas), t, x.shape)
         # The model_var_values is [-1, 1] for [min_var, max_var].
         frac = (model_var_values + 1) / 2
         model_log_variance = frac * max_log + (1 - frac) * min_log
