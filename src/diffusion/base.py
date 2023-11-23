@@ -79,6 +79,7 @@ class DiffusionSampler(ABC):
 
         steps = []
         x_tm1 = th.randn((num_samples,) + shape).to(device)
+        print("x sum", x_tm1.sum().item())
 
         for t in reversed(range(0, self.num_timesteps)):
             t_tensor = th.full((x_tm1.shape[0],), t, device=device)
@@ -95,6 +96,7 @@ class DiffusionSampler(ABC):
                 pred_noise, log_var = model(x_tm1, t_tensor).split(x_tm1.size(1), dim=1)
                 log_var, _ = self._clip_var(x_tm1, t_tensor, log_var)
                 sqrt_post_var_t = th.exp(0.5 * log_var)
+                print(f"t={t}: {sqrt_post_var_t.sum().item()}")
             if x_tm1.isnan().any():
                 print(f"x: NaN at t={t}")
             if pred_noise.isnan().any():

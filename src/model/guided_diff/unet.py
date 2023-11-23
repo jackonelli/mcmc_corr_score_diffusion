@@ -342,7 +342,7 @@ class UNetModel(nn.Module):
         :param x: an [N x C x ...] Tensor of inputs.
         :param timesteps: a 1-D batch of timesteps.
         :param y: an [N] Tensor of labels, if class-conditional.
-        :return: an [N x C x ...] Tensor of outputs.
+        :return: an [N x 2*C x ...] Tensor of outputs.
         """
         assert (y is not None) == (
             self.num_classes is not None
@@ -955,15 +955,22 @@ class QKVAttention(nn.Module):
 @th.no_grad()
 def test():
     dev = dist_util.dev()
-    model = load_guided_diff_unet(model_path=Path.cwd() / "models" / "256x256_diffusion.pt", dev=dev)
+    model = load_guided_diff_unet(
+        model_path=Path.cwd() / "models" / "256x256_diffusion_uncond.pt", dev=dev, class_cond=False
+    )
     model.eval()
     B = 4
-    test_xs = th.randn(B, 3, 256, 256).to(dev)
+    test_xs_1 = th.randn(B, 3, 256, 256).to(dev)
+    test_xs_2 = th.randn(B, 3, 256, 256).to(dev)
     test_ts = th.randint(low=0, high=1000, size=(B,)).to(dev)
+    test_ts = th.ones((B,)).to(dev)
     test_ys = th.randint(low=0, high=NUM_CLASSES, size=(B,)).to(dev)
     print("Forward...")
-    eps = model(test_xs, test_ts, y=test_ys)
-    print("eps", eps.size())
+    pred_noise, log_var = model(test_xs_1, test_ts).split(test_xs_1.size(1), dim=1)
+    for b in range(B):
+        log_var_b = log_var[b]
+        sigma = th.exp(0.5 * log_var_b)
+        print("Sum", sigma.sum())
 
 
 if __name__ == "__main__":
