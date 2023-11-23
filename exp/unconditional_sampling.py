@@ -8,8 +8,9 @@ sys.path.append(".")
 from pathlib import Path
 from argparse import ArgumentParser
 import torch as th
+import matplotlib.pyplot as plt
 from src.diffusion.base import DiffusionSampler
-from src.diffusion.beta_schedules import improved_beta_schedule, sparse_beta_schedule
+from src.diffusion.beta_schedules import improved_beta_schedule, linear_beta_schedule, sparse_beta_schedule
 from src.model.unet import load_mnist_diff
 from src.model.imagenet import load_imagenet_diff
 from src.utils.net import get_device, Device
@@ -40,16 +41,19 @@ def main():
         raise ValueError("Incorrect model name '{args.model}'")
     T = args.num_diff_steps
     # beta_schedule = partial(_sparse_betas, og_schedule=improved_beta_schedule, og_num_diff_steps=1000)
-    beta_schedule = improved_beta_schedule
-    diff_sampler = DiffusionSampler(beta_schedule, T)
+    beta_schedule = linear_beta_schedule
+    diff_sampler = DiffusionSampler(beta_schedule, T, posterior_variance="learned")
 
     samples, _ = diff_sampler.sample(
         diff_model, args.num_samples, device, (channels, image_size, image_size), verbose=True
     )
-    if args.plot:
-        plot_samples_grid(samples.detach().cpu().numpy())
-
+    samples = samples.detach().cpu()
     th.save(samples, Path.cwd() / "outputs" / f"uncond_samples_{args.model}.th")
+    if args.plot:
+        # plot_samples_grid(samples.detach().cpu().numpy())
+        x = samples[0].permute(1, 2, 0)
+        plt.imshow(x)
+        plt.show()
 
 
 def _sparse_betas(num_timesteps: int, og_schedule, og_num_diff_steps: int) -> th.Tensor:
