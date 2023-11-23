@@ -13,7 +13,7 @@ from src.guidance.classifier_full import ClassifierFullGuidance
 from src.model.resnet import load_classifier
 from src.utils.net import Device, get_device
 from src.diffusion.base import DiffusionSampler
-from src.diffusion.beta_schedules import improved_beta_schedule
+from src.diffusion.beta_schedules import improved_beta_schedule, linear_beta_schedule
 from src.model.unet import load_mnist_diff
 from src.utils.vis import plot_samples_grid
 from src.model.guided_diff.unet import load_guided_diff_unet
@@ -26,6 +26,7 @@ def main():
     models_dir = Path.cwd() / "models"
     diff_model_path = models_dir / f"{args.diff_model}.pt"
     class_model_path = models_dir / f"{args.class_model}.pt"
+    print("Loading models")
     if "mnist" in args.diff_model:
         channels, image_size = 1, 28
         diff_model = load_mnist_diff(diff_model_path, device)
@@ -33,10 +34,12 @@ def main():
     elif "256x256_diffusion" in args.diff_model:
         channels, image_size = 3, 256
         diff_model = load_guided_diff_unet(model_path=diff_model_path, dev=device, class_cond=args.class_cond)
+        diff_model.eval()
         classifier = load_guided_classifier(model_path=class_model_path, dev=device, image_size=image_size)
+        classifier.eval()
 
     T = args.num_diff_steps
-    diff_sampler = DiffusionSampler(improved_beta_schedule, num_diff_steps=T)
+    diff_sampler = DiffusionSampler(linear_beta_schedule, num_diff_steps=T, posterior_variance="learned")
     diff_sampler.to(device)
 
     guidance = ClassifierFullGuidance(classifier, lambda_=args.guid_scale)
@@ -44,8 +47,9 @@ def main():
 
     num_samples = args.num_samples
     classes = th.ones((num_samples,), dtype=th.int64)
+    print("Sampling...")
     samples, _ = guid_sampler.sample(num_samples, classes, device, th.Size((channels, image_size, image_size)))
-    plot_samples_grid(samples.detach().cpu())
+    th.save(samples, Path.cwd() / "outputs" / f"cfg_{args.diff_model}.th")
 
 
 def _load_class(class_path: Path, device):

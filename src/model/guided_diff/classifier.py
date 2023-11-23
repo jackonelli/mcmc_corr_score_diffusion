@@ -19,7 +19,6 @@ from src.model.guided_diff.nn import (
     normalization,
     timestep_embedding,
 )
-from src.model.guided_diff import dist_util
 
 
 def load_guided_classifier(
@@ -48,7 +47,7 @@ def load_guided_classifier(
         resblock_updown=resblock_updown,
         pool=pool,
     )
-    classifier.load_state_dict(dist_util.load_state_dict(str(model_path), map_location="cpu"))
+    classifier.load_state_dict(th.load(model_path, map_location="cpu"))
     classifier.to(dev)
     if use_fp16:
         classifier.convert_to_fp16()
