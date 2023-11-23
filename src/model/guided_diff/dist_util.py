@@ -55,32 +55,24 @@ def load_state_dict(path, **kwargs):
     """
     Load a PyTorch file without redundant fetches across MPI ranks.
     """
+    return th.load(path, **kwargs)
+
+
+def load_state_dict_mpi(path, **kwargs):
+    """
+    Load a PyTorch file without redundant fetches across MPI ranks.
+    """
     chunk_size = 2**30  # MPI has a relatively small size limit
-    if MPI.COMM_WORLD.Get_rank() == 0:
-        with bf.BlobFile(path, "rb") as f:
-            data = f.read()
-        num_chunks = len(data) // chunk_size
-        if len(data) % chunk_size:
-            num_chunks += 1
-        MPI.COMM_WORLD.bcast(num_chunks)
-        for i in range(0, len(data), chunk_size):
-            MPI.COMM_WORLD.bcast(data[i : i + chunk_size])
-    else:
-        num_chunks = MPI.COMM_WORLD.bcast(None)
-        data = bytes()
-        for _ in range(num_chunks):
-            data += MPI.COMM_WORLD.bcast(None)
+    with bf.BlobFile(path, "rb") as f:
+        data = f.read()
+    num_chunks = len(data) // chunk_size
+    if len(data) % chunk_size:
+        num_chunks += 1
+    MPI.COMM_WORLD.bcast(num_chunks)
+    for i in range(0, len(data), chunk_size):
+        MPI.COMM_WORLD.bcast(data[i : i + chunk_size])
 
     return th.load(io.BytesIO(data), **kwargs)
-
-
-def sync_params(params):
-    """
-    Synchronize a sequence of Tensors across ranks from rank 0.
-    """
-    for p in params:
-        with th.no_grad():
-            dist.broadcast(p, 0)
 
 
 def _find_free_port():

@@ -85,7 +85,6 @@ class DiffusionSampler(ABC):
                 print("Diff step", t)
 
             # Use the model to predict noise and use the noise to step back
-            # pred_noise, sigma = model(x_tm1, t_tensor)
             if not isinstance(self.posterior_variance, str):
                 pred_noise = model(x_tm1, t_tensor)
                 sqrt_post_var_t = th.sqrt(extract(self.posterior_variance, t, x_tm1))
@@ -99,7 +98,7 @@ class DiffusionSampler(ABC):
 
         return x_tm1, steps
 
-    def _sample_x_tm1_given_x_t(self, x_t: th.Tensor, t: int, pred_noise: th.Tensor, sqrt_post_var_t: th.Tensor):
+    def _sample_x_tm1_given_x_t(self, x_t: th.Tensor, t: int, pred_noise_t: th.Tensor, sqrt_post_var_t: th.Tensor):
         """Denoise the input tensor at a given timestep using the predicted noise
 
         Args:
@@ -120,7 +119,7 @@ class DiffusionSampler(ABC):
         else:
             z = 0
 
-        m_tm1 = (x_t - b_t / (th.sqrt(1 - a_bar_t)) * pred_noise) / a_t.sqrt()
+        m_tm1 = (x_t - b_t / (th.sqrt(1 - a_bar_t)) * pred_noise_t) / a_t.sqrt()
         noise = sqrt_post_var_t * z
         xtm1 = m_tm1 + noise
         return xtm1

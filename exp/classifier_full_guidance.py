@@ -3,6 +3,7 @@
 
 import sys
 
+
 sys.path.append(".")
 from argparse import ArgumentParser
 from pathlib import Path
@@ -15,24 +16,35 @@ from src.diffusion.base import DiffusionSampler
 from src.diffusion.beta_schedules import improved_beta_schedule
 from src.model.unet import load_mnist_diff
 from src.utils.vis import plot_samples_grid
+from src.model.guided_diff.unet import load_guided_diff_unet
+from src.model.guided_diff.classifier import load_guided_classifier
 
 
 def main():
     args = parse_args()
     device = get_device(Device.GPU)
     models_dir = Path.cwd() / "models"
-    uncond_diff = load_mnist_diff(models_dir / "uncond_unet_mnist.pt", device)
-    classifier = _load_class(models_dir / "resnet_classifier_t_mnist.pt", device)
+    diff_model_path = models_dir / f"{args.diff_model}.pt"
+    class_model_path = models_dir / f"{args.class_model}.pt"
+    if "mnist" in args.diff_model:
+        channels, image_size = 1, 28
+        diff_model = load_mnist_diff(diff_model_path, device)
+        classifier = _load_class(models_dir / class_model_path, device)
+    elif "256x256_diffusion" in args.diff_model:
+        channels, image_size = 3, 256
+        diff_model = load_guided_diff_unet(model_path=diff_model_path, dev=device, class_cond=args.class_cond)
+        classifier = load_guided_classifier(model_path=class_model_path, dev=device, image_size=image_size)
+
     T = args.num_diff_steps
     diff_sampler = DiffusionSampler(improved_beta_schedule, num_diff_steps=T)
     diff_sampler.to(device)
 
     guidance = ClassifierFullGuidance(classifier, lambda_=args.guid_scale)
-    reconstr_guided_sampler = GuidanceSampler(uncond_diff, diff_sampler, guidance, verbose=True)
+    guid_sampler = GuidanceSampler(diff_model, diff_sampler, guidance, verbose=True)
 
     num_samples = args.num_samples
     classes = th.ones((num_samples,), dtype=th.int64)
-    samples, _ = reconstr_guided_sampler.sample(num_samples, classes, device, th.Size((1, 28, 28)))
+    samples, _ = guid_sampler.sample(num_samples, classes, device, th.Size((channels, image_size, image_size)))
     plot_samples_grid(samples.detach().cpu())
 
 
@@ -48,6 +60,10 @@ def parse_args():
     parser.add_argument("--guid_scale", default=1.0, type=float, help="Guidance scale")
     parser.add_argument("--num_samples", default=100, type=int, help="Num samples (batch size to run in parallell)")
     parser.add_argument("--num_diff_steps", default=1000, type=int, help="Num diffusion steps")
+    parser.add_argument("--diff_model", type=str, help="Diffusion model file (withouth '.pt' extension)")
+    parser.add_argument("--class_model", type=str, help="Classifier model file (withouth '.pt' extension)")
+    parser.add_argument("--class_cond", action="store_true", help="Use classconditional diff. model")
+    parser.add_argument("--plot", action="store_true", help="enables plots")
     return parser.parse_args()
 
 

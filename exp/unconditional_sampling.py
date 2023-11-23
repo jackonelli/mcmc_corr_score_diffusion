@@ -1,8 +1,5 @@
-"""Prototyping script for sampling a UNet-based unconditional diffusion model for MNIST"""
-
-
+"""Sample from unconditional diffusion models"""
 import sys
-
 
 sys.path.append(".")
 from pathlib import Path
