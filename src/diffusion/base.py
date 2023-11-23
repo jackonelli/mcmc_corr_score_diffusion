@@ -60,7 +60,6 @@ class DiffusionSampler(ABC):
         if not isinstance(self.posterior_variance, str):
             self.posterior_variance = self.posterior_variance.to(device)
         self.posterior_log_variance_clipped = self.posterior_log_variance_clipped.to(device)
-        print("TYPES", self.betas.dtype, self.posterior_log_variance_clipped.dtype)
 
     @th.no_grad()
     def sample(self, model: nn.Module, num_samples: int, device: th.device, shape: tuple, verbose=False):
@@ -79,7 +78,6 @@ class DiffusionSampler(ABC):
 
         steps = []
         x_tm1 = th.randn((num_samples,) + shape).to(device)
-        print("x sum", x_tm1.sum().item())
 
         for t in reversed(range(0, self.num_timesteps)):
             t_tensor = th.full((x_tm1.shape[0],), t, device=device)
@@ -96,13 +94,6 @@ class DiffusionSampler(ABC):
                 pred_noise, log_var = model(x_tm1, t_tensor).split(x_tm1.size(1), dim=1)
                 log_var, _ = self._clip_var(x_tm1, t_tensor, log_var)
                 sqrt_post_var_t = th.exp(0.5 * log_var)
-                print(f"t={t}: {sqrt_post_var_t.sum().item()}")
-            if x_tm1.isnan().any():
-                print(f"x: NaN at t={t}")
-            if pred_noise.isnan().any():
-                print(f"eps: NaN at t={t}")
-            if sqrt_post_var_t.isnan().any():
-                print(f"sigma: NaN at t={t}")
             x_tm1 = self._sample_x_tm1_given_x_t(x_tm1, t, pred_noise, sqrt_post_var_t=sqrt_post_var_t)
             # steps.append((t, x_tm1.detach().cpu()))
 
