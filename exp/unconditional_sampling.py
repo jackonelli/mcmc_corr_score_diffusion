@@ -32,7 +32,7 @@ def main():
         diff_model = load_imagenet_diff(model_path, device, image_size=32)
         channels, image_size = 3, 32
     elif "256x256_diffusion" in args.model:
-        assert args.class_cond and not "uncond" in args.model
+        assert not (args.class_cond and "uncond" in args.model)
         diff_model = load_guided_diff_unet(model_path=model_path, dev=device, class_cond=args.class_cond)
         diff_model.eval()
         if args.class_cond:
@@ -54,7 +54,7 @@ def main():
         time_steps = respaced_timesteps(T, respaced_T)
         betas = new_sparse(time_steps, betas)
     else:
-        raise ValueError('respaced_num_diff_steps cannot be higher than num_diff_steps')
+        raise ValueError("respaced_num_diff_steps cannot be higher than num_diff_steps")
     diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance="learned")
 
     print("Sampling...")
@@ -74,8 +74,12 @@ def parse_args():
     parser = ArgumentParser(prog="Sample from unconditional diff. model")
     parser.add_argument("--num_samples", default=100, type=int, help="Number of samples")
     parser.add_argument("--num_diff_steps", default=1000, type=int, help="Number of diffusion steps")
-    parser.add_argument("--respaced_num_diff_steps", default=250, type=int,
-                        help="Number of respaced diffusion steps (fewer than or equal to num_diff_steps)")
+    parser.add_argument(
+        "--respaced_num_diff_steps",
+        default=250,
+        type=int,
+        help="Number of respaced diffusion steps (fewer than or equal to num_diff_steps)",
+    )
     parser.add_argument("--model", type=str, help="Model file (withouth '.pt' extension)")
     parser.add_argument("--plot", action="store_true", help="enables plots")
     parser.add_argument("--class_cond", action="store_true", help="Use class conditional diff. model")

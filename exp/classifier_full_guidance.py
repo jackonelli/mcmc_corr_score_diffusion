@@ -59,7 +59,7 @@ def main():
     diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance="learned")
 
     guidance = ClassifierFullGuidance(classifier, lambda_=args.guid_scale)
-    guid_sampler = GuidanceSampler(diff_model, diff_sampler, guidance, verbose=True)
+    guid_sampler = GuidanceSampler(diff_model, diff_sampler, guidance)
 
     print("Sampling...")
     samples, _ = guid_sampler.sample(num_samples, classes, device, th.Size((channels, image_size, image_size)))

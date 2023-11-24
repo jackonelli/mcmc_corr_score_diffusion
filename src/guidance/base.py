@@ -66,32 +66,32 @@ class GuidanceSampler:
         return x_tm1, steps
 
     def _sample_x_tm1_given_x_t(
-        self, x_t: th.Tensor, t: int, pred_noise: th.Tensor, sqrt_post_var_t: th.Tensor, classes: th.Tensor
+        self, x_t: th.Tensor, t_idx: int, pred_noise: th.Tensor, sqrt_post_var_t: th.Tensor, classes: th.Tensor
     ):
         """Denoise the input tensor at a given timestep using the predicted noise
 
         Args:
             x_t (any shape),
-            t (timestep at which to denoise),
+            t_idx (timestep index at which to denoise),
             predicted_noise (noise predicted at the timestep)
 
         Returns:
             x_tm1 (x[t-1] denoised sample by one step - x_t.shape)
         """
-        b_t = extract(self.diff_proc.betas, t, x_t)
-        a_t = extract(self.diff_proc.alphas, t, x_t)
-        a_bar_t = extract(self.diff_proc.alphas_bar, t, x_t)
+        b_t = extract(self.diff_proc.betas, t_idx, x_t)
+        a_t = extract(self.diff_proc.alphas, t_idx, x_t)
+        a_bar_t = extract(self.diff_proc.alphas_bar, t_idx, x_t)
 
-        if t > 0:
+        if t_idx > 0:
             z = th.randn_like(x_t)
         else:
             z = 0
 
-        sigma_t = self.diff_proc.sigma_t(t, x_t)
-        t_tensor = th.full((x_t.shape[0],), t, device=x_t.device)
+        sigma_t = self.diff_proc.sigma_t(t_idx, x_t)
+        t_tensor = th.full((x_t.shape[0],), t_idx, device=x_t.device)
         class_score = self.guidance.grad(x_t, t_tensor, classes, pred_noise)
-        self.grads["uncond"][t] = th.norm(-pred_noise)
-        self.grads["class"][t] = th.norm(sigma_t * class_score)
+        self.grads["uncond"][t_idx] = th.norm(-pred_noise)
+        self.grads["class"][t_idx] = th.norm(sigma_t * class_score)
         m_tm1 = (x_t + b_t / (th.sqrt(1 - a_bar_t)) * (sigma_t * class_score - pred_noise)) / a_t.sqrt()
         noise = sqrt_post_var_t * z
         xtm1 = m_tm1 + noise
@@ -106,9 +106,8 @@ class MCMCGuidanceSampler(GuidanceSampler):
         guidance: Guidance,
         mcmc_sampler: MCMCSampler,
         reverse=True,
-        verbose=False,
     ):
-        super().__init__(diff_model=diff_model, diff_proc=diff_proc, guidance=guidance, verbose=verbose)
+        super().__init__(diff_model=diff_model, diff_proc=diff_proc, guidance=guidance)
         self.mcmc_sampler = mcmc_sampler
         self.mcmc_sampler.set_gradient_function(self.grad)
         self.reverse = reverse
@@ -116,16 +115,10 @@ class MCMCGuidanceSampler(GuidanceSampler):
     def grad(self, x_t, t, classes):
         sigma_t = self.diff_proc.sigma_t(t, x_t)
         t_tensor = th.full((x_t.shape[0],), t, device=x_t.device)
-        # pred_noise = self.diff_model(x_t, t_tensor)
-        # TODO: Which sigma_t ?
         if not isinstance(self.diff_proc.posterior_variance, str):
             pred_noise = self.diff_model(x_t, t_tensor)
-            # sqrt_post_var_t = th.sqrt(extract(self.diff_proc.posterior_variance, t, x_tm1))
-            # assert pred_noise.size() == x_t.size()
         else:
-            pred_noise, log_var = self.diff_model(x_t, t_tensor).split(x_t.size(1), dim=1)
-            # log_var, _ = self.diff_proc._clip_var(x_t, t_tensor, log_var)
-            # sqrt_post_var_t = th.exp(0.5 * log_var)
+            pred_noise, _ = self.diff_model(x_t, t_tensor).split(x_t.size(1), dim=1)
         class_score = self.guidance.grad(x_t, t_tensor, classes, pred_noise)
         return class_score - pred_noise / sigma_t
 
@@ -148,12 +141,11 @@ class MCMCGuidanceSampler(GuidanceSampler):
         steps = []
         x_tm1 = th.randn((num_samples,) + shape).to(device)
 
-        self.verbose_counter = 0
-
-        for t, t_idx in zip(self.time_steps.__reversed__(), reversed(self.time_steps_idx)):
-            if verbose and self.diff_proc.verbose_split[self.verbose_counter] == t:
+        verbose_counter = 0
+        for t, t_idx in zip(self.diff_proc.time_steps.__reversed__(), reversed(self.diff_proc.time_steps_idx)):
+            if verbose and self.diff_proc.verbose_split[verbose_counter] == t:
                 print("Diff step", t.item())
-                self.verbose_counter += 1
+                verbose_counter += 1
 
             if self.reverse:
                 t_tensor = th.full((x_tm1.shape[0],), t.item(), device=device)
@@ -174,7 +166,7 @@ class MCMCGuidanceSampler(GuidanceSampler):
                 )
 
             if t > 0:
-                x_tm1 = self.mcmc_sampler.sample_step(x_tm1, t - 1, classes)
+                x_tm1 = self.mcmc_sampler.sample_step(x_tm1, t_idx - 1, classes)
             steps.append(x_tm1.detach().cpu())
 
         return x_tm1, steps

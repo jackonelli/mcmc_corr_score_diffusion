@@ -47,7 +47,7 @@ def main():
 
     betas = beta_schedule(num_timesteps=T)
     time_steps = th.tensor([i for i in range(T)])
-    diff_sampler = DiffusionSampler(betas, num_diff_steps=T, posterior_variance="learned")
+    diff_sampler = DiffusionSampler(betas=betas, time_steps=time_steps, posterior_variance="learned")
     diff_sampler.to(device)
     mcmc_steps = 4
     # step_sizes = diff_sampler.betas * 0.005
@@ -72,15 +72,18 @@ def main():
         guidance=guidance,
         mcmc_sampler=mcmc_sampler,
         reverse=True,
-        verbose=True,
     )
     num_samples = args.num_samples
     th.manual_seed(0)
     classes = th.randint(10, (num_samples,), dtype=th.int64)
     # classes = th.ones((num_samples,), dtype=th.int64)
-    samples, _ = guided_sampler.sample(num_samples, classes, device, th.Size((channels, image_size, image_size)))
+    print("Sampling...")
+    samples, _ = guided_sampler.sample(
+        num_samples, classes, device, th.Size((channels, image_size, image_size)), verbose=True
+    )
 
-    run = 4
+    save_file = Path.cwd() / "outputs" / f"cfg_mcmc_{args.diff_model}.th"
+    print(f"Saving samples to '{save_file}'")
     data = dict()
     data["samples"] = samples.detach().cpu()
     data["accepts"] = guided_sampler.mcmc_sampler.accepts
@@ -103,6 +106,12 @@ def parse_args():
     parser.add_argument("--guid_scale", default=1.0, type=float, help="Guidance scale")
     parser.add_argument("--num_samples", default=100, type=int, help="Num samples (batch size to run in parallell)")
     parser.add_argument("--num_diff_steps", default=1000, type=int, help="Num diffusion steps")
+    parser.add_argument(
+        "--respaced_num_diff_steps",
+        default=250,
+        type=int,
+        help="Number of respaced diffusion steps (fewer than or equal to num_diff_steps)",
+    )
     parser.add_argument("--diff_model", type=str, help="Diffusion model file (withouth '.pt' extension)")
     parser.add_argument("--class_model", type=str, help="Classifier model file (withouth '.pt' extension)")
     parser.add_argument("--class_cond", action="store_true", help="Use classconditional diff. model")

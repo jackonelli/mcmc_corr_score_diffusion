@@ -28,7 +28,6 @@ class DiffusionSampler(ABC):
         self.time_steps_idx = [i for i in range(len(time_steps))]
         self.num_diff_steps = len(time_steps)
         self.verbose_split = list(reversed([i[0].item() for i in th.chunk(self.time_steps, 10)]))
-        self.verbose_counter = 0
 
         # define beta
         self.betas = betas
@@ -49,9 +48,8 @@ class DiffusionSampler(ABC):
 
         self.posterior_log_variance_clipped = _compute_post_log_var(self.betas)
 
-    def sigma_t(self, t, x_t):
-        t_ind = th.where(self.time_steps == t, self.time_teps)[0].item()
-        a_bar_t = extract(self.alphas_bar, t_ind, x_t)
+    def sigma_t(self, t_idx, x_t):
+        a_bar_t = extract(self.alphas_bar, t_idx, x_t)
         return th.sqrt(1 - a_bar_t)
 
     def to(self, device: th.device):
@@ -79,14 +77,14 @@ class DiffusionSampler(ABC):
 
         steps = []
         x_tm1 = th.randn((num_samples,) + shape).to(device)
-        self.verbose_counter = 0
+        verbose_counter = 0
 
         for t, t_idx in zip(self.time_steps.__reversed__(), reversed(self.time_steps_idx)):
             t_tensor = th.full((x_tm1.shape[0],), t.item(), device=device)
             t_idx_tensor = th.full((x_tm1.shape[0],), t_idx, device=device)
-            if verbose and self.verbose_split[self.verbose_counter] == t:
+            if verbose and self.verbose_split[verbose_counter] == t:
                 print("Diff step", t.item())
-                self.verbose_counter += 1
+                verbose_counter += 1
 
             # Use the model to predict noise and use the noise to step back
             if not isinstance(self.posterior_variance, str):
