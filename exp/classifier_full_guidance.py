@@ -14,9 +14,8 @@ from src.guidance.classifier_full import ClassifierFullGuidance
 from src.model.resnet import load_classifier
 from src.utils.net import Device, get_device
 from src.diffusion.base import DiffusionSampler
-from src.diffusion.beta_schedules import improved_beta_schedule, linear_beta_schedule, new_sparse, respaced_timesteps
+from src.diffusion.beta_schedules import improved_beta_schedule, linear_beta_schedule, respaced_beta_schedule
 from src.model.unet import load_mnist_diff
-from src.utils.vis import plot_samples_grid
 from src.model.guided_diff.unet import load_guided_diff_unet
 from src.model.guided_diff.classifier import load_guided_classifier
 
@@ -46,23 +45,20 @@ def main():
         classifier = load_guided_classifier(model_path=class_model_path, dev=device, image_size=image_size)
         classifier.eval()
 
-    T = args.num_diff_steps
-    respaced_T = args.respaced_num_diff_steps
-    betas = beta_schedule(num_timesteps=T)
-    if respaced_T == T:
-        time_steps = th.tensor([i for i in range(T)])
-    elif respaced_T < T:
-        time_steps = respaced_timesteps(T, respaced_T)
-        betas = new_sparse(time_steps, betas)
-    else:
-        raise ValueError("respaced_num_diff_steps cannot be higher than num_diff_steps")
+    betas, time_steps = respaced_beta_schedule(
+        original_betas=beta_schedule(num_timesteps=args.num_diff_steps),
+        T=args.num_diff_steps,
+        respaced_T=args.respaced_num_diff_steps,
+    )
     diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance="learned")
 
     guidance = ClassifierFullGuidance(classifier, lambda_=args.guid_scale)
     guid_sampler = GuidanceSampler(diff_model, diff_sampler, guidance)
 
     print("Sampling...")
-    samples, _ = guid_sampler.sample(num_samples, classes, device, th.Size((channels, image_size, image_size)))
+    samples, _ = guid_sampler.sample(
+        num_samples, classes, device, th.Size((channels, image_size, image_size)), verbose=True
+    )
     save_file = Path.cwd() / "outputs" / f"cfg_{args.diff_model}.th"
     print(f"Saving samples to '{save_file}'")
     th.save(samples, save_file)

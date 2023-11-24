@@ -8,7 +8,12 @@ from argparse import ArgumentParser
 import torch as th
 import matplotlib.pyplot as plt
 from src.diffusion.base import DiffusionSampler
-from src.diffusion.beta_schedules import improved_beta_schedule, linear_beta_schedule, respaced_timesteps, new_sparse
+from src.diffusion.beta_schedules import (
+    improved_beta_schedule,
+    linear_beta_schedule,
+    respaced_timesteps,
+    respaced_beta_schedule,
+)
 from src.model.unet import load_mnist_diff
 from src.model.imagenet import load_imagenet_diff
 from src.utils.net import get_device, Device
@@ -28,6 +33,7 @@ def main():
     if "imagenet" in args.model:
         diff_model = load_imagenet_diff(model_path, device)
         channels, image_size = 3, 112
+        beta_schedule = improved_beta_schedule
     elif "cifar10" in args.model:
         diff_model = load_imagenet_diff(model_path, device, image_size=32)
         channels, image_size = 3, 32
@@ -40,21 +46,18 @@ def main():
             diff_model = partial(diff_model.forward, y=classes)
 
         channels, image_size = 3, 256
+        beta_schedule = linear_beta_schedule
     elif "mnist" in args.model:
         diff_model = load_mnist_diff(model_path, device)
         channels, image_size = 1, 28
+        beta_schedule = improved_beta_schedule
     else:
         raise ValueError("Incorrect model name '{args.model}'")
-    T = args.num_diff_steps
-    respaced_T = args.respaced_num_diff_steps
-    betas = linear_beta_schedule(num_timesteps=T)
-    if respaced_T == T:
-        time_steps = th.tensor([i for i in range(T)])
-    elif respaced_T < T:
-        time_steps = respaced_timesteps(T, respaced_T)
-        betas = new_sparse(time_steps, betas)
-    else:
-        raise ValueError("respaced_num_diff_steps cannot be higher than num_diff_steps")
+    betas, time_steps = respaced_beta_schedule(
+        original_betas=beta_schedule(num_timesteps=args.num_diff_steps),
+        T=args.num_diff_steps,
+        respaced_T=args.respaced_num_diff_steps,
+    )
     diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance="learned")
 
     print("Sampling...")

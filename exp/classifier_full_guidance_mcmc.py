@@ -13,7 +13,7 @@ from src.samplers.mcmc import AnnealedHMCScoreSampler
 from src.model.resnet import load_classifier
 from src.utils.net import Device, get_device
 from src.diffusion.base import DiffusionSampler
-from src.diffusion.beta_schedules import improved_beta_schedule, linear_beta_schedule
+from src.diffusion.beta_schedules import improved_beta_schedule, linear_beta_schedule, respaced_beta_schedule
 from src.model.unet import load_mnist_diff
 from src.utils.vis import plot_samples_grid
 from src.model.guided_diff.unet import load_guided_diff_unet
@@ -45,8 +45,11 @@ def main():
         classifier = load_guided_classifier(model_path=class_model_path, dev=device, image_size=image_size)
         classifier.eval()
 
-    betas = beta_schedule(num_timesteps=T)
-    time_steps = th.tensor([i for i in range(T)])
+    betas, time_steps = respaced_beta_schedule(
+        original_betas=beta_schedule(num_timesteps=args.num_diff_steps),
+        T=args.num_diff_steps,
+        respaced_T=args.respaced_num_diff_steps,
+    )
     diff_sampler = DiffusionSampler(betas=betas, time_steps=time_steps, posterior_variance="learned")
     diff_sampler.to(device)
     mcmc_steps = 4
@@ -82,14 +85,13 @@ def main():
         num_samples, classes, device, th.Size((channels, image_size, image_size)), verbose=True
     )
 
-    save_file = Path.cwd() / "outputs" / f"cfg_mcmc_{args.diff_model}.th"
-    print(f"Saving samples to '{save_file}'")
     data = dict()
     data["samples"] = samples.detach().cpu()
     data["accepts"] = guided_sampler.mcmc_sampler.accepts
     data["parameters"] = {"stepsizes": step_sizes.detach().cpu(), "a": a, "b": b}
     data["classes"] = classes
     save_file = Path.cwd() / "outputs" / f"cfg_{args.diff_model}.p"
+    print(f"Saving samples to '{save_file}'")
     pickle.dump(data, open(save_file, "wb"))
     # plot_samples_grid(samples.detach().cpu())
 
