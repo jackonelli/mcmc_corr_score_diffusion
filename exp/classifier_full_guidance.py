@@ -7,6 +7,7 @@ import sys
 sys.path.append(".")
 from argparse import ArgumentParser
 from pathlib import Path
+from functools import partial
 import torch as th
 from src.guidance.base import GuidanceSampler
 from src.guidance.classifier_full import ClassifierFullGuidance
@@ -26,6 +27,8 @@ def main():
     models_dir = Path.cwd() / "models"
     diff_model_path = models_dir / f"{args.diff_model}.pt"
     class_model_path = models_dir / f"{args.class_model}.pt"
+    num_samples = args.num_samples
+    classes = th.ones((num_samples,), dtype=th.int64).to(device)
     print("Loading models")
     if "mnist" in args.diff_model:
         channels, image_size = 1, 28
@@ -33,8 +36,11 @@ def main():
         classifier = _load_class(models_dir / class_model_path, device)
     elif "256x256_diffusion" in args.diff_model:
         channels, image_size = 3, 256
-        diff_model = load_guided_diff_unet(model_path=diff_model_path, dev=device, class_cond=args.class_cond)
-        diff_model.eval()
+        diff_model_proto = load_guided_diff_unet(model_path=diff_model_path, dev=device, class_cond=args.class_cond)
+        diff_model_proto.eval()
+        if args.class_cond:
+            print("Using class conditional diffusion model")
+            diff_model = partial(diff_model_proto.forward, y=classes)
         classifier = load_guided_classifier(model_path=class_model_path, dev=device, image_size=image_size)
         classifier.eval()
 
@@ -45,11 +51,11 @@ def main():
     guidance = ClassifierFullGuidance(classifier, lambda_=args.guid_scale)
     guid_sampler = GuidanceSampler(diff_model, diff_sampler, guidance, verbose=True)
 
-    num_samples = args.num_samples
-    classes = th.ones((num_samples,), dtype=th.int64)
     print("Sampling...")
     samples, _ = guid_sampler.sample(num_samples, classes, device, th.Size((channels, image_size, image_size)))
-    th.save(samples, Path.cwd() / "outputs" / f"cfg_{args.diff_model}.th")
+    save_file = Path.cwd() / "outputs" / f"cfg_{args.diff_model}.th"
+    print(f"Saving samples to '{save_file}'")
+    th.save(samples, save_file)
 
 
 def _load_class(class_path: Path, device):

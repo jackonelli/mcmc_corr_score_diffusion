@@ -191,7 +191,6 @@ class EncoderUNetModel(nn.Module):
         )
         self._feature_size += ch
         self.pool = pool
-        print("Pool", self.pool)
         if pool == "adaptive":
             self.out = nn.Sequential(
                 normalization(ch),

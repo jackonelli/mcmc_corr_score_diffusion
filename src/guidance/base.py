@@ -20,7 +20,6 @@ class GuidanceSampler:
 
     def __init__(self, diff_model: nn.Module, diff_proc: DiffusionSampler, guidance: Guidance, verbose=False):
         self.diff_model = diff_model
-        self.diff_model.eval()
         self.diff_proc = diff_proc
         self.guidance = guidance
         self.verbose = verbose
@@ -40,9 +39,7 @@ class GuidanceSampler:
             all x through the (predicted) reverse diffusion steps
         """
 
-        # self.diff_model.eval()
         steps = []
-        classes = classes.to(device)
         x_tm1 = th.randn((num_samples,) + shape).to(device)
 
         for t in reversed(range(0, self.diff_proc.num_timesteps)):
@@ -138,9 +135,7 @@ class MCMCGuidanceSampler(GuidanceSampler):
             all x through the (predicted) reverse diffusion steps
         """
 
-        # self.diff_model.eval()
         steps = []
-        classes = classes.to(device)
         x_tm1 = th.randn((num_samples,) + shape).to(device)
 
         for t in reversed(range(0, self.diff_proc.num_timesteps)):

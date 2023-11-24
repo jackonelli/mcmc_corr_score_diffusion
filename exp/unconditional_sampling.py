@@ -34,6 +34,7 @@ def main():
     elif "256x256_diffusion" in args.model:
         assert args.class_cond and not "uncond" in args.model
         diff_model_proto = load_guided_diff_unet(model_path=model_path, dev=device, class_cond=args.class_cond)
+        diff_model_proto.eval()
         if args.class_cond:
             print("Using class conditional diffusion model")
             diff_model = partial(diff_model_proto.forward, y=classes)
