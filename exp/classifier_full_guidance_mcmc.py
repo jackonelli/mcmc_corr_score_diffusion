@@ -31,10 +31,12 @@ def main():
     T = args.num_diff_steps
     if "mnist" in args.diff_model:
         channels, image_size = 1, 28
+        beta_schedule = improved_beta_schedule
         diff_model = load_mnist_diff(diff_model_path, device)
         classifier = _load_class(models_dir / class_model_path, device)
     elif "256x256_diffusion" in args.diff_model:
         channels, image_size = 3, 256
+        beta_schedule = linear_beta_schedule
         diff_model_proto = load_guided_diff_unet(model_path=diff_model_path, dev=device, class_cond=args.class_cond)
         diff_model_proto.eval()
         if args.class_cond:
@@ -42,7 +44,10 @@ def main():
             diff_model = partial(diff_model_proto.forward, y=classes)
         classifier = load_guided_classifier(model_path=class_model_path, dev=device, image_size=image_size)
         classifier.eval()
-    diff_sampler = DiffusionSampler(linear_beta_schedule, num_diff_steps=T, posterior_variance="learned")
+
+    betas = beta_schedule(num_timesteps=T)
+    time_steps = th.tensor([i for i in range(T)])
+    diff_sampler = DiffusionSampler(betas, num_diff_steps=T, posterior_variance="learned")
     diff_sampler.to(device)
     mcmc_steps = 4
     # step_sizes = diff_sampler.betas * 0.005
