@@ -33,11 +33,11 @@ def main():
         channels, image_size = 3, 32
     elif "256x256_diffusion" in args.model:
         assert args.class_cond and not "uncond" in args.model
-        diff_model_proto = load_guided_diff_unet(model_path=model_path, dev=device, class_cond=args.class_cond)
-        diff_model_proto.eval()
+        diff_model = load_guided_diff_unet(model_path=model_path, dev=device, class_cond=args.class_cond)
+        diff_model.eval()
         if args.class_cond:
             print("Using class conditional diffusion model")
-            diff_model = partial(diff_model_proto.forward, y=classes)
+            diff_model = partial(diff_model.forward, y=classes)
 
         channels, image_size = 3, 256
     elif "mnist" in args.model:

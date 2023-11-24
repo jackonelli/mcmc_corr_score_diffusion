@@ -85,6 +85,7 @@ class GuidanceSampler:
 
         sigma_t = self.diff_proc.sigma_t(t, x_t)
         t_tensor = th.full((x_t.shape[0],), t, device=x_t.device)
+        # TODO: Bad limit!
         if t < 1000:
             class_score = self.guidance.grad(x_t, t_tensor, classes, pred_noise)
         else:
@@ -115,7 +116,16 @@ class MCMCGuidanceSampler(GuidanceSampler):
     def grad(self, x_t, t, classes):
         sigma_t = self.diff_proc.sigma_t(t, x_t)
         t_tensor = th.full((x_t.shape[0],), t, device=x_t.device)
-        pred_noise = self.diff_model(x_t, t_tensor)
+        # pred_noise = self.diff_model(x_t, t_tensor)
+        # TODO: Which sigma_t ?
+        if not isinstance(self.diff_proc.posterior_variance, str):
+            pred_noise = self.diff_model(x_t, t_tensor)
+            # sqrt_post_var_t = th.sqrt(extract(self.diff_proc.posterior_variance, t, x_tm1))
+            # assert pred_noise.size() == x_t.size()
+        else:
+            pred_noise, log_var = self.diff_model(x_t, t_tensor).split(x_t.size(1), dim=1)
+            # log_var, _ = self.diff_proc._clip_var(x_t, t_tensor, log_var)
+            # sqrt_post_var_t = th.exp(0.5 * log_var)
         class_score = self.guidance.grad(x_t, t_tensor, classes, pred_noise)
         return class_score - pred_noise / sigma_t
 
@@ -145,8 +155,17 @@ class MCMCGuidanceSampler(GuidanceSampler):
             if self.reverse:
                 # Use the model to predict noise and use the noise to step back
                 t_tensor = th.full((x_tm1.shape[0],), t, device=device)
-                pred_noise = self.diff_model(x_tm1, t_tensor)
-                x_tm1 = self._sample_x_tm1_given_x_t(x_tm1, t, pred_noise, classes)
+                # pred_noise = self.diff_model(x_tm1, t_tensor)
+                if not isinstance(self.diff_proc.posterior_variance, str):
+                    pred_noise = self.diff_model(x_tm1, t_tensor)
+                    assert pred_noise.size() == x_tm1.size()
+                    sqrt_post_var_t = th.sqrt(extract(self.diff_proc.posterior_variance, t, x_tm1))
+                else:
+                    pred_noise, log_var = self.diff_model(x_tm1, t_tensor).split(x_tm1.size(1), dim=1)
+                    assert pred_noise.size() == x_tm1.size()
+                    log_var, _ = self.diff_proc._clip_var(x_tm1, t_tensor, log_var)
+                    sqrt_post_var_t = th.exp(0.5 * log_var)
+                x_tm1 = self._sample_x_tm1_given_x_t(x_tm1, t, pred_noise, sqrt_post_var_t, classes)
 
             if t > 0:
                 x_tm1 = self.mcmc_sampler.sample_step(x_tm1, t - 1, classes)

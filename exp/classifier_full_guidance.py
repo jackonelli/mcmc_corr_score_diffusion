@@ -1,4 +1,4 @@
-"""Script for sampling with reconstruction guidance"""
+"""Script for sampling with classifier-full guidance"""
 
 
 import sys
@@ -36,11 +36,11 @@ def main():
         classifier = _load_class(models_dir / class_model_path, device)
     elif "256x256_diffusion" in args.diff_model:
         channels, image_size = 3, 256
-        diff_model_proto = load_guided_diff_unet(model_path=diff_model_path, dev=device, class_cond=args.class_cond)
-        diff_model_proto.eval()
+        diff_model = load_guided_diff_unet(model_path=diff_model_path, dev=device, class_cond=args.class_cond)
+        diff_model.eval()
         if args.class_cond:
             print("Using class conditional diffusion model")
-            diff_model = partial(diff_model_proto.forward, y=classes)
+            diff_model = partial(diff_model.forward, y=classes)
         classifier = load_guided_classifier(model_path=class_model_path, dev=device, image_size=image_size)
         classifier.eval()
 
