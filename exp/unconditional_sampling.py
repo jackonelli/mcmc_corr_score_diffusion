@@ -7,7 +7,7 @@ from argparse import ArgumentParser
 import torch as th
 import matplotlib.pyplot as plt
 from src.diffusion.base import DiffusionSampler
-from src.diffusion.beta_schedules import improved_beta_schedule, linear_beta_schedule, sparse_beta_schedule
+from src.diffusion.beta_schedules import improved_beta_schedule, linear_beta_schedule, respaced_timesteps, new_sparse
 from src.model.unet import load_mnist_diff
 from src.model.imagenet import load_imagenet_diff
 from src.utils.net import get_device, Device
@@ -37,9 +37,16 @@ def main():
     else:
         raise ValueError("Incorrect model name '{args.model}'")
     T = args.num_diff_steps
-    # beta_schedule = partial(_sparse_betas, og_schedule=improved_beta_schedule, og_num_diff_steps=1000)
-    beta_schedule = linear_beta_schedule
-    diff_sampler = DiffusionSampler(beta_schedule, T, posterior_variance="learned")
+    respaced_T = args.respaced_num_diff_steps
+    betas = linear_beta_schedule(num_timesteps=T)
+    if respaced_T == T:
+        time_steps = th.tensor([i for i in range(T)])
+    elif respaced_T < T:
+        time_steps = respaced_timesteps(T, respaced_T)
+        betas = new_sparse(time_steps, betas)
+    else:
+        raise ValueError('respaced_num_diff_steps cannot be higher than num_diff_steps')
+    diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance="learned")
 
     samples, _ = diff_sampler.sample(
         diff_model, args.num_samples, device, (channels, image_size, image_size), verbose=True
@@ -53,16 +60,12 @@ def main():
         plt.show()
 
 
-def _sparse_betas(num_timesteps: int, og_schedule, og_num_diff_steps: int) -> th.Tensor:
-    """Helper function that generate a beta schedule"""
-    og_betas = og_schedule(og_num_diff_steps)
-    return sparse_beta_schedule(og_betas, og_num_diff_steps // num_timesteps)
-
-
 def parse_args():
     parser = ArgumentParser(prog="Sample from unconditional diff. model")
     parser.add_argument("--num_samples", default=100, type=int, help="Number of samples")
     parser.add_argument("--num_diff_steps", default=1000, type=int, help="Number of diffusion steps")
+    parser.add_argument("--respaced_num_diff_steps", default=250, type=int,
+                        help="Number of respaced diffusion steps (fewer than or equal to num_diff_steps)")
     parser.add_argument("--model", type=str, help="Model file (withouth '.pt' extension)")
     parser.add_argument("--plot", action="store_true", help="enables plots")
     return parser.parse_args()

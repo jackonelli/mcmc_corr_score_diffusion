@@ -45,7 +45,9 @@ def test_classifier_t():
     model.eval()
 
     num_diff_steps = 1000
-    noise_scheduler = DiffusionSampler(improved_beta_schedule, num_diff_steps)
+    betas = improved_beta_schedule(num_timesteps=num_diff_steps)
+    time_steps = th.tensor([i for i in range(num_diff_steps)])
+    noise_scheduler = DiffusionSampler(betas, time_steps)
     n_points = 10
     ts = th.linspace(0, 999, n_points).type(th.int).numpy().tolist()
     batch_size = 256

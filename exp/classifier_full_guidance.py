@@ -36,7 +36,9 @@ def main():
         classifier = load_guided_classifier(model_path=class_model_path, dev=device, image_size=image_size)
 
     T = args.num_diff_steps
-    diff_sampler = DiffusionSampler(improved_beta_schedule, num_diff_steps=T)
+    
+    time_steps = th.tensor([i for i in range(T)])
+    diff_sampler = DiffusionSampler(improved_beta_schedule, time_steps)
     diff_sampler.to(device)
 
     guidance = ClassifierFullGuidance(classifier, lambda_=args.guid_scale)

@@ -35,9 +35,10 @@ def main():
     else:
         unet = UNet(image_size, time_emb_dim, channels).to(dev)
 
-    unet = UNet(image_size, time_emb_dim, channels).to(dev)
     unet.train()
-    diff_sampler = DiffusionSampler(improved_beta_schedule, num_diff_steps)
+    betas = improved_beta_schedule(num_timesteps=num_diff_steps)
+    time_steps = th.tensor([i for i in range(num_diff_steps)])
+    diff_sampler = DiffusionSampler(betas, time_steps)
 
     diffm = DiffusionModel(model=unet, loss_f=F.mse_loss, noise_scheduler=diff_sampler)
 

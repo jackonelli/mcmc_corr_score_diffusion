@@ -107,6 +107,17 @@ def space_timesteps(num_timesteps, section_counts):
     return set(all_steps)
 
 
+def respaced_timesteps(num_timesteps, desired_num_timesteps):
+    frac_stride = (num_timesteps - 1) / (desired_num_timesteps - 1)
+    time_steps_respace = []
+    cur_idx = 0.0
+    start_idx = 0
+    for _ in range(desired_num_timesteps):
+        time_steps_respace.append(start_idx + round(cur_idx))
+        cur_idx += frac_stride
+    return th.tensor(time_steps_respace)
+
+
 from copy import copy
 
 
@@ -123,10 +134,15 @@ def new_sparse(use_timesteps, original_betas):
             new_betas.append(1 - alpha_cumprod / last_alpha_cumprod)
             last_alpha_cumprod = alpha_cumprod
             timestep_map.append(i)
-    return np.array(new_betas)
+    return th.tensor(new_betas)
 
 
 if __name__ == "__main__":
     # betas = linear_beta_schedule(num_timesteps=20)
-    ts = space_timesteps(1000, [10, 15, 20])
-    print(ts)
+    T = 1000
+    respace = 250
+    ts = respaced_timesteps(T, respace)
+    betas = linear_beta_schedule(num_timesteps=T)
+    betas_new = new_sparse(ts, betas)
+    print(betas)
+    print(betas_new)

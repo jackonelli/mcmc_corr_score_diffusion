@@ -21,21 +21,22 @@ class DiffusionSampler(ABC):
 
     def __init__(
         self,
-        # TODO: this should be a list of betas instead?
-        # No reason to have a function, which is immediately called,
-        # e.g., for sparse diff steps.
-        beta_schedule: Callable,
-        num_diff_steps: int,
+        betas: th.tensor,
+        time_steps: th.tensor,
         posterior_variance="beta",
     ):
-        self.num_timesteps = num_diff_steps
+        self.time_steps = time_steps
+        self.time_steps_idx = [i for i in range(len(time_steps))]
+        self.num_diff_steps = len(time_steps)
+        self.verbose_split = list(reversed([i[0].item() for i in th.chunk(self.time_steps, 10)]))
+        self.verbose_counter = 0
 
         # define beta
-        self.betas = beta_schedule(num_timesteps=num_diff_steps)
+        self.betas = betas
         self.alphas = 1.0 - self.betas
         self.alphas_bar = compute_alpha_bars(self.alphas)
 
-        # Two ifferent values of posterior variance (sigma ** 2) proposed of the authors + learned
+        # Different values of posterior variance (sigma ** 2) proposed of the authors + learned
         if posterior_variance == "beta":
             self.posterior_variance = self.betas
         elif posterior_variance == "beta_tilde":
@@ -78,22 +79,25 @@ class DiffusionSampler(ABC):
 
         steps = []
         x_tm1 = th.randn((num_samples,) + shape).to(device)
+        self.verbose_counter = 0
 
-        for t in reversed(range(0, self.num_timesteps)):
-            t_tensor = th.full((x_tm1.shape[0],), t, device=device)
-            if verbose and t % 100 == 0:
-                print("Diff step", t)
+        for t, t_idx in zip(self.time_steps.__reversed__(), reversed(self.time_steps_idx)):
+            t_tensor = th.full((x_tm1.shape[0],), t.item(), device=device)
+            t_idx_tensor = th.full((x_tm1.shape[0],), t_idx, device=device)
+            if verbose and self.verbose_split[self.verbose_counter] == t:
+                print("Diff step", t.item())
+                self.verbose_counter += 1
 
             # Use the model to predict noise and use the noise to step back
             if not isinstance(self.posterior_variance, str):
                 pred_noise = model(x_tm1, t_tensor)
-                sqrt_post_var_t = th.sqrt(extract(self.posterior_variance, t, x_tm1))
+                sqrt_post_var_t = th.sqrt(extract(self.posterior_variance, t_idx, x_tm1))
                 assert pred_noise.size() == x_tm1.size()
             else:
                 pred_noise, log_var = model(x_tm1, t_tensor).split(x_tm1.size(1), dim=1)
-                log_var, _ = self._clip_var(x_tm1, t_tensor, log_var)
+                log_var, _ = self._clip_var(x_tm1, t_idx_tensor, log_var)
                 sqrt_post_var_t = th.exp(0.5 * log_var)
-            x_tm1 = self._sample_x_tm1_given_x_t(x_tm1, t, pred_noise, sqrt_post_var_t=sqrt_post_var_t)
+            x_tm1 = self._sample_x_tm1_given_x_t(x_tm1, t_idx, pred_noise, sqrt_post_var_t=sqrt_post_var_t)
             # steps.append((t, x_tm1.detach().cpu()))
 
         return x_tm1, steps

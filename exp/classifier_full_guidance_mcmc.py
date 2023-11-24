@@ -24,7 +24,9 @@ def main():
     uncond_diff = load_mnist_diff(models_dir / "uncond_unet_mnist.pt", device)
     classifier = _load_class(models_dir / "resnet_classifier_t_mnist.pt", device)
     T = 1000
-    diff_sampler = DiffusionSampler(improved_beta_schedule, num_diff_steps=T)
+    betas = improved_beta_schedule(num_timesteps=T)
+    time_steps = th.tensor([i for i in range(T)])
+    diff_sampler = DiffusionSampler(betas, time_steps)
     diff_sampler.to(device)
     mcmc_steps = 4
     # step_sizes = diff_sampler.betas * 0.005
