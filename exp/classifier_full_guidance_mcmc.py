@@ -86,7 +86,7 @@ def main():
     print(f"Saving samples to '{save_file}'")
     data = dict()
     data["samples"] = samples.detach().cpu()
-    data["accepts"] = guided_sampler.mcmc_sampler.accepts
+    data["accepts"] = guided_sampler.mcmc_sampler.accept_ratio
     data["parameters"] = {"stepsizes": step_sizes.detach().cpu(), "a": a, "b": b}
     data["classes"] = classes
     save_file = Path.cwd() / "outputs" / f"cfg_{args.diff_model}.p"

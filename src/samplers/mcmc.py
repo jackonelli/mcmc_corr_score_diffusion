@@ -2,8 +2,9 @@ import torch
 import torch as th
 import numpy as np
 from typing import Callable
+import itertools
 from abc import ABC, abstractmethod
-
+import gc
 
 class MCMCSampler(ABC):
     def __init__(self, num_samples_per_step: int, step_sizes: th.Tensor, gradient_function: Callable):
@@ -15,7 +16,8 @@ class MCMCSampler(ABC):
         self.step_sizes = step_sizes
         self.num_samples_per_step = num_samples_per_step
         self.gradient_function = gradient_function
-        self.accepts = dict()
+        self.accept_ratio = dict()
+        self.all_accepts = dict()
 
     @abstractmethod
     def sample_step(self, *args, **kwargs):
@@ -43,6 +45,7 @@ class AnnealedULASampler(MCMCSampler):
         self._noise_function = None
         self._gradient_fn_unnorm = None
 
+    @th.no_grad()
     def sample_step(self, x: th.Tensor, t: int, text_embeddings: th.Tensor):
         for i in range(self.num_samples_per_step):
             ss = self.step_sizes[t]
@@ -71,14 +74,14 @@ class AnnealedLAScoreSampler(MCMCSampler):
         )
         self._sync_function = None
         self._noise_function = None
-        self._gradient_fn_unnorm = None
         self.n_trapets = n_trapets
-        self.accepts = list()
-        self.accepts_t = dict()
-        self.explogp_t = dict()
 
+    @th.no_grad()
     def sample_step(self, x, t, text_embeddings=None):
+        dims = x.dim()
         print("t", t)
+        self.accept_ratio[t] = list()
+        self.all_accepts[t] = list()
 
         for i in range(self.num_samples_per_step):
             ss = self.step_sizes[t]
@@ -96,13 +99,13 @@ class AnnealedLAScoreSampler(MCMCSampler):
             def energy_s(ss_):
                 diff = x_hat - x
                 x_ = x + ss_[0] * diff
-                energy = th.unsqueeze(th.sum(self._gradient_fn_unnorm(x_, t, text_embeddings) * diff), dim=0)
+                energy = th.unsqueeze(th.sum(self.gradient_function(x_, t, text_embeddings) * diff), dim=0)
                 for j in range(1, len(ss_)):
                     x_ = x + ss_[j] * diff
                     energy = th.concatenate(
                         (
                             energy,
-                            th.unsqueeze(th.sum(self._gradient_fn_unnorm(x_, t, text_embeddings) * diff), dim=0),
+                            th.unsqueeze(th.sum(self.gradient_function(x_, t, text_embeddings) * diff), dim=0),
                         )
                     )
                 return energy
@@ -111,20 +114,15 @@ class AnnealedLAScoreSampler(MCMCSampler):
             energys = energy_s(s)
             diff_logp_x = th.trapezoid(energys, s)
             logp_accept = diff_logp_x + logp_reverse - logp_forward
-            print("explogp_accept", th.exp(logp_accept))
 
-            u = th.rand(1).cuda()
-            accept = int(u < th.exp(logp_accept))
-            print("accept", accept)
-            self.accepts.append(accept)
-
-            if t not in self.accepts_t.keys():
-                self.accepts_t[t] = list()
-                self.explogp_t[t] = list()
-            self.accepts_t[t].append(accept)
-            self.explogp_t[t].append(th.exp(logp_accept).cpu().numpy())
-            print("t_ratio", np.sum(self.accepts_t[t]) / len(self.accepts_t[t]))
-            accept = 1.0
+            u = th.rand(x.shape[0]).to(x.device)
+            accept = (
+                (u < th.exp(logp_accept))
+                .to(th.float32)
+                .reshape((x.shape[0],) + tuple(([1 for _ in range(dims - 1)])))
+            )
+            self.accept_ratio[t].append((th.sum(accept) / accept.shape[0]).detach().cpu().item())
+            self.all_accepts[t].append(accept.detach().cpu())
             x = accept * x_hat + (1 - accept) * x
 
         return x
@@ -172,12 +170,14 @@ class AnnealedHMCScoreSampler(MCMCSampler):
             self._num_leapfrog_steps,
         )
 
+    @th.no_grad()
     def sample_step(self, x, t, text_embeddings=None):
         dims = x.dim()
 
         # Sample Momentum
         v = th.randn_like(x) * self._mass_diag_sqrt[t]
-        self.accepts[t] = list()
+        self.accept_ratio[t] = list()
+        self.all_accepts[t] = list()
 
         for i in range(self.num_samples_per_step):
             # Partial Momentum Refreshment
@@ -212,7 +212,8 @@ class AnnealedHMCScoreSampler(MCMCSampler):
             # update samples
             x = accept * x_next + (1 - accept) * x
             v = accept * v_next + (1 - accept) * v_prime
-            self.accepts[t].append((th.sum(accept) / accept.shape[0]).detach().cpu().item())
+            self.accept_ratio[t].append((th.sum(accept) / accept.shape[0]).detach().cpu().item())
+            self.all_accepts[t].append(accept.detach().cpu().squeeze())
         return x
 
 
@@ -257,7 +258,7 @@ class AdaptiveStepSizeMCMCSamplerWrapper(MCMCSampler):
         self.accept_rate_bound = accept_rate_bound
         self.max_iter = max_iter
         self.T = self.sampler.step_sizes.shape[0]
-        self.res = {i: {"accepts": [], "step_sizes": []} for i in range(self.T)}
+        self.res = {i: {"accepts": [], "step_sizes": []} for i in range(self.T-1)}
 
     def sample_step(self, x, t, text_embeddings=None):
         state = torch.get_rng_state()
@@ -272,10 +273,10 @@ class AdaptiveStepSizeMCMCSamplerWrapper(MCMCSampler):
         while not step_found and i < self.max_iter:
             torch.manual_seed(t)
             x_ = self.sampler.sample_step(x, t, text_embeddings)
-            a_rate = np.mean(self.sampler.accepts[t])
+            a_rate = np.mean(self.sampler.accept_ratio[t])
             step_s = self.sampler.step_sizes[t].clone()
             self.res[t]["accepts"].append(a_rate)
-            self.res[t]["step_sizes"].append(step_s)
+            self.res[t]["step_sizes"].append(step_s.detach().cpu().item())
             if self.accept_rate_bound[0] <= a_rate <= self.accept_rate_bound[1]:
                 step_found = True
             else:
@@ -300,6 +301,81 @@ class AdaptiveStepSizeMCMCSamplerWrapper(MCMCSampler):
             i += 1
         torch.set_rng_state(state)
         return x_
+
+    def set_gradient_function(self, gradient_function):
+        self.sampler.set_gradient_function(gradient_function)
+
+
+class AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize(MCMCSampler):
+    def __init__(self, sampler: MCMCSampler, accept_rate_bound: list, batch_size: int,
+                 device, max_iter: int = 10):
+        super().__init__(
+            num_samples_per_step=sampler.num_samples_per_step,
+            step_sizes=sampler.step_sizes,
+            gradient_function=sampler.gradient_function,
+        )
+        self.sampler = sampler
+        self.accept_rate_bound = accept_rate_bound
+        self.max_iter = max_iter
+        self.T = self.sampler.step_sizes.shape[0]
+        self.res = {i: {"accepts": [], "step_sizes": []} for i in range(self.T - 1)}
+        self.batch_size = batch_size
+        self.device = device
+
+    def sample_step(self, x, t, text_embeddings=None):
+        state = torch.get_rng_state()
+        step_found = False
+        upper = {"stepsize": None, "accept": 1}
+        lower = {"stepsize": None, "accept": 0}
+        if t < self.T - 2:
+            self.sampler.step_sizes[t] = self.res[t + 1]["step_sizes"][-1]
+
+        i = 0
+        n_batches = int(np.ceil(x.shape[0] / self.batch_size))
+        idx = np.array([i * self.batch_size for i in range(n_batches)] + [x.shape[0] - 1])
+        x_next = torch.empty(x.size())
+
+        while not step_found and i < self.max_iter:
+            torch.manual_seed(t)
+            accepts = list()
+            for j in range(n_batches-1):
+                x_ = x[idx[j]:idx[j + 1]].to(self.device)
+                y_ = text_embeddings[idx[j]:idx[j + 1]].to(self.device)
+                x_ = self.sampler.sample_step(x_, t, y_)
+                x_next[idx[j]:idx[j + 1]] = x_.detach().cpu()
+                accepts += list(itertools.chain(*[acc.numpy().tolist() for acc in self.sampler.all_accepts[t]]))
+                del x_
+                del y_
+                gc.collect()
+                torch.cuda.empty_cache()
+            a_rate = np.mean(accepts)
+            step_s = self.sampler.step_sizes[t].clone()
+            self.res[t]["accepts"].append(a_rate)
+            self.res[t]["step_sizes"].append(step_s.detach().cpu().item())
+            if self.accept_rate_bound[0] <= a_rate <= self.accept_rate_bound[1]:
+                step_found = True
+            else:
+                # Update best bound so far
+                if self.accept_rate_bound[1] < a_rate <= upper["accept"]:
+                    upper["accept"] = a_rate
+                    upper["stepsize"] = step_s
+                if lower["accept"] <= a_rate < self.accept_rate_bound[0]:
+                    lower["accept"] = a_rate
+                    lower["stepsize"] = step_s
+
+                # New step size
+                new_step_s = step_s.clone()
+                if upper["stepsize"] is None:
+                    new_step_s /= 10
+                elif lower["stepsize"] is None:
+                    new_step_s *= 10
+                else:
+                    new_step_s = torch.exp((torch.log(upper["stepsize"]) + torch.log(lower["stepsize"])) / 2)
+
+                self.sampler.step_sizes[t] = new_step_s
+            i += 1
+        torch.set_rng_state(state)
+        return x_next
 
     def set_gradient_function(self, gradient_function):
         self.sampler.set_gradient_function(gradient_function)
