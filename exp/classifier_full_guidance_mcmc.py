@@ -31,12 +31,13 @@ def main():
     T = args.num_diff_steps
     if "mnist" in args.diff_model:
         channels, image_size = 1, 28
-        beta_schedule = improved_beta_schedule
+        beta_schedule, var_mode = improved_beta_schedule, "beta"
         diff_model = load_mnist_diff(diff_model_path, device)
         classifier = _load_class(models_dir / class_model_path, device)
     elif "256x256_diffusion" in args.diff_model:
         channels, image_size = 3, 256
-        beta_schedule = linear_beta_schedule
+        beta_schedule, var_mode = linear_beta_schedule, "learned"
+
         diff_model_proto = load_guided_diff_unet(model_path=diff_model_path, dev=device, class_cond=args.class_cond)
         diff_model_proto.eval()
         if args.class_cond:
@@ -50,7 +51,7 @@ def main():
         T=args.num_diff_steps,
         respaced_T=args.respaced_num_diff_steps,
     )
-    diff_sampler = DiffusionSampler(betas=betas, time_steps=time_steps, posterior_variance="learned")
+    diff_sampler = DiffusionSampler(betas=betas, time_steps=time_steps, posterior_variance=var_mode)
     diff_sampler.to(device)
     mcmc_steps = 4
     # step_sizes = diff_sampler.betas * 0.005
@@ -61,12 +62,6 @@ def main():
     a = 0.05
     b = 1.6
     step_sizes = a * diff_sampler.betas**b
-    # import matplotlib.pyplot as plt
-    # plt.figure()
-    # plt.semilogy(step_sizes.cpu())
-    # plt.semilogy(a * diff_sampler.betas.cpu() ** b)
-    # plt.title(r'$a \beta^b, \; a={}, b={}$'.format(a, b))
-    # plt.show()
     mcmc_sampler = AnnealedHMCScoreSampler(mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
     guidance = ClassifierFullGuidance(classifier, lambda_=args.guid_scale)
     guided_sampler = MCMCGuidanceSampler(
@@ -79,7 +74,6 @@ def main():
     num_samples = args.num_samples
     th.manual_seed(0)
     classes = th.randint(10, (num_samples,), dtype=th.int64)
-    # classes = th.ones((num_samples,), dtype=th.int64)
     print("Sampling...")
     samples, _ = guided_sampler.sample(
         num_samples, classes, device, th.Size((channels, image_size, image_size)), verbose=True
@@ -93,7 +87,6 @@ def main():
     save_file = Path.cwd() / "outputs" / f"cfg_{args.diff_model}.p"
     print(f"Saving samples to '{save_file}'")
     pickle.dump(data, open(save_file, "wb"))
-    # plot_samples_grid(samples.detach().cpu())
 
 
 def _load_class(class_path: Path, device):
@@ -122,15 +115,4 @@ def parse_args():
 
 
 if __name__ == "__main__":
-    # import pickle
-    # data0 = pickle.load(open("data_run1.p", "rb"))
-    # data1 = pickle.load(open("samples_mnist_reverse_lambda1_run2.p", "rb"))
-    # data1 = pickle.load(open("data_run1.p", "rb"))
-    # device = get_device(Device.GPU)
-    # models_dir = Path.cwd() / "models"
-    # classifier = _load_class(models_dir / "resnet_classifier_t_mnist.pt", device)
-    # sm = classifier(data0['samples'].cuda(), th.full((data0['samples'].shape[0],), 0, device=device))
-    # sm = classifier(data1.cuda(), th.full((data1.shape[0],), 0, device=device))
-    # pred = th.argmax(sm.detach().cpu(), axis=1)
-    # print(th.sum(pred == 1)/100)
     main()

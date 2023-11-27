@@ -11,7 +11,6 @@ from src.diffusion.base import DiffusionSampler
 from src.diffusion.beta_schedules import (
     improved_beta_schedule,
     linear_beta_schedule,
-    respaced_timesteps,
     respaced_beta_schedule,
 )
 from src.model.unet import load_mnist_diff
@@ -33,10 +32,11 @@ def main():
     if "imagenet" in args.model:
         diff_model = load_imagenet_diff(model_path, device)
         channels, image_size = 3, 112
-        beta_schedule = improved_beta_schedule
+        beta_schedule, var_mode = improved_beta_schedule, "beta"
     elif "cifar10" in args.model:
         diff_model = load_imagenet_diff(model_path, device, image_size=32)
         channels, image_size = 3, 32
+        beta_schedule, var_mode = improved_beta_schedule, "beta"
     elif "256x256_diffusion" in args.model:
         assert not (args.class_cond and "uncond" in args.model)
         diff_model = load_guided_diff_unet(model_path=model_path, dev=device, class_cond=args.class_cond)
@@ -46,11 +46,11 @@ def main():
             diff_model = partial(diff_model.forward, y=classes)
 
         channels, image_size = 3, 256
-        beta_schedule = linear_beta_schedule
+        beta_schedule, var_mode = linear_beta_schedule, "learned"
     elif "mnist" in args.model:
         diff_model = load_mnist_diff(model_path, device)
         channels, image_size = 1, 28
-        beta_schedule = improved_beta_schedule
+        beta_schedule, var_mode = improved_beta_schedule, "beta"
     else:
         raise ValueError("Incorrect model name '{args.model}'")
     betas, time_steps = respaced_beta_schedule(
@@ -58,7 +58,7 @@ def main():
         T=args.num_diff_steps,
         respaced_T=args.respaced_num_diff_steps,
     )
-    diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance="learned")
+    diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance=var_mode)
 
     print("Sampling...")
     samples, _ = diff_sampler.sample(
@@ -67,7 +67,6 @@ def main():
     samples = samples.detach().cpu()
     th.save(samples, Path.cwd() / "outputs" / f"uncond_samples_{args.model}.th")
     if args.plot:
-        # plot_samples_grid(samples.detach().cpu().numpy())
         x = samples[0].permute(1, 2, 0)
         plt.imshow(x)
         plt.show()
