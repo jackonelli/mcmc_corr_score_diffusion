@@ -114,7 +114,7 @@ def main():
         samples, _ = guided_sampler.sample(num_samples, classes, device, th.Size((channels, image_size, image_size)))
 
     adaptive_step_sizes = sampler.res
-    pickle.dump(adaptive_step_sizes, open("adaptive_step_sizes.p", "wb"))
+    pickle.dump(adaptive_step_sizes, open("outputs/adaptive_step_sizes.p", "wb"))
 
 
 def _load_class(class_path: Path, device):
@@ -131,12 +131,12 @@ def parse_args():
     parser.add_argument("--batch_size", default=10, type=int, help="Batch size")
     parser.add_argument("--num_samples", default=100, type=int, help="Number of samples for estimate acceptance ratio")
     parser.add_argument("--accept_rate_bound", default=[0.6, 0.8], type=list, help="Acceptance ratio bounds")
-    parser.add_argument("--max_iter", default=10, type=int, help="Number of search iterations per time step")
+    parser.add_argument("--max_iter", default=20, type=int, help="Number of search iterations per time step")
     parser.add_argument("--mcmc", default="HMC", type=str, choices=["HMC", "LA"], help="Type of MCMC sampler")
     parser.add_argument("--n_mcmc_steps", default=1, type=int, help="Number of MCMC steps")
     parser.add_argument(
         "--respaced_num_diff_steps",
-        default=250,
+        default=100,
         type=int,
         help="Number of respaced diffusion steps (fewer than or equal to num_diff_steps)",
     )

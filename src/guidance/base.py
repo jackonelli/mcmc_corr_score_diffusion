@@ -147,7 +147,7 @@ class MCMCGuidanceSampler(GuidanceSampler):
 
             if t > 0:
                 x_tm1 = self.mcmc_sampler.sample_step(x_tm1, t_idx - 1, classes)
-            steps.append(x_tm1.detach().cpu())
+            # steps.append(x_tm1.detach().cpu())
 
         return x_tm1, steps
 
