@@ -3,6 +3,7 @@ from typing import Optional
 from pathlib import Path
 import json
 from datetime import datetime
+from copy import deepcopy
 
 
 def test():
@@ -22,6 +23,8 @@ class SimulationConfig:
     class_cond: bool
     num_diff_steps: int
     num_respaced_diff_steps: int
+    num_samples: int
+    batch_size: int
     # Guidance
     classifier: Optional[Path]
     guid_scale: Optional[float]
@@ -37,8 +40,10 @@ class SimulationConfig:
         return SimulationConfig(**cfg)
 
     def save(self, sim_dir: Path):
+        tmp_config = deepcopy(self)
+        tmp_config.results_dir = str(tmp_config.results_dir)
         with open(sim_dir / "config.json", "w") as outfile:
-            json.dump(asdict(self), outfile, indent=4, sort_keys=False)
+            json.dump(asdict(tmp_config), outfile, indent=4, sort_keys=False)
 
 
 def timestamp() -> str:
