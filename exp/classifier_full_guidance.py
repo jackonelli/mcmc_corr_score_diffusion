@@ -35,6 +35,8 @@ def main():
         beta_schedule = improved_beta_schedule
         diff_model = load_mnist_diff(diff_model_path, device)
         classifier = _load_class(models_dir / class_model_path, device)
+        posterior_variance = "beta"
+        num_classes = 10
     elif "256x256_diffusion" in args.diff_model:
         channels, image_size = 3, 256
         beta_schedule = linear_beta_schedule
@@ -42,9 +44,10 @@ def main():
         diff_model.eval()
         if args.class_cond:
             print("Using class conditional diffusion model")
-        #    diff_model = partial(diff_model.forward, y=classes)
         classifier = load_guided_classifier(model_path=class_model_path, dev=device, image_size=image_size)
         classifier.eval()
+        posterior_variance = "learned"
+        num_classes = 1000
 
     T = args.num_diff_steps
     respaced_T = args.respaced_num_diff_steps
@@ -56,7 +59,7 @@ def main():
         betas = new_sparse(time_steps, betas)
     else:
         raise ValueError("respaced_num_diff_steps cannot be higher than num_diff_steps")
-    diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance="learned")
+    diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance=posterior_variance)
 
     guidance = ClassifierFullGuidance(classifier, lambda_=args.guid_scale)
     guid_sampler = GuidanceSampler(diff_model, diff_sampler, guidance, diff_cond=args.class_cond)

@@ -34,6 +34,8 @@ def main():
         beta_schedule = improved_beta_schedule
         diff_model = load_mnist_diff(diff_model_path, device)
         classifier = _load_class(models_dir / class_model_path, device)
+        posterior_variance = "beta"
+        num_classes = 10
     elif "256x256_diffusion" in args.diff_model:
         channels, image_size = 3, 256
         beta_schedule = linear_beta_schedule
@@ -43,6 +45,8 @@ def main():
             print("Using class conditional diffusion model")
         classifier = load_guided_classifier(model_path=class_model_path, dev=device, image_size=image_size)
         classifier.eval()
+        posterior_variance = "learned"
+        num_classes = 1000
 
     T = args.num_diff_steps
     respaced_T = args.respaced_num_diff_steps
@@ -55,7 +59,7 @@ def main():
     else:
         raise ValueError("respaced_num_diff_steps should not be higher than num_diff_steps (slower)")
 
-    diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance="learned")
+    diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance=posterior_variance)
     diff_sampler.to(device)
 
     # Default values
@@ -76,7 +80,7 @@ def main():
 
     guidance = ClassifierFullGuidance(classifier, lambda_=args.guid_scale)
     th.manual_seed(0)
-    classes = th.randint(10, (num_samples,), dtype=th.int64)
+    classes = th.randint(num_classes, (num_samples,), dtype=th.int64)
     if batch_size < num_samples:
         sampler = AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize(
             sampler=mcmc_sampler,

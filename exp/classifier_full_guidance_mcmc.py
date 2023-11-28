@@ -32,20 +32,23 @@ def main():
         beta_schedule = improved_beta_schedule
         diff_model = load_mnist_diff(diff_model_path, device)
         classifier = _load_class(models_dir / class_model_path, device)
+        posterior_variance = "beta"
+        num_classes = 10
     elif "256x256_diffusion" in args.diff_model:
         channels, image_size = 3, 256
         beta_schedule = linear_beta_schedule
-        diff_model_proto = load_guided_diff_unet(model_path=diff_model_path, dev=device, class_cond=args.class_cond)
-        diff_model_proto.eval()
+        diff_model = load_guided_diff_unet(model_path=diff_model_path, dev=device, class_cond=args.class_cond)
+        diff_model.eval()
         if args.class_cond:
             print("Using class conditional diffusion model")
-            # diff_model = partial(diff_model_proto.forward, y=classes)
         classifier = load_guided_classifier(model_path=class_model_path, dev=device, image_size=image_size)
         classifier.eval()
+        posterior_variance = "learned"
+        num_classes = 1000
 
     betas = beta_schedule(num_timesteps=T)
     time_steps = th.tensor([i for i in range(T)])
-    diff_sampler = DiffusionSampler(betas=betas, time_steps=time_steps, posterior_variance="learned")
+    diff_sampler = DiffusionSampler(betas=betas, time_steps=time_steps, posterior_variance=posterior_variance)
     diff_sampler.to(device)
     mcmc_steps = 4
 
@@ -65,7 +68,7 @@ def main():
     )
     num_samples = args.num_samples
     th.manual_seed(0)
-    classes = th.randint(10, (num_samples,), dtype=th.int64)
+    classes = th.randint(num_classes, (num_samples,), dtype=th.int64)
     print("Sampling...")
     samples, _ = guided_sampler.sample(
         num_samples, classes, device, th.Size((channels, image_size, image_size)), verbose=True

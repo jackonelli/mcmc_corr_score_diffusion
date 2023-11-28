@@ -81,8 +81,8 @@ class GuidanceSampler:
         sigma_t = self.diff_proc.sigma_t(t_idx, x_t)
         t_tensor = th.full((x_t.shape[0],), t_idx, device=x_t.device)
         class_score = self.guidance.grad(x_t, t_tensor, classes, pred_noise)
-        self.grads["uncond"][t_idx] = th.norm(-pred_noise)
-        self.grads["class"][t_idx] = th.norm(sigma_t * class_score)
+        self.grads["uncond"][t_idx] = th.norm(-pred_noise).detach().cpu()
+        self.grads["class"][t_idx] = th.norm(sigma_t * class_score).detach().cpu()
         m_tm1 = (x_t + b_t / (th.sqrt(1 - a_bar_t)) * (sigma_t * class_score - pred_noise)) / a_t.sqrt()
         noise = sqrt_post_var_t * z
         xtm1 = m_tm1 + noise
@@ -107,10 +107,13 @@ class MCMCGuidanceSampler(GuidanceSampler):
     def grad(self, x_t, t, classes):
         sigma_t = self.diff_proc.sigma_t(t, x_t)
         t_tensor = th.full((x_t.shape[0],), t, device=x_t.device)
+        args = [x_t, t_tensor]
+        if self.diff_cond:
+            args += [classes]
         if not isinstance(self.diff_proc.posterior_variance, str):
-            pred_noise = self.diff_model(x_t, t_tensor)
+            pred_noise = self.diff_model(*args)
         else:
-            pred_noise, _ = self.diff_model(x_t, t_tensor).split(x_t.size(1), dim=1)
+            pred_noise, _ = self.diff_model(*args).split(x_t.size(1), dim=1)
         class_score = self.guidance.grad(x_t, t_tensor, classes, pred_noise)
         return class_score - pred_noise / sigma_t
 
