@@ -189,6 +189,7 @@ class MCMCGuidanceSamplerStacking(MCMCGuidanceSampler):
             if t > 0:
                 # Note x is on cpu!
                 x = self.mcmc_sampler.sample_step(x, t_idx - 1, classes)
+        return x, []
 
 
 @th.no_grad()
