@@ -59,8 +59,8 @@ def main():
     b = 1.6
     step_sizes = a * diff_sampler.betas**b
 
-    mcmc_sampler = AnnealedHMCScoreSampler(mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
     guidance = ClassifierFullGuidance(classifier, lambda_=args.guid_scale)
+    mcmc_sampler = AnnealedHMCScoreSampler(mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
     guided_sampler = MCMCGuidanceSampler(
         diff_model=diff_model,
         diff_proc=diff_sampler,

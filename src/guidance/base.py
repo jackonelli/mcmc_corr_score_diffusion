@@ -177,6 +177,7 @@ class MCMCGuidanceSamplerStacking(MCMCGuidanceSampler):
         x = th.randn((num_samples,) + shape)
 
         for t, t_idx in zip(self.diff_proc.time_steps.__reversed__(), reversed(self.diff_proc.time_steps_idx)):
+            print("Diff step: ", t.item())
             if self.reverse:
                 for i in range(n_batches - 1):
                     x_tm1 = x[idx[i] : idx[i + 1]].to(device)

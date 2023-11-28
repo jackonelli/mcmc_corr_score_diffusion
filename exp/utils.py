@@ -26,9 +26,10 @@ class SimulationConfig:
     num_samples: int
     batch_size: int
     # Guidance
-    classifier: Optional[Path]
-    guid_scale: Optional[float]
+    classifier: str
+    guid_scale: float
     # MCMC
+    mcmc_method: Optional[str]
     mcmc_steps: Optional[int]
     # Meta
     results_dir: Path = Path.cwd() / "results"

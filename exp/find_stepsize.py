@@ -6,6 +6,7 @@ import sys
 sys.path.append(".")
 from argparse import ArgumentParser
 from pathlib import Path
+import pickle
 import torch as th
 from src.guidance.base import MCMCGuidanceSampler, MCMCGuidanceSamplerStacking
 from src.guidance.classifier_full import ClassifierFullGuidance
@@ -26,13 +27,13 @@ from src.diffusion.beta_schedules import (
 from src.model.guided_diff.unet import load_guided_diff_unet
 from src.model.guided_diff.classifier import load_guided_classifier
 from src.model.unet import load_mnist_diff
-import pickle
+from exp.utils import timestamp
 
 
 def main():
     args = parse_args()
     accept_rate_bound = [float(x) for x in args.accept_rate_bound]
-    print(accept_rate_bound)
+    sim_dir = _setup_results_dir(Path.cwd() / "results", args)
     device = get_device(Device.GPU)
     models_dir = Path.cwd() / "models"
     # uncond_diff = load_mnist_diff(models_dir / "uncond_unet_mnist.pt", device)
@@ -121,7 +122,21 @@ def main():
         samples, _ = guided_sampler.sample(num_samples, classes, device, th.Size((channels, image_size, image_size)))
 
     adaptive_step_sizes = sampler.res
-    pickle.dump(adaptive_step_sizes, open("outputs/adaptive_step_sizes.p", "wb"))
+    pickle.dump(adaptive_step_sizes, open(sim_dir / "adaptive_step_sizes.p", "wb"))
+
+
+import json
+
+
+def _setup_results_dir(res_dir: Path, args) -> Path:
+    assert res_dir.exists()
+    sim_dir = res_dir / f"find_stepsize_{timestamp()}"
+    sim_dir.mkdir()
+    args_dict = vars(args)
+    with open(sim_dir / "args.json", "w") as file:
+        json.dump(args_dict, file, indent=2)
+
+    return sim_dir
 
 
 def _load_class(class_path: Path, device):
