@@ -1,0 +1,14 @@
+{
+    "name":"baseline",
+    "image_size": 256,
+    "num_channels": 3,
+    "diff_model": "256x256_diffusion_uncond",
+    "class_cond": false,
+    "num_diff_steps": 1000,
+    "num_respaced_diff_steps": 100,
+    "num_samples": 100,
+    "batch_size": 10,
+    "classifier": null,
+    "guid_scale": null,
+    "mcmc_steps": null
+}

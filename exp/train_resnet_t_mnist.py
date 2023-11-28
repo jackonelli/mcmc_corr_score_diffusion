@@ -37,7 +37,9 @@ def main():
     ).to(dev)
     resnet.train()
 
-    noise_scheduler = DiffusionSampler(improved_beta_schedule, num_diff_steps)
+    betas = improved_beta_schedule(num_timesteps=num_diff_steps)
+    time_steps = th.tensor([i for i in range(num_diff_steps)])
+    noise_scheduler = DiffusionSampler(betas, time_steps)
 
     diff_classifier = DiffusionClassifier(
         model=resnet, loss_f=th.nn.CrossEntropyLoss(), noise_scheduler=noise_scheduler

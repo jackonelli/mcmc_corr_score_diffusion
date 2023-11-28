@@ -2,7 +2,7 @@ from pathlib import Path
 import json
 from copy import deepcopy
 from torch.utils.data import DataLoader, Dataset
-from torchvision.transforms import Compose, ToTensor, Resize
+from torchvision.transforms import Compose, ToTensor, Resize, Lambda
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset
 from PIL import Image
@@ -23,7 +23,15 @@ class ImageNet100(Dataset):
         self.root = root
         self.id_to_num_map, self.id_to_name_map = _parse_labels_map(root / "Labels.json")
         self.samples = self._parse_samples(train)
-        self.transform = Compose([Resize(size=[img_size, img_size], antialias=True), ToTensor()])
+        self.transform = Compose(
+            [
+                Resize(size=[img_size, img_size], antialias=True),
+                # Turn into tensor (scales [0, 255] to (0, 1))
+                ToTensor(),
+                # Map data to (-1, 1)
+                Lambda(lambda x: (x * 2) - 1),
+            ],
+        )
 
     def __len__(self):
         return len(self.samples)
