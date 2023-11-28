@@ -17,7 +17,7 @@ from src.diffusion.beta_schedules import (
 from src.model.unet import load_mnist_diff
 from src.model.imagenet import load_imagenet_diff
 from src.utils.net import get_device, Device
-from src.model.guided_diff.unet import load_guided_diff_unet
+from src.model.guided_diff.unet import NUM_CLASSES, load_guided_diff_unet
 from exp.utils import SimulationConfig, timestamp
 
 
@@ -26,8 +26,8 @@ def main():
     config = SimulationConfig.from_json(args.config)
     # Setup and assign a directory where simulation results are saved.
     sim_dir = _setup_results_dir(config)
-    classes = th.ones((config.num_samples,)).long().to(device)
     device = get_device(Device.GPU)
+
     models_dir = Path.cwd() / "models"
     model_path = models_dir / f"{config.diff_model}.pt"
     assert model_path.exists(), f"Model '{model_path}' does not exist."
@@ -41,17 +41,20 @@ def main():
     betas, time_steps = respaced_beta_schedule(
         original_betas=beta_schedule(num_timesteps=config.num_diff_steps),
         T=config.num_diff_steps,
-        respaced_T=config.respaced_num_diff_steps,
+        respaced_T=config.num_respaced_diff_steps,
     )
 
     diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance=var_mode)
 
     print("Sampling...")
-    samples, _ = diff_sampler.sample(
-        diff_model, config.num_samples, device, (channels, image_size, image_size), verbose=True
-    )
-    samples = samples.detach().cpu()
-    th.save(samples, sim_dir / f"samples_{args.sim_batch}.th")
+    for batch in range(config.num_samples // config.batch_size):
+        classes = th.randint(low=0, high=NUM_CLASSES, size=(config.num_samples,)).long().to(device)
+        samples, _ = diff_sampler.sample(
+            diff_model, config.num_samples, device, (channels, image_size, image_size), verbose=True
+        )
+        samples = samples.detach().cpu()
+        th.save(samples, sim_dir / f"samples_{args.sim_batch}_{batch}.th")
+        th.save(samples, sim_dir / f"classes_{args.sim_batch}_{batch}.th")
 
 
 def _setup_results_dir(config: SimulationConfig) -> Path:
