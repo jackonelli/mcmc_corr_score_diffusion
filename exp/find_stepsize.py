@@ -5,8 +5,12 @@ from pathlib import Path
 import torch as th
 from src.guidance.base import MCMCGuidanceSampler, MCMCGuidanceSamplerStacking
 from src.guidance.classifier_full import ClassifierFullGuidance
-from src.samplers.mcmc import AnnealedHMCScoreSampler, AdaptiveStepSizeMCMCSamplerWrapper, \
-    AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize, AnnealedLAScoreSampler
+from src.samplers.mcmc import (
+    AnnealedHMCScoreSampler,
+    AdaptiveStepSizeMCMCSamplerWrapper,
+    AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize,
+    AnnealedLAScoreSampler,
+)
 from src.model.resnet import load_classifier
 from src.utils.net import Device, get_device
 from src.diffusion.base import DiffusionSampler
@@ -51,19 +55,19 @@ def main():
     else:
         raise ValueError("respaced_num_diff_steps should not be higher than num_diff_steps (slower)")
 
-    diff_sampler = DiffusionSampler(betas, time_steps)
+    diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance="learned")
     diff_sampler.to(device)
 
     # Default values
     a = 1  # 0.05
     b = 1  # 1.6
-    step_sizes = a * diff_sampler.betas ** b
+    step_sizes = a * diff_sampler.betas**b
 
     batch_size = args.batch_size
     num_samples = args.num_samples
 
     mcmc_steps = args.n_mcmc_steps
-    if args.mcmc == 'HMC':
+    if args.mcmc == "HMC":
         mcmc_sampler = AnnealedHMCScoreSampler(mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
     else:
         mcmc_sampler = AnnealedLAScoreSampler(mcmc_steps, step_sizes, None)
@@ -74,20 +78,35 @@ def main():
     th.manual_seed(0)
     classes = th.randint(10, (num_samples,), dtype=th.int64)
     if batch_size < num_samples:
-        sampler = AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize(sampler=mcmc_sampler,
-                                                                   accept_rate_bound=accept_rate_bound,
-                                                                   batch_size=batch_size, device=device,
-                                                                   max_iter=max_iter)
+        sampler = AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize(
+            sampler=mcmc_sampler,
+            accept_rate_bound=accept_rate_bound,
+            batch_size=batch_size,
+            device=device,
+            max_iter=max_iter,
+        )
 
-        guided_sampler = MCMCGuidanceSamplerStacking(diff_model=diff_model, diff_proc=diff_sampler, guidance=guidance,
-                                                     mcmc_sampler=sampler, diff_cond=args.class_cond)
-        samples, _ = guided_sampler.sample_stacking(num_samples, batch_size, classes, device,
-                                                    th.Size((channels, image_size, image_size)))
+        guided_sampler = MCMCGuidanceSamplerStacking(
+            diff_model=diff_model,
+            diff_proc=diff_sampler,
+            guidance=guidance,
+            mcmc_sampler=sampler,
+            diff_cond=args.class_cond,
+        )
+        samples, _ = guided_sampler.sample_stacking(
+            num_samples, batch_size, classes, device, th.Size((channels, image_size, image_size))
+        )
     else:
-        sampler = AdaptiveStepSizeMCMCSamplerWrapper(sampler=mcmc_sampler, accept_rate_bound=accept_rate_bound,
-                                                     max_iter=max_iter)
-        guided_sampler = MCMCGuidanceSampler(diff_model=diff_model, diff_proc=diff_sampler, guidance=guidance,
-                                             mcmc_sampler=sampler, diff_cond=args.class_cond)
+        sampler = AdaptiveStepSizeMCMCSamplerWrapper(
+            sampler=mcmc_sampler, accept_rate_bound=accept_rate_bound, max_iter=max_iter
+        )
+        guided_sampler = MCMCGuidanceSampler(
+            diff_model=diff_model,
+            diff_proc=diff_sampler,
+            guidance=guidance,
+            mcmc_sampler=sampler,
+            diff_cond=args.class_cond,
+        )
         samples, _ = guided_sampler.sample(num_samples, classes, device, th.Size((channels, image_size, image_size)))
 
     adaptive_step_sizes = sampler.res
@@ -107,10 +126,10 @@ def parse_args():
     parser.add_argument("--num_diff_steps", default=1000, type=int, help="Num diffusion steps")
     parser.add_argument("--batch_size", default=10, type=int, help="Batch size")
     parser.add_argument("--num_samples", default=100, type=int, help="Number of samples for estimate acceptance ratio")
-    parser.add_argument('--accept_rate_bound', default=[0.6, 0.8], type=list, help='Acceptance ratio bounds')
-    parser.add_argument('--max_iter', default=10, type=int, help='Number of search iterations per time step')
-    parser.add_argument('--mcmc', default='HMC', type=str, choices=['HMC', 'LA'], help='Type of MCMC sampler')
-    parser.add_argument('--n_mcmc_steps', default=1, type=int, help='Number of MCMC steps')
+    parser.add_argument("--accept_rate_bound", default=[0.6, 0.8], type=list, help="Acceptance ratio bounds")
+    parser.add_argument("--max_iter", default=10, type=int, help="Number of search iterations per time step")
+    parser.add_argument("--mcmc", default="HMC", type=str, choices=["HMC", "LA"], help="Type of MCMC sampler")
+    parser.add_argument("--n_mcmc_steps", default=1, type=int, help="Number of MCMC steps")
     parser.add_argument(
         "--respaced_num_diff_steps",
         default=250,
