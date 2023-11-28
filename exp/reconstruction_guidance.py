@@ -27,7 +27,7 @@ def main():
     diff_sampler.to(device)
 
     guidance = ReconstructionGuidance(uncond_diff, classifier, diff_sampler.alphas_bar.clone(), lambda_=args.guid_scale)
-    reconstr_guided_sampler = GuidanceSampler(uncond_diff, diff_sampler, guidance, verbose=True)
+    reconstr_guided_sampler = GuidanceSampler(uncond_diff, diff_sampler, guidance)
 
     num_samples = 100
     classes = th.ones((num_samples,), dtype=th.int64)
