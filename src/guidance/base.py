@@ -21,11 +21,12 @@ class Guidance(ABC):
 class GuidanceSampler:
     """Sampling from classifier guided DDPM"""
 
-    def __init__(self, diff_model: nn.Module, diff_proc: DiffusionSampler, guidance: Guidance):
+    def __init__(self, diff_model: nn.Module, diff_proc: DiffusionSampler, guidance: Guidance, diff_cond: bool = False):
         self.diff_model = diff_model
         self.diff_proc = diff_proc
         self.guidance = guidance
         self.grads = {"uncond": dict(), "class": dict()}
+        self.diff_cond = diff_cond
 
     @th.no_grad()
     def sample(self, num_samples: int, classes: th.Tensor, device: th.device, shape: tuple, verbose=False):
@@ -49,20 +50,7 @@ class GuidanceSampler:
             if verbose and self.diff_proc.verbose_split[self.verbose_counter] == t:
                 print("Diff step", t.item())
                 self.verbose_counter += 1
-            t_tensor = th.full((x_tm1.shape[0],), t.item(), device=device)
-            t_idx_tensor = th.full((x_tm1.shape[0],), t_idx, device=device)
-            # Use the model to predict noise and use the noise to step back
-            if not isinstance(self.diff_proc.posterior_variance, str):
-                pred_noise = self.diff_model(x_tm1, t_tensor)
-                sqrt_post_var_t = th.sqrt(extract(self.diff_proc.posterior_variance, t_idx, x_tm1))
-                assert pred_noise.size() == x_tm1.size()
-            else:
-                pred_noise, log_var = self.diff_model(x_tm1, t_tensor).split(x_tm1.size(1), dim=1)
-                log_var, _ = self.diff_proc._clip_var(x_tm1, t_idx_tensor, log_var)
-                sqrt_post_var_t = th.exp(0.5 * log_var)
-            x_tm1 = self._sample_x_tm1_given_x_t(
-                x_tm1, t_idx, pred_noise, sqrt_post_var_t=sqrt_post_var_t, classes=classes
-            )
+            x_tm1 = reverse_func(self, t, t_idx, x_tm1, classes, device, self.diff_cond)
 
             # steps.append(x_tm1.detach().cpu())
 
@@ -109,8 +97,9 @@ class MCMCGuidanceSampler(GuidanceSampler):
         guidance: Guidance,
         mcmc_sampler: MCMCSampler,
         reverse=True,
+        diff_cond: bool = False
     ):
-        super().__init__(diff_model=diff_model, diff_proc=diff_proc, guidance=guidance)
+        super().__init__(diff_model=diff_model, diff_proc=diff_proc, guidance=guidance, diff_cond=diff_cond)
         self.mcmc_sampler = mcmc_sampler
         self.mcmc_sampler.set_gradient_function(self.grad)
         self.reverse = reverse
@@ -151,21 +140,7 @@ class MCMCGuidanceSampler(GuidanceSampler):
                 verbose_counter += 1
 
             if self.reverse:
-                t_tensor = th.full((x_tm1.shape[0],), t.item(), device=device)
-                t_idx_tensor = th.full((x_tm1.shape[0],), t_idx, device=device)
-                # Use the model to predict noise and use the noise to step back
-                if not isinstance(self.diff_proc.posterior_variance, str):
-                    pred_noise = self.diff_model(x_tm1, t_tensor)
-                    assert pred_noise.size() == x_tm1.size()
-                    sqrt_post_var_t = th.sqrt(extract(self.diff_proc.posterior_variance, t_idx, x_tm1))
-                else:
-                    pred_noise, log_var = self.diff_model(x_tm1, t_tensor).split(x_tm1.size(1), dim=1)
-                    assert pred_noise.size() == x_tm1.size()
-                    log_var, _ = self.diff_proc._clip_var(x_tm1, t_idx_tensor, log_var)
-                    sqrt_post_var_t = th.exp(0.5 * log_var)
-                x_tm1 = self._sample_x_tm1_given_x_t(
-                    x_tm1, t_idx, pred_noise, sqrt_post_var_t=sqrt_post_var_t, classes=classes
-                )
+                x_tm1 = reverse_func(self, t, t_idx, x_tm1, classes, device)
 
             if t > 0:
                 x_tm1 = self.mcmc_sampler.sample_step(x_tm1, t_idx - 1, classes)
@@ -183,28 +158,10 @@ class MCMCGuidanceSamplerStacking(MCMCGuidanceSampler):
         guidance: Guidance,
         mcmc_sampler: MCMCSampler,
         reverse: bool = True,
+        diff_cond: bool = False
     ):
         super().__init__(diff_model=diff_model, diff_proc=diff_proc, guidance=guidance, mcmc_sampler=mcmc_sampler,
-                         reverse=reverse)
-
-    @th.no_grad()
-    def func_reverse(self, t, t_idx, x_tm1, classes, device):
-        t_tensor = th.full((x_tm1.shape[0],), t.item(), device=device)
-        t_idx_tensor = th.full((x_tm1.shape[0],), t_idx, device=device)
-        # Use the model to predict noise and use the noise to step back
-        if not isinstance(self.diff_proc.posterior_variance, str):
-            pred_noise = self.diff_model(x_tm1, t_tensor)
-            assert pred_noise.size() == x_tm1.size()
-            sqrt_post_var_t = th.sqrt(extract(self.diff_proc.posterior_variance, t_idx, x_tm1))
-        else:
-            pred_noise, log_var = self.diff_model(x_tm1, t_tensor).split(x_tm1.size(1), dim=1)
-            assert pred_noise.size() == x_tm1.size()
-            log_var, _ = self.diff_proc._clip_var(x_tm1, t_idx_tensor, log_var)
-            sqrt_post_var_t = th.exp(0.5 * log_var)
-        x_tm1 = self._sample_x_tm1_given_x_t(
-            x_tm1, t_idx, pred_noise, sqrt_post_var_t=sqrt_post_var_t, classes=classes
-        )
-        return x_tm1
+                         reverse=reverse, diff_cond=diff_cond)
 
     def sample_stacking(self, num_samples: int, batch_size: int, classes: th.Tensor, device: th.device, shape: tuple):
         n_batches = int(np.ceil(num_samples/batch_size))
@@ -215,7 +172,7 @@ class MCMCGuidanceSamplerStacking(MCMCGuidanceSampler):
             if self.reverse:
                 for i in range(n_batches-1):
                     x_tm1 = x[idx[i]:idx[i+1]].to(device)
-                    x_tm1 = self.func_reverse(t, t_idx, x_tm1, classes[idx[i]:idx[i+1]], device)
+                    x_tm1 = reverse_func(self, t, t_idx, x_tm1, classes[idx[i]:idx[i+1]], device, self.diff_cond)
                     x[idx[i]:idx[i+1]] = x_tm1.detach().cpu()
                     del x_tm1
                     gc.collect()
@@ -224,3 +181,26 @@ class MCMCGuidanceSamplerStacking(MCMCGuidanceSampler):
             if t > 0:
                 # Note x is on cpu!
                 x = self.mcmc_sampler.sample_step(x, t_idx - 1, classes)
+
+
+@th.no_grad()
+def reverse_func(model, t, t_idx, x_tm1, classes, device, diff_cond):
+    t_tensor = th.full((x_tm1.shape[0],), t.item(), device=device)
+    t_idx_tensor = th.full((x_tm1.shape[0],), t_idx, device=device)
+    # Use the model to predict noise and use the noise to step back
+    args = [x_tm1, t_tensor]
+    if diff_cond:
+        args += [classes.to(device)]
+    if not isinstance(model.diff_proc.posterior_variance, str):
+        pred_noise = model.diff_model(*args)
+        assert pred_noise.size() == x_tm1.size()
+        sqrt_post_var_t = th.sqrt(extract(model.diff_proc.posterior_variance, t_idx, x_tm1))
+    else:
+        pred_noise, log_var = model.diff_model(*args).split(x_tm1.size(1), dim=1)
+        assert pred_noise.size() == x_tm1.size()
+        log_var, _ = model.diff_proc._clip_var(x_tm1, t_idx_tensor, log_var)
+        sqrt_post_var_t = th.exp(0.5 * log_var)
+    x_tm1 = model._sample_x_tm1_given_x_t(
+        x_tm1, t_idx, pred_noise, sqrt_post_var_t=sqrt_post_var_t, classes=classes
+    )
+    return x_tm1

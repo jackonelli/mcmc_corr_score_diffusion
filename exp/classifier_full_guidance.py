@@ -42,7 +42,7 @@ def main():
         diff_model.eval()
         if args.class_cond:
             print("Using class conditional diffusion model")
-            diff_model = partial(diff_model.forward, y=classes)
+        #    diff_model = partial(diff_model.forward, y=classes)
         classifier = load_guided_classifier(model_path=class_model_path, dev=device, image_size=image_size)
         classifier.eval()
 
@@ -59,7 +59,7 @@ def main():
     diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance="learned")
 
     guidance = ClassifierFullGuidance(classifier, lambda_=args.guid_scale)
-    guid_sampler = GuidanceSampler(diff_model, diff_sampler, guidance)
+    guid_sampler = GuidanceSampler(diff_model, diff_sampler, guidance, diff_cond=args.class_cond)
 
     print("Sampling...")
     samples, _ = guid_sampler.sample(num_samples, classes, device, th.Size((channels, image_size, image_size)))
