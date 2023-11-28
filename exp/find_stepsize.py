@@ -31,6 +31,8 @@ import pickle
 
 def main():
     args = parse_args()
+    accept_rate_bound = [float(x) for x in args.accept_rate_bound]
+    print(accept_rate_bound)
     device = get_device(Device.GPU)
     models_dir = Path.cwd() / "models"
     # uncond_diff = load_mnist_diff(models_dir / "uncond_unet_mnist.pt", device)
@@ -81,7 +83,6 @@ def main():
         mcmc_sampler = AnnealedHMCScoreSampler(mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
     else:
         mcmc_sampler = AnnealedLAScoreSampler(mcmc_steps, step_sizes, None)
-    accept_rate_bound = args.accept_rate_bound
     max_iter = args.max_iter
 
     guidance = ClassifierFullGuidance(classifier, lambda_=args.guid_scale)
@@ -136,7 +137,9 @@ def parse_args():
     parser.add_argument("--num_diff_steps", default=1000, type=int, help="Num diffusion steps")
     parser.add_argument("--batch_size", default=10, type=int, help="Batch size")
     parser.add_argument("--num_samples", default=120, type=int, help="Number of samples for estimate acceptance ratio")
-    parser.add_argument("--accept_rate_bound", default=[0.6, 0.8], type=list, help="Acceptance ratio bounds")
+    parser.add_argument(
+        "--accept_rate_bound", default=[0.6, 0.8], nargs="+", type=float, help="Acceptance ratio bounds"
+    )
     parser.add_argument("--max_iter", default=20, type=int, help="Number of search iterations per time step")
     parser.add_argument("--mcmc", default="HMC", type=str, choices=["HMC", "LA"], help="Type of MCMC sampler")
     parser.add_argument("--n_mcmc_steps", default=1, type=int, help="Number of MCMC steps")
