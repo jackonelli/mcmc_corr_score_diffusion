@@ -4,6 +4,9 @@ from pathlib import Path
 import json
 from datetime import datetime
 from copy import deepcopy
+from typing import Tuple
+import pickle
+import torch as th
 
 
 def test():
@@ -60,7 +63,24 @@ class SimulationConfig:
             json.dump(asdict(tmp_config), outfile, indent=4, sort_keys=False)
 
 
-def timestamp() -> str:
+def get_step_size(step_size_dir: Path, bounds: Tuple[float, float]):
+    path = step_size_dir / f"step_size_{bounds[0]}_{bounds[1]}.p"
+    assert path.exists(), f"Step size file '{path}' not found"
+    with open(path, "rb") as f:
+        res = pickle.load(f)
+    step_sizes = th.tensor([val["step_sizes"][-1] for val in res.values()])
+    return step_sizes
+
+
+def setup_results_dir(config: SimulationConfig) -> Path:
+    assert config.results_dir.exists()
+    sim_dir = config.results_dir / f"{config.name}_{_timestamp()}"
+    sim_dir.mkdir()
+    config.save(sim_dir)
+    return sim_dir
+
+
+def _timestamp() -> str:
     return datetime.now().strftime("%y%m%d_%H%M%S")
 
 

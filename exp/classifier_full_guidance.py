@@ -41,8 +41,6 @@ def main():
         beta_schedule = linear_beta_schedule
         diff_model = load_guided_diff_unet(model_path=diff_model_path, dev=device, class_cond=args.class_cond)
         diff_model.eval()
-        if args.class_cond:
-            print("Using class conditional diffusion model")
         classifier = load_guided_classifier(model_path=class_model_path, dev=device, image_size=image_size)
         classifier.eval()
         posterior_variance = "learned"

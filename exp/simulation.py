@@ -17,7 +17,7 @@ from src.model.guided_diff.classifier import load_guided_classifier
 from src.guidance.base import GuidanceSampler, MCMCGuidanceSampler
 from src.guidance.classifier_full import ClassifierFullGuidance
 from src.samplers.mcmc import AnnealedHMCScoreSampler
-from exp.utils import SimulationConfig, timestamp
+from exp.utils import SimulationConfig, setup_results_dir, get_step_size
 
 
 def main():
@@ -25,7 +25,7 @@ def main():
     config = SimulationConfig.from_json(args.config)
     assert config.num_samples % config.batch_size == 0, "num_samples should be a multiple of batch_size"
     # Setup and assign a directory where simulation results are saved.
-    sim_dir = _setup_results_dir(config)
+    sim_dir = setup_results_dir(config)
     device = get_device(Device.GPU)
 
     # Hyper/meta params
@@ -57,7 +57,7 @@ def main():
     if config.mcmc_method is None:
         guid_sampler = GuidanceSampler(diff_model, diff_sampler, guidance, diff_cond=config.class_cond)
     else:
-        step_sizes = _get_step_size(models_dir / "step_sizes", config.mcmc_bounds)
+        step_sizes = get_step_size(models_dir / "step_sizes", config.mcmc_bounds)
         mcmc_sampler = AnnealedHMCScoreSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
         guid_sampler = MCMCGuidanceSampler(
             diff_model=diff_model,
@@ -80,30 +80,9 @@ def main():
         th.save(samples, sim_dir / f"classes_{args.sim_batch}_{batch}.th")
 
 
-from typing import Tuple
-import pickle
-
-
-def _get_step_size(step_size_dir: Path, bounds: Tuple[float, float]):
-    path = step_size_dir / f"step_size_{bounds[0]}_{bounds[1]}.p"
-    assert path.exists(), f"Step size file '{path}' not found"
-    with open(path, "rb") as f:
-        res = pickle.load(f)
-    step_sizes = th.tensor([val["step_sizes"][-1] for val in res.values()])
-    return step_sizes
-
-
-def _setup_results_dir(config: SimulationConfig) -> Path:
-    assert config.results_dir.exists()
-    sim_dir = config.results_dir / f"{config.name}_{timestamp()}"
-    sim_dir.mkdir()
-    config.save(sim_dir)
-    return sim_dir
-
-
 def parse_args():
     parser = ArgumentParser(prog="Sample from diffusion model")
-    parser.add_argument("--config", type=Path, help="Config file path")
+    parser.add_argument("--config", type=Path, required=True, help="Config file path")
     parser.add_argument(
         "--sim_batch", type=int, default=0, help="Simulation batch index, indexes parallell simulations."
     )

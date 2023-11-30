@@ -143,7 +143,7 @@ class MCMCGuidanceSampler(GuidanceSampler):
                 verbose_counter += 1
 
             if self.reverse:
-                x_tm1 = reverse_func(self, t, t_idx, x_tm1, classes, device)
+                x_tm1 = reverse_func(self, t, t_idx, x_tm1, classes, device, self.diff_cond)
 
             if t > 0:
                 x_tm1 = self.mcmc_sampler.sample_step(x_tm1, t_idx - 1, classes)
