@@ -46,6 +46,7 @@ class SimulationConfig:
         cfg = SimulationConfig(**cfg)
         if cfg.mcmc_bounds is not None:
             cfg.mcmc_bounds = tuple(cfg.mcmc_bounds)
+        cfg.results_dir = Path(cfg.results_dir)
         cfg._validate()
         return cfg
 
