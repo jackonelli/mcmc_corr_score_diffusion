@@ -57,9 +57,7 @@ def main():
     if config.mcmc_method is None:
         guid_sampler = GuidanceSampler(diff_model, diff_sampler, guidance, diff_cond=config.class_cond)
     else:
-        a = 0.05
-        b = 1.6
-        step_sizes = a * diff_sampler.betas**b
+        step_sizes = _get_step_size(models_dir / "step_sizes", config.mcmc_bounds)
         mcmc_sampler = AnnealedHMCScoreSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
         guid_sampler = MCMCGuidanceSampler(
             diff_model=diff_model,
@@ -67,7 +65,7 @@ def main():
             guidance=guidance,
             mcmc_sampler=mcmc_sampler,
             reverse=True,
-            diff_cond=args.class_cond,
+            diff_cond=config.class_cond,
         )
 
     print("Sampling...")
@@ -80,6 +78,19 @@ def main():
         samples = samples.detach().cpu()
         th.save(samples, sim_dir / f"samples_{args.sim_batch}_{batch}.th")
         th.save(samples, sim_dir / f"classes_{args.sim_batch}_{batch}.th")
+
+
+from typing import Tuple
+import pickle
+
+
+def _get_step_size(step_size_dir: Path, bounds: Tuple[float, float]):
+    path = step_size_dir / f"step_size_{bounds[0]}_{bounds[1]}.p"
+    assert path.exists(), f"Step size file '{path}' not found"
+    with open(path, "rb") as f:
+        res = pickle.load(f)
+    step_sizes = th.tensor([val["step_sizes"][-1] for val in res.values()])
+    return step_sizes
 
 
 def _setup_results_dir(config: SimulationConfig) -> Path:

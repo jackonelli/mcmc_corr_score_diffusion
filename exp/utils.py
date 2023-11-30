@@ -1,5 +1,5 @@
 from dataclasses import dataclass, asdict
-from typing import Optional
+from typing import Optional, Tuple
 from pathlib import Path
 import json
 from datetime import datetime
@@ -7,9 +7,9 @@ from copy import deepcopy
 
 
 def test():
-    cfg = SimulationConfig.from_json(Path.cwd() / "exp/configs/baseline.json")
+    cfg = SimulationConfig.from_json(Path.cwd() / "exp/configs/hmc.json")
     cfg.save(Path.cwd() / "results")
-    print(timestamp())
+    print(cfg.mcmc_bounds, type(cfg.mcmc_bounds))
 
 
 @dataclass
@@ -31,6 +31,8 @@ class SimulationConfig:
     # MCMC
     mcmc_method: Optional[str]
     mcmc_steps: Optional[int]
+    # accept ratio bounds in percent
+    mcmc_bounds: Optional[Tuple[float, float]]
     # Meta
     results_dir: Path = Path.cwd() / "results"
 
@@ -38,7 +40,18 @@ class SimulationConfig:
     def from_json(cfg_file_path: Path):
         with open(cfg_file_path) as cfg_file:
             cfg = json.load(cfg_file)
-        return SimulationConfig(**cfg)
+        cfg = SimulationConfig(**cfg)
+        if cfg.mcmc_bounds is not None:
+            cfg.mcmc_bounds = tuple(cfg.mcmc_bounds)
+        cfg._validate()
+        return cfg
+
+    def _validate(self):
+        if self.mcmc_method is not None:
+            assert self.mcmc_steps is not None and self.mcmc_bounds is not None
+            for b in self.mcmc_bounds:
+                assert b >= 0 and b <= 100
+            assert self.mcmc_bounds[0] < self.mcmc_bounds[1]
 
     def save(self, sim_dir: Path):
         tmp_config = deepcopy(self)
