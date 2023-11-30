@@ -22,6 +22,7 @@ from exp.utils import SimulationConfig, setup_results_dir, get_step_size
 
 def main():
     args = parse_args()
+    print("Sim batch", args.sim_batch)
     config = SimulationConfig.from_json(args.config)
     assert config.num_samples % config.batch_size == 0, "num_samples should be a multiple of batch_size"
     # Setup and assign a directory where simulation results are saved.

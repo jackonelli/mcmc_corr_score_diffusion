@@ -76,13 +76,14 @@ def get_step_size(step_size_dir: Path, bounds: Tuple[float, float]):
 def setup_results_dir(config: SimulationConfig) -> Path:
     assert config.results_dir.exists()
     sim_dir = config.results_dir / f"{config.name}_{_timestamp()}"
-    sim_dir.mkdir()
+    if not sim_dir.exists():
+        sim_dir.mkdir()
     config.save(sim_dir)
     return sim_dir
 
 
 def _timestamp() -> str:
-    return datetime.now().strftime("%y%m%d_%H%M%S")
+    return datetime.now().strftime("%y%m%d_%H%M")
 
 
 if __name__ == "__main__":
