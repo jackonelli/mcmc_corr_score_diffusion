@@ -13,5 +13,5 @@
     "mcmc_method": null,
     "mcmc_steps": null,
     "mcmc_bounds": null,
-    "results_dir": "results"
+    "results_dir": "/results"
 }
