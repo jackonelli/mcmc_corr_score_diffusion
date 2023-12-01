@@ -1,5 +1,5 @@
 {
-    "name":"baseline",
+    "name":"baseline_respaced",
     "image_size": 256,
     "num_channels": 3,
     "diff_model": "256x256_diffusion_uncond",
