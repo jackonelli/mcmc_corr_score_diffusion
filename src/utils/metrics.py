@@ -3,6 +3,15 @@ import csv
 import numpy as np
 
 
+def hard_label_from_logit(logit):
+    return logit.argmax()
+
+
+def accuracy(pred_class, true_class):
+    """Accuracy from hard labels"""
+    return (pred_class == true_class).float().mean()
+
+
 def parse_diff_metrics(path: Path):
     """Parse metrics from lightning logs"""
     train_losses, val_losses = [], []
