@@ -1,15 +1,24 @@
 from pathlib import Path
 import csv
 import numpy as np
+import torch as th
 
 
 def hard_label_from_logit(logit):
-    return logit.argmax()
+    return logit.argmax(dim=1)
 
 
 def accuracy(pred_class, true_class):
     """Accuracy from hard labels"""
     return (pred_class == true_class).float().mean()
+
+
+def top_n_accuracy(logits, true_class, n):
+    """Top-n accuracy"""
+    true_class = true_class.clone().reshape((true_class.size(0), 1))
+    top_n = logits.sort(descending=True, dim=1).indices[:, :n]
+    exists = th.any(th.eq(top_n, true_class), dim=1)
+    return exists.float().mean()
 
 
 def parse_diff_metrics(path: Path):
