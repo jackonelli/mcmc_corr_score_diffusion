@@ -87,13 +87,6 @@ def main():
     pickle.dump(data, open(save_file, "wb"))
 
 
-def _load_class(class_path: Path, device):
-    classifier = load_classifier(class_path, True)
-    classifier.to(device)
-    classifier.eval()
-    return classifier
-
-
 def parse_args():
     parser = ArgumentParser(prog="Sample with MCMC classifier-full guidance")
     parser.add_argument("--guid_scale", default=1.0, type=float, help="Guidance scale")

@@ -36,6 +36,7 @@ def main():
         classifier = _load_class(models_dir / class_model_path, device)
         posterior_variance = "beta"
         num_classes = 10
+
     elif "256x256_diffusion" in args.diff_model:
         channels, image_size = 3, 256
         beta_schedule = linear_beta_schedule

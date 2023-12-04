@@ -20,8 +20,8 @@ def main():
     time_emb_dim = 112
     channels = 1
     num_diff_steps = 1000
-    batch_size = 256
-    model_path = Path.cwd() / "models" / "resnet_classifier_t_mnist.pt"
+    batch_size = 225
+    model_path = Path.cwd() / "models" / "mnist_classifier_t.pt"
     if not model_path.parent.exists():
         print(f"Save dir. '{model_path.parent}' does not exist.")
         return

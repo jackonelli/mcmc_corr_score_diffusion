@@ -20,8 +20,8 @@ class DiffusionSampler(ABC):
 
     def __init__(
         self,
-        betas: th.tensor,
-        time_steps: th.tensor,
+        betas: th.Tensor,
+        time_steps: th.Tensor,
         posterior_variance="beta",
     ):
         self.time_steps = time_steps
@@ -265,7 +265,8 @@ class DiffusionModel(pl.LightningModule):
         x = batch["pixel_values"].to(self.device)
 
         # Algorithm 1 line 3: sample t uniformally for every example in the batch
-        ts = th.randint(0, self.noise_scheduler.num_timesteps, (batch_size,), device=self.device).long()
+        T = self.noise_scheduler.time_steps.size(0)
+        ts = th.randint(0, T, (batch_size,), device=self.device).long()
 
         noise = th.randn_like(x)
         x_noisy = self.noise_scheduler.q_sample(x_0=x, ts=ts, noise=noise)
@@ -299,7 +300,8 @@ class DiffusionModel(pl.LightningModule):
         th.manual_seed(self.i_batch_val)
 
         # Algorithm 1 line 3: sample t uniformally for every example in the batch
-        ts = th.randint(0, self.noise_scheduler.num_timesteps, (batch_size,), device=self.device).long()
+        T = self.noise_scheduler.time_steps.size(0)
+        ts = th.randint(0, T, (batch_size,), device=self.device).long()
 
         noise = th.randn_like(x)
         th.set_rng_state(rng_state)
@@ -341,7 +343,8 @@ class DiffusionClassifier(pl.LightningModule):
         y = batch["label"].to(self.device).long()
 
         # Algorithm 1 line 3: sample t uniformally for every example in the batch
-        ts = th.randint(0, self.noise_scheduler.num_timesteps, (batch_size,), device=self.device).long()
+        T = self.noise_scheduler.time_steps.size(0)
+        ts = th.randint(0, T, (batch_size,), device=self.device).long()
 
         noise = th.randn_like(x)
         x_noisy = self.noise_scheduler.q_sample(x_0=x, ts=ts, noise=noise)
@@ -372,7 +375,8 @@ class DiffusionClassifier(pl.LightningModule):
         th.manual_seed(self.i_batch_val)
 
         # Algorithm 1 line 3: sample t uniformally for every example in the batch
-        ts = th.randint(0, self.noise_scheduler.num_timesteps, (batch_size,), device=self.device).long()
+        T = self.noise_scheduler.time_steps.size(0)
+        ts = th.randint(0, T, (batch_size,), device=self.device).long()
 
         noise = th.randn_like(x)
         th.set_rng_state(rng_state)
