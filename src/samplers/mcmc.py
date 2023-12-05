@@ -6,6 +6,7 @@ import itertools
 from abc import ABC, abstractmethod
 import gc
 
+
 class MCMCSampler(ABC):
     def __init__(self, num_samples_per_step: int, step_sizes: th.Tensor, gradient_function: Callable):
         """
@@ -117,9 +118,7 @@ class AnnealedLAScoreSampler(MCMCSampler):
 
             u = th.rand(x.shape[0]).to(x.device)
             accept = (
-                (u < th.exp(logp_accept))
-                .to(th.float32)
-                .reshape((x.shape[0],) + tuple(([1 for _ in range(dims - 1)])))
+                (u < th.exp(logp_accept)).to(th.float32).reshape((x.shape[0],) + tuple(([1 for _ in range(dims - 1)])))
             )
             self.accept_ratio[t].append((th.sum(accept) / accept.shape[0]).detach().cpu().item())
             self.all_accepts[t].append(accept.detach().cpu())
@@ -258,7 +257,7 @@ class AdaptiveStepSizeMCMCSamplerWrapper(MCMCSampler):
         self.accept_rate_bound = accept_rate_bound
         self.max_iter = max_iter
         self.T = self.sampler.step_sizes.shape[0]
-        self.res = {i: {"accepts": [], "step_sizes": []} for i in range(self.T-1)}
+        self.res = {i: {"accepts": [], "step_sizes": []} for i in range(self.T - 1)}
 
     def sample_step(self, x, t, text_embeddings=None):
         state = torch.get_rng_state()
@@ -307,8 +306,7 @@ class AdaptiveStepSizeMCMCSamplerWrapper(MCMCSampler):
 
 
 class AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize(MCMCSampler):
-    def __init__(self, sampler: MCMCSampler, accept_rate_bound: list, batch_size: int,
-                 device, max_iter: int = 10):
+    def __init__(self, sampler: MCMCSampler, accept_rate_bound: list, batch_size: int, device, max_iter: int = 10):
         super().__init__(
             num_samples_per_step=sampler.num_samples_per_step,
             step_sizes=sampler.step_sizes,
@@ -338,11 +336,11 @@ class AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize(MCMCSampler):
         while not step_found and i < self.max_iter:
             torch.manual_seed(t)
             accepts = list()
-            for j in range(n_batches-1):
-                x_ = x[idx[j]:idx[j + 1]].to(self.device)
-                y_ = text_embeddings[idx[j]:idx[j + 1]].to(self.device)
+            for j in range(n_batches - 1):
+                x_ = x[idx[j] : idx[j + 1]].to(self.device)
+                y_ = text_embeddings[idx[j] : idx[j + 1]].to(self.device)
                 x_ = self.sampler.sample_step(x_, t, y_)
-                x_next[idx[j]:idx[j + 1]] = x_.detach().cpu()
+                x_next[idx[j] : idx[j + 1]] = x_.detach().cpu()
                 accepts += list(itertools.chain(*[acc.numpy().tolist() for acc in self.sampler.all_accepts[t]]))
                 del x_
                 del y_

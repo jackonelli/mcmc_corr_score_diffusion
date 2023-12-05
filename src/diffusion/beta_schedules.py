@@ -71,16 +71,18 @@ def respaced_timesteps(num_timesteps: int, desired_num_timesteps: int) -> th.Ten
 
 def respaced_betas(use_timesteps: th.Tensor, original_betas: th.Tensor) -> th.Tensor:
     original_betas = copy(original_betas)
-    timestep_map = []
+    # timestep_map = []
 
     alphas_cumprod = compute_alpha_bars((1 - original_betas))
     last_alpha_cumprod = 1.0
     new_betas = []
     for i, alpha_cumprod in enumerate(alphas_cumprod):
         if i in use_timesteps:
-            new_betas.append(1 - alpha_cumprod / last_alpha_cumprod)
+            new_beta = 1 - alpha_cumprod / last_alpha_cumprod
+            # print(f"a_bar: {alpha_cumprod}, last_a_bar: {last_alpha_cumprod}, new b: {new_beta}")
+            new_betas.append(new_beta)
             last_alpha_cumprod = alpha_cumprod
-            timestep_map.append(i)
+            # timestep_map.append(i)
     return th.tensor(new_betas)
 
 

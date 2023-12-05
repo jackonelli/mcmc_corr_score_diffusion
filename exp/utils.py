@@ -6,6 +6,8 @@ from datetime import datetime
 from copy import deepcopy
 from typing import Tuple
 import pickle
+import random
+import numpy as np
 import torch as th
 
 
@@ -83,6 +85,13 @@ def setup_results_dir(config: SimulationConfig) -> Path:
 
 def timestamp() -> str:
     return datetime.now().strftime("%y%m%d_%H%M")
+
+
+def set_seed(seed: int):
+    print(f"Using manual seed '{seed}'")
+    random.seed(seed)
+    np.random.seed(seed)
+    th.manual_seed(seed)
 
 
 if __name__ == "__main__":
