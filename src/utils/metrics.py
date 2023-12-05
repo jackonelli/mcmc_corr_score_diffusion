@@ -21,6 +21,21 @@ def top_n_accuracy(logits, true_class, n):
     return exists.float().mean()
 
 
+def mahalanobis_diagonal(u, v, cov):
+    """Mahalanobis distance for diagonal cov. matrices"""
+    delta = u - v
+    inv_diag = 1 / cov
+    m = th.sum(inv_diag * delta * delta)
+    return th.sqrt(m)
+
+
+def mahalanobis(u, v, cov):
+    """Mahalanobis distance for general cov. matrices"""
+    delta = u - v
+    m = th.dot(delta, th.matmul(th.inverse(cov), delta))
+    return th.sqrt(m)
+
+
 def parse_diff_metrics(path: Path):
     """Parse metrics from lightning logs"""
     train_losses, val_losses = [], []
