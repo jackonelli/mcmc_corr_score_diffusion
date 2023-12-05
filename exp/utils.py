@@ -64,8 +64,8 @@ class SimulationConfig:
             json.dump(asdict(tmp_config), outfile, indent=4, sort_keys=False)
 
 
-def get_step_size(step_size_dir: Path, steps: int, bounds: Tuple[float, float]):
-    path = step_size_dir / f"step_size_{steps}_{bounds[0]}_{bounds[1]}.p"
+def get_step_size(step_size_dir: Path, name: str, steps: int, bounds: Tuple[float, float]):
+    path = step_size_dir / f"{name}_{steps}_{bounds[0]}_{bounds[1]}.p"
     assert path.exists(), f"Step size file '{path}' not found"
     with open(path, "rb") as f:
         res = pickle.load(f)

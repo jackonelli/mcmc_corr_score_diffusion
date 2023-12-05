@@ -44,21 +44,21 @@ def main():
     if "mnist" in config.diff_model:
         channels, image_size = 1, 28
         beta_schedule, post_var = improved_beta_schedule, "beta"
+        num_classes = 10
         diff_model = load_mnist_diff(diff_model_path, device)
         diff_model.eval()
         classifier = load_classifier_t(model_path=classifier_path, dev=device)
         classifier.eval()
-        num_classes = 10
     elif "256x256_diffusion" in config.diff_model:
+        beta_schedule, post_var = linear_beta_schedule, "learned"
+        num_classes = 1000
         diff_model = load_guided_diff_unet(model_path=diff_model_path, dev=device, class_cond=config.class_cond)
         diff_model.eval()
         classifier = load_guided_classifier(model_path=classifier_path, dev=device, image_size=image_size)
         classifier.eval()
-        num_classes = 1000
     else:
         print(f"Incorrect model '{args.diff_model}'")
 
-    beta_schedule, post_var = linear_beta_schedule, "learned"
     betas, time_steps = respaced_beta_schedule(
         original_betas=beta_schedule(num_timesteps=config.num_diff_steps),
         T=config.num_diff_steps,
@@ -71,7 +71,9 @@ def main():
         guid_sampler = GuidanceSampler(diff_model, diff_sampler, guidance, diff_cond=config.class_cond)
     else:
         assert config.mcmc_steps is not None and config.mcmc_bounds is not None
-        step_sizes = get_step_size(models_dir / "step_sizes", config.num_respaced_diff_steps, config.mcmc_bounds)
+        step_sizes = get_step_size(
+            models_dir / "step_sizes", config.name, config.num_respaced_diff_steps, config.mcmc_bounds
+        )
         mcmc_sampler = AnnealedHMCScoreSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
         guid_sampler = MCMCGuidanceSampler(
             diff_model=diff_model,

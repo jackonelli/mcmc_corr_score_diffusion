@@ -16,7 +16,7 @@ from src.samplers.mcmc import (
     AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize,
     AnnealedLAScoreSampler,
 )
-from src.model.resnet import load_classifier
+from src.model.resnet import load_classifier_t
 from src.utils.net import Device, get_device
 from src.diffusion.base import DiffusionSampler
 from src.diffusion.beta_schedules import (
@@ -44,7 +44,7 @@ def main():
         channels, image_size = 1, 28
         beta_schedule = improved_beta_schedule
         diff_model = load_mnist_diff(diff_model_path, device)
-        classifier = _load_class(models_dir / class_model_path, device)
+        classifier = load_classifier_t(models_dir / class_model_path, device)
         posterior_variance = "beta"
         num_classes = 10
     elif "256x256_diffusion" in args.diff_model:
@@ -137,13 +137,6 @@ def _setup_results_dir(res_dir: Path, args) -> Path:
         json.dump(args_dict, file, indent=2)
 
     return sim_dir
-
-
-def _load_class(class_path: Path, device):
-    classifier = load_classifier(class_path, True)
-    classifier.to(device)
-    classifier.eval()
-    return classifier
 
 
 def parse_args():

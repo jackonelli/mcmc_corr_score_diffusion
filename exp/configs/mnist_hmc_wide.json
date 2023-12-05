@@ -1,0 +1,17 @@
+{
+    "name":"mnist_hmc_wide",
+    "image_size": 28,
+    "num_channels": 1,
+    "diff_model": "uncond_unet_mnist",
+    "class_cond": false,
+    "num_diff_steps": 1000,
+    "num_respaced_diff_steps": 100,
+    "num_samples": 200,
+    "batch_size": 200,
+    "classifier":  "mnist_classifier_t",
+    "guid_scale": 10.0,
+    "mcmc_method": "hmc",
+    "mcmc_steps": 5,
+    "mcmc_bounds": [70, 90],
+    "results_dir": "./results"
+}
