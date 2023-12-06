@@ -13,6 +13,7 @@ from src.diffusion.beta_schedules import (
     respaced_beta_schedule,
 )
 from src.utils.net import get_device, Device
+from src.utils.seeding import set_seed
 from src.model.guided_diff.unet import load_guided_diff_unet
 from src.model.guided_diff.classifier import load_guided_classifier
 from src.model.resnet import load_classifier_t
@@ -21,7 +22,7 @@ from src.guidance.base import GuidanceSampler, MCMCGuidanceSampler
 from src.guidance.classifier_full import ClassifierFullGuidance
 from src.samplers.mcmc import AnnealedHMCScoreSampler
 from src.data.mnist import get_mnist_data_loaders
-from exp.utils import SimulationConfig, setup_results_dir, get_step_size, set_seed
+from exp.utils import SimulationConfig, setup_results_dir, get_step_size
 
 
 @th.no_grad()

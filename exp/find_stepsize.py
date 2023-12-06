@@ -28,11 +28,13 @@ from src.model.guided_diff.unet import load_guided_diff_unet
 from src.model.guided_diff.classifier import load_guided_classifier
 from src.model.unet import load_mnist_diff
 from exp.utils import timestamp
+from src.utils.seeding import set_seed
 
 
 def main():
     args = parse_args()
     accept_rate_bound_pct = [int(x) for x in args.accept_rate_bound]
+    set_seed(args.seed)
     sim_dir = _setup_results_dir(Path.cwd() / "results", args)
     device = get_device(Device.GPU)
     models_dir = Path.cwd() / "models"
@@ -168,6 +170,7 @@ def parse_args():
     parser.add_argument("--diff_model", type=str, help="Diffusion model file (withouth '.pt' extension)")
     parser.add_argument("--class_model", type=str, help="Classifier model file (withouth '.pt' extension)")
     parser.add_argument("--class_cond", action="store_true", help="Use classconditional diff. model")
+    parser.add_argument("--seed", type=int, default=None)
     return parser.parse_args()
 
 

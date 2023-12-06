@@ -38,6 +38,8 @@ class SimulationConfig:
     mcmc_steps: Optional[int]
     # accept ratio bounds in percent
     mcmc_bounds: Optional[Tuple[float, float]]
+    # Seed
+    seed: Optional[int]
     # Meta
     results_dir: Path = Path.cwd() / "results"
 
@@ -87,13 +89,6 @@ def setup_results_dir(config: SimulationConfig) -> Path:
 
 def timestamp() -> str:
     return datetime.now().strftime("%y%m%d_%H%M")
-
-
-def set_seed(seed: int):
-    print(f"Using manual seed '{seed}'")
-    random.seed(seed)
-    np.random.seed(seed)
-    th.manual_seed(seed)
 
 
 if __name__ == "__main__":

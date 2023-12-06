@@ -47,6 +47,7 @@ class DiffusionSampler(ABC):
             raise NotImplementedError
 
         self.posterior_log_variance_clipped = _compute_post_log_var(self.betas)
+        self.rng_state = None
 
     def sigma_t(self, t_idx, x_t):
         a_bar_t = extract(self.alphas_bar, t_idx, x_t)
@@ -78,6 +79,12 @@ class DiffusionSampler(ABC):
         steps = []
         x_tm1 = th.randn((num_samples,) + shape).to(device)
         verbose_counter = 0
+
+        current_rng_state = th.get_rng_state()
+        initial_seed = th.initial_seed()
+        th.manual_seed(initial_seed)
+        self.rng_state = th.get_rng_state()
+        th.set_rng_state(current_rng_state)
 
         for t, t_idx in zip(self.time_steps.__reversed__(), reversed(self.time_steps_idx)):
             t_tensor = th.full((x_tm1.shape[0],), t.item(), device=device)
@@ -117,7 +124,11 @@ class DiffusionSampler(ABC):
         a_bar_t = extract(self.alphas_bar, t, x_t)
 
         if t > 0:
+            current_rng_state = th.get_rng_state()
+            th.set_rng_state(self.rng_state)
             z = th.randn_like(x_t)
+            self.rng_state = th.get_rng_state()
+            th.set_rng_state(current_rng_state)
         else:
             z = 0
 

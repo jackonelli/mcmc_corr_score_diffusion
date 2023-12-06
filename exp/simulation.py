@@ -21,12 +21,15 @@ from src.guidance.base import GuidanceSampler, MCMCGuidanceSampler
 from src.guidance.classifier_full import ClassifierFullGuidance
 from src.samplers.mcmc import AnnealedHMCScoreSampler
 from exp.utils import SimulationConfig, setup_results_dir, get_step_size
+from src.utils.seeding import set_seed
 
 
 def main():
     args = parse_args()
     config = SimulationConfig.from_json(args.config)
     assert config.num_samples % config.batch_size == 0, "num_samples should be a multiple of batch_size"
+    set_seed(config.seed)
+
     # Setup and assign a directory where simulation results are saved.
     sim_dir = setup_results_dir(config)
     device = get_device(Device.GPU)
