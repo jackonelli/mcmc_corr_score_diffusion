@@ -36,6 +36,8 @@ class SimulationConfig:
     mcmc_steps: Optional[int]
     # accept ratio bounds in percent
     mcmc_bounds: Optional[Tuple[float, float]]
+    # Seed
+    seed: Optional[int]
     # Meta
     results_dir: Path = Path.cwd() / "results"
 

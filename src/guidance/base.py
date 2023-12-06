@@ -27,6 +27,7 @@ class GuidanceSampler:
         self.guidance = guidance
         self.grads = {"uncond": dict(), "class": dict()}
         self.diff_cond = diff_cond
+        self.rng_state = None
 
     @th.no_grad()
     def sample(self, num_samples: int, classes: th.Tensor, device: th.device, shape: tuple, verbose=False):
@@ -45,6 +46,12 @@ class GuidanceSampler:
         steps = []
         x_tm1 = th.randn((num_samples,) + shape).to(device)
         self.verbose_counter = 0
+
+        current_rng_state = th.get_rng_state()
+        initial_seed = th.initial_seed()
+        th.manual_seed(initial_seed)
+        self.rng_state = th.get_rng_state()
+        th.set_rng_state(current_rng_state)
 
         for t, t_idx in zip(self.diff_proc.time_steps.__reversed__(), reversed(self.diff_proc.time_steps_idx)):
             if verbose and self.diff_proc.verbose_split[self.verbose_counter] == t:
@@ -74,7 +81,11 @@ class GuidanceSampler:
         a_bar_t = extract(self.diff_proc.alphas_bar, t_idx, x_t)
 
         if t_idx > 0:
+            current_rng_state = th.get_rng_state()
+            th.set_rng_state(self.rng_state)
             z = th.randn_like(x_t)
+            self.rng_state = th.get_rng_state()
+            th.set_rng_state(current_rng_state)
         else:
             z = 0
 
@@ -103,6 +114,7 @@ class MCMCGuidanceSampler(GuidanceSampler):
         self.mcmc_sampler = mcmc_sampler
         self.mcmc_sampler.set_gradient_function(self.grad)
         self.reverse = reverse
+        self.rng_state = None
 
     def grad(self, x_t, t, classes):
         sigma_t = self.diff_proc.sigma_t(t, x_t)
@@ -135,6 +147,12 @@ class MCMCGuidanceSampler(GuidanceSampler):
 
         steps = []
         x_tm1 = th.randn((num_samples,) + shape).to(device)
+
+        current_rng_state = th.get_rng_state()
+        initial_seed = th.initial_seed()
+        th.manual_seed(initial_seed)
+        self.rng_state = th.get_rng_state()
+        th.set_rng_state(current_rng_state)
 
         verbose_counter = 0
         for t, t_idx in zip(self.diff_proc.time_steps.__reversed__(), reversed(self.diff_proc.time_steps_idx)):
@@ -176,13 +194,19 @@ class MCMCGuidanceSamplerStacking(MCMCGuidanceSampler):
         idx = np.array([i * batch_size for i in range(n_batches)] + [num_samples - 1])
         x = th.randn((num_samples,) + shape)
 
+        current_rng_state = th.get_rng_state()
+        initial_seed = th.initial_seed()
+        th.manual_seed(initial_seed)
+        self.rng_state = th.get_rng_state()
+        th.set_rng_state(current_rng_state)
+
         for t, t_idx in zip(self.diff_proc.time_steps.__reversed__(), reversed(self.diff_proc.time_steps_idx)):
             print("Diff step: ", t.item())
             if self.reverse:
                 for i in range(n_batches - 1):
-                    x_tm1 = x[idx[i] : idx[i + 1]].to(device)
-                    x_tm1 = reverse_func(self, t, t_idx, x_tm1, classes[idx[i] : idx[i + 1]], device, self.diff_cond)
-                    x[idx[i] : idx[i + 1]] = x_tm1.detach().cpu()
+                    x_tm1 = x[idx[i]: idx[i + 1]].to(device)
+                    x_tm1 = reverse_func(self, t, t_idx, x_tm1, classes[idx[i]: idx[i + 1]], device, self.diff_cond)
+                    x[idx[i]: idx[i + 1]] = x_tm1.detach().cpu()
                     del x_tm1
                     gc.collect()
                     torch.cuda.empty_cache()
