@@ -71,8 +71,10 @@ def get_step_size(step_size_dir: Path, name: str, steps: int, bounds: Tuple[floa
     assert path.exists(), f"Step size file '{path}' not found"
     with open(path, "rb") as f:
         res = pickle.load(f)
-    step_sizes = th.tensor([val["step_sizes"][-1] for val in res.values()])
-    return step_sizes
+    # We accidentally save the last index (which we then leave with a reverse step)
+    # Therefore we include t=T in the dict, but it's not populated with a step size.
+    extracted = [(int(t), x["step_sizes"][-1]) for t, x in res.items() if x["step_sizes"]]
+    return dict(extracted)
 
 
 def setup_results_dir(config: SimulationConfig) -> Path:

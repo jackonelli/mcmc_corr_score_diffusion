@@ -68,7 +68,7 @@ def main():
         T=config.num_diff_steps,
         respaced_T=config.num_respaced_diff_steps,
     )
-    print("betas", betas[0], beta_schedule(1000)[0])
+    # print("betas", betas[0], beta_schedule(1000)[0])
     diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance=post_var)
     guidance = ClassifierFullGuidance(classifier, lambda_=config.guid_scale)
 

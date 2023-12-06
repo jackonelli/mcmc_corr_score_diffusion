@@ -94,6 +94,7 @@ def main():
         samples = samples.detach().cpu()
         th.save(samples, sim_dir / f"samples_{args.sim_batch}_{batch}.th")
         th.save(classes, sim_dir / f"classes_{args.sim_batch}_{batch}.th")
+    print(f"Results written to '{sim_dir}'")
 
 
 def parse_args():

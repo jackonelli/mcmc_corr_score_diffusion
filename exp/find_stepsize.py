@@ -32,7 +32,7 @@ from exp.utils import timestamp
 
 def main():
     args = parse_args()
-    accept_rate_bound = [float(x) for x in args.accept_rate_bound]
+    accept_rate_bound_pct = [int(x) for x in args.accept_rate_bound]
     sim_dir = _setup_results_dir(Path.cwd() / "results", args)
     device = get_device(Device.GPU)
     models_dir = Path.cwd() / "models"
@@ -74,7 +74,8 @@ def main():
     # Default values
     a = 1  # 0.05
     b = 1  # 1.6
-    step_sizes = a * diff_sampler.betas**b
+    step_sizes = {t.item(): a * beta**b for t, beta in zip(time_steps, betas)}
+    # step_sizes = a * diff_sampler.betas**b
 
     batch_size = args.batch_size
     num_samples = args.num_samples
@@ -92,7 +93,8 @@ def main():
     if batch_size < num_samples:
         sampler = AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize(
             sampler=mcmc_sampler,
-            accept_rate_bound=accept_rate_bound,
+            accept_rate_bound=[a / 100 for a in accept_rate_bound_pct],
+            time_steps=time_steps,
             batch_size=batch_size,
             device=device,
             max_iter=max_iter,
@@ -109,8 +111,12 @@ def main():
             num_samples, batch_size, classes, device, th.Size((channels, image_size, image_size))
         )
     else:
+        print("Running Adaptive MCMC sampler")
         sampler = AdaptiveStepSizeMCMCSamplerWrapper(
-            sampler=mcmc_sampler, accept_rate_bound=accept_rate_bound, max_iter=max_iter
+            sampler=mcmc_sampler,
+            accept_rate_bound=[a / 100 for a in accept_rate_bound_pct],
+            time_steps=time_steps,
+            max_iter=max_iter,
         )
         guided_sampler = MCMCGuidanceSampler(
             diff_model=diff_model,
@@ -122,7 +128,9 @@ def main():
         samples, _ = guided_sampler.sample(num_samples, classes, device, th.Size((channels, image_size, image_size)))
 
     adaptive_step_sizes = sampler.res
-    pickle.dump(adaptive_step_sizes, open(sim_dir / "adaptive_step_sizes.p", "wb"))
+    lower_bound, upper_bound = accept_rate_bound_pct
+    save_path = sim_dir / f"mnist_{respaced_T}_{lower_bound}_{upper_bound}.p"
+    pickle.dump(adaptive_step_sizes, open(save_path, "wb"))
 
 
 import json
@@ -131,7 +139,7 @@ import json
 def _setup_results_dir(res_dir: Path, args) -> Path:
     assert res_dir.exists()
     sim_dir = res_dir / f"find_stepsize_{timestamp()}"
-    sim_dir.mkdir()
+    sim_dir.mkdir(exist_ok=True)
     args_dict = vars(args)
     with open(sim_dir / "args.json", "w") as file:
         json.dump(args_dict, file, indent=2)

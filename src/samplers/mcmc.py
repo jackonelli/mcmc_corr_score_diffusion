@@ -1,14 +1,14 @@
 import torch
 import torch as th
 import numpy as np
-from typing import Callable
+from typing import Callable, Dict
 import itertools
 from abc import ABC, abstractmethod
 import gc
 
 
 class MCMCSampler(ABC):
-    def __init__(self, num_samples_per_step: int, step_sizes: th.Tensor, gradient_function: Callable):
+    def __init__(self, num_samples_per_step: int, step_sizes: Dict[int, float], gradient_function: Callable):
         """
         @param num_samples_per_step: Number of MCMC steps per timestep t
         @param step_sizes: Step sizes for each t
@@ -33,7 +33,7 @@ class AnnealedULASampler(MCMCSampler):
     Annealed Unadjusted-Langevin Algorithm
     """
 
-    def __init__(self, num_samples_per_step: int, step_sizes: th.Tensor, gradient_function: Callable):
+    def __init__(self, num_samples_per_step: int, step_sizes: Dict[int, float], gradient_function: Callable):
         """
         @param num_samples_per_step: Number of ULA steps per timestep t
         @param step_sizes: Step sizes for each t
@@ -80,7 +80,6 @@ class AnnealedLAScoreSampler(MCMCSampler):
     @th.no_grad()
     def sample_step(self, x, t, text_embeddings=None):
         dims = x.dim()
-        print("t", t)
         self.accept_ratio[t] = list()
         self.all_accepts[t] = list()
 
@@ -136,7 +135,7 @@ class AnnealedHMCScoreSampler(MCMCSampler):
     def __init__(
         self,
         num_samples_per_step: int,
-        step_sizes: th.Tensor,
+        step_sizes: Dict[int, float],
         damping_coeff: float,
         mass_diag_sqrt: th.Tensor,
         num_leapfrog_steps: int,
@@ -144,7 +143,7 @@ class AnnealedHMCScoreSampler(MCMCSampler):
     ):
         """
         @param num_samples_per_step: Number of HMC steps per timestep t
-        @param step_sizes: Step sizes for leapfrog steps for each t
+        @param step_sizes: Step size for leapfrog steps for each t
         @param damping_coeff: Damping coefficient
         @param mass_diag_sqrt: Square root of mass diagonal matrix for each t
         @param num_leapfrog_steps: Number of leapfrog steps per HMC step
@@ -158,34 +157,36 @@ class AnnealedHMCScoreSampler(MCMCSampler):
         self._num_leapfrog_steps = num_leapfrog_steps
         self._sync_function = None
 
-    def leapfrog_step(self, x, v, i, text_embeddings):
-        step_size = self.step_sizes[i]
+    def leapfrog_step(self, x, v, t, t_idx, classes):
+        step_size = self.step_sizes[t]
         return _leapfrog_step(
             x,
             v,
-            lambda _x: self.gradient_function(_x, i, text_embeddings),
+            lambda _x: self.gradient_function(_x, t, t_idx, classes),
             step_size,
-            self._mass_diag_sqrt[i],
+            self._mass_diag_sqrt[t_idx],
             self._num_leapfrog_steps,
         )
 
     @th.no_grad()
-    def sample_step(self, x, t, text_embeddings=None):
+    def sample_step(self, x, t, t_idx, classes=None):
         dims = x.dim()
 
         # Sample Momentum
-        v = th.randn_like(x) * self._mass_diag_sqrt[t]
+        v = th.randn_like(x) * self._mass_diag_sqrt[t_idx]
         self.accept_ratio[t] = list()
         self.all_accepts[t] = list()
 
         for i in range(self.num_samples_per_step):
             # Partial Momentum Refreshment
             eps = th.randn_like(x)
-            v_prime = v * self._damping_coeff + np.sqrt(1.0 - self._damping_coeff**2) * eps * self._mass_diag_sqrt[t]
-            x_next, v_next, xs, grads = self.leapfrog_step(x, v_prime, t, text_embeddings)
+            v_prime = (
+                v * self._damping_coeff + np.sqrt(1.0 - self._damping_coeff**2) * eps * self._mass_diag_sqrt[t_idx]
+            )
+            x_next, v_next, xs, grads = self.leapfrog_step(x, v_prime, t, t_idx, classes)
 
-            logp_v_p = -0.5 * (v_prime**2 / self._mass_diag_sqrt[t] ** 2).sum(dim=tuple(range(1, dims)))
-            logp_v = -0.5 * (v_next**2 / self._mass_diag_sqrt[t] ** 2).sum(dim=tuple(range(1, dims)))
+            logp_v_p = -0.5 * (v_prime**2 / self._mass_diag_sqrt[t_idx] ** 2).sum(dim=tuple(range(1, dims)))
+            logp_v = -0.5 * (v_next**2 / self._mass_diag_sqrt[t_idx] ** 2).sum(dim=tuple(range(1, dims)))
 
             def energy_steps(xs_, grads_):
                 e = (grads_[0] * (xs_[1] - xs_[0])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)
@@ -247,7 +248,7 @@ def _leapfrog_step(
 
 
 class AdaptiveStepSizeMCMCSamplerWrapper(MCMCSampler):
-    def __init__(self, sampler: MCMCSampler, accept_rate_bound: list, max_iter: int = 10):
+    def __init__(self, sampler: MCMCSampler, accept_rate_bound: list, time_steps, max_iter: int = 10):
         super().__init__(
             num_samples_per_step=sampler.num_samples_per_step,
             step_sizes=sampler.step_sizes,
@@ -256,22 +257,24 @@ class AdaptiveStepSizeMCMCSamplerWrapper(MCMCSampler):
         self.sampler = sampler
         self.accept_rate_bound = accept_rate_bound
         self.max_iter = max_iter
-        self.T = self.sampler.step_sizes.shape[0]
-        self.res = {i: {"accepts": [], "step_sizes": []} for i in range(self.T - 1)}
+        self.respaced_T = time_steps.size(0)
+        self.time_steps = time_steps
+        self.res = {t.item(): {"accepts": [], "step_sizes": []} for t in time_steps}
 
-    def sample_step(self, x, t, text_embeddings=None):
+    def sample_step(self, x, t, t_idx, classes=None):
         state = torch.get_rng_state()
         step_found = False
         upper = {"stepsize": None, "accept": 1}
         lower = {"stepsize": None, "accept": 0}
-        if t < self.T - 2:
-            self.sampler.step_sizes[t] = self.res[t + 1]["step_sizes"][-1]
+        if t_idx < self.respaced_T - 2:
+            prev_respaced_t = self.time_steps[t_idx + 1].item()
+            self.sampler.step_sizes[t] = th.tensor(self.res[prev_respaced_t]["step_sizes"][-1])
 
         i = 0
         x_ = None
         while not step_found and i < self.max_iter:
             torch.manual_seed(t)
-            x_ = self.sampler.sample_step(x, t, text_embeddings)
+            x_ = self.sampler.sample_step(x, t, t_idx, classes)
             a_rate = np.mean(self.sampler.accept_ratio[t])
             step_s = self.sampler.step_sizes[t].clone()
             self.res[t]["accepts"].append(a_rate)
@@ -306,7 +309,9 @@ class AdaptiveStepSizeMCMCSamplerWrapper(MCMCSampler):
 
 
 class AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize(MCMCSampler):
-    def __init__(self, sampler: MCMCSampler, accept_rate_bound: list, batch_size: int, device, max_iter: int = 10):
+    def __init__(
+        self, sampler: MCMCSampler, accept_rate_bound: list, time_steps, batch_size: int, device, max_iter: int = 10
+    ):
         super().__init__(
             num_samples_per_step=sampler.num_samples_per_step,
             step_sizes=sampler.step_sizes,
@@ -315,18 +320,20 @@ class AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize(MCMCSampler):
         self.sampler = sampler
         self.accept_rate_bound = accept_rate_bound
         self.max_iter = max_iter
-        self.T = self.sampler.step_sizes.shape[0]
-        self.res = {i: {"accepts": [], "step_sizes": []} for i in range(self.T - 1)}
+        self.respaced_T = time_steps.size(0)
+        self.time_steps = time_steps
+        self.res = {t.item(): {"accepts": [], "step_sizes": []} for t in time_steps}
         self.batch_size = batch_size
         self.device = device
 
-    def sample_step(self, x, t, text_embeddings=None):
+    def sample_step(self, x, t, t_idx, text_embeddings=None):
         state = torch.get_rng_state()
         step_found = False
         upper = {"stepsize": None, "accept": 1}
         lower = {"stepsize": None, "accept": 0}
-        if t < self.T - 2:
-            self.sampler.step_sizes[t] = self.res[t + 1]["step_sizes"][-1]
+        if t < self.respaced_T - 2:
+            prev_respaced_t = self.time_steps[t_idx + 1].item()
+            self.sampler.step_sizes[t] = self.res[prev_respaced_t]["step_sizes"][-1]
 
         i = 0
         n_batches = int(np.ceil(x.shape[0] / self.batch_size))
@@ -339,7 +346,7 @@ class AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize(MCMCSampler):
             for j in range(n_batches - 1):
                 x_ = x[idx[j] : idx[j + 1]].to(self.device)
                 y_ = text_embeddings[idx[j] : idx[j + 1]].to(self.device)
-                x_ = self.sampler.sample_step(x_, t, y_)
+                x_ = self.sampler.sample_step(x_, t, t_idx, y_)
                 x_next[idx[j] : idx[j + 1]] = x_.detach().cpu()
                 accepts += list(itertools.chain(*[acc.numpy().tolist() for acc in self.sampler.all_accepts[t]]))
                 del x_

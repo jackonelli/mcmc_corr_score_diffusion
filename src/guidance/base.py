@@ -104,8 +104,8 @@ class MCMCGuidanceSampler(GuidanceSampler):
         self.mcmc_sampler.set_gradient_function(self.grad)
         self.reverse = reverse
 
-    def grad(self, x_t, t, classes):
-        sigma_t = self.diff_proc.sigma_t(t, x_t)
+    def grad(self, x_t, t, t_idx, classes):
+        sigma_t = self.diff_proc.sigma_t(t_idx, x_t)
         t_tensor = th.full((x_t.shape[0],), t, device=x_t.device)
         args = [x_t, t_tensor]
         if self.diff_cond:
@@ -146,7 +146,8 @@ class MCMCGuidanceSampler(GuidanceSampler):
                 x_tm1 = reverse_func(self, t, t_idx, x_tm1, classes, device, self.diff_cond)
 
             if t > 0:
-                x_tm1 = self.mcmc_sampler.sample_step(x_tm1, t_idx - 1, classes)
+                respaced_t = self.diff_proc.time_steps[t_idx - 1].item()
+                x_tm1 = self.mcmc_sampler.sample_step(x_tm1, respaced_t, t_idx - 1, classes)
             # steps.append(x_tm1.detach().cpu())
 
         return x_tm1, steps

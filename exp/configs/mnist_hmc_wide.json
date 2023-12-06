@@ -12,6 +12,6 @@
     "guid_scale": 10.0,
     "mcmc_method": "hmc",
     "mcmc_steps": 5,
-    "mcmc_bounds": [70, 90],
+    "mcmc_bounds": [78, 82],
     "results_dir": "./results"
 }
