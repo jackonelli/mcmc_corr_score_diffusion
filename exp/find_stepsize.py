@@ -77,6 +77,7 @@ def main():
     a = 1  # 0.05
     b = 1  # 1.6
     step_sizes = {t.item(): a * beta**b for t, beta in zip(time_steps, betas)}
+    print(step_sizes)
     # step_sizes = a * diff_sampler.betas**b
 
     batch_size = args.batch_size
@@ -90,7 +91,6 @@ def main():
     max_iter = args.max_iter
 
     guidance = ClassifierFullGuidance(classifier, lambda_=args.guid_scale)
-    th.manual_seed(0)
     classes = th.randint(num_classes, (num_samples,), dtype=th.int64)
     if batch_size < num_samples:
         sampler = AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize(

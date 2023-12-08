@@ -1,7 +1,7 @@
 """Test classification helpers"""
 import unittest
 import torch as th
-from src.utils.metrics import mahalanobis, mahalanobis_diagonal
+from src.utils.metrics import mahalanobis, mahalanobis_diagonal, r3_accuracy
 
 
 class Metrics(unittest.TestCase):
@@ -23,3 +23,15 @@ class Metrics(unittest.TestCase):
         # full_dist = mahalanobis(u, v, full_mat)
         # self.assertTrue(th.allclose(diag_dist, full_dist))
         pass
+
+    def test_r3_accuracy(self):
+        prob_vecs = th.tensor(
+            [
+                [0.6, 0.2, 0.2],
+                [0.4, 0.3, 0.3],
+                [0.2, 0.7, 0.1],
+                [0.7, 0.2, 0.1],
+            ]
+        )
+        true_classes = th.tensor([0, 0, 1, 1])
+        self.assertAlmostEqual(0.5, r3_accuracy(prob_vecs, true_classes).item())

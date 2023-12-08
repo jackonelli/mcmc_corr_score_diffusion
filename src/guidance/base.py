@@ -200,7 +200,8 @@ class MCMCGuidanceSamplerStacking(MCMCGuidanceSampler):
 
             if t > 0:
                 # Note x is on cpu!
-                x = self.mcmc_sampler.sample_step(x, t_idx - 1, classes)
+                respaced_t = self.diff_proc.time_steps[t_idx - 1].item()
+                x = self.mcmc_sampler.sample_step(x, respaced_t, t_idx - 1, classes)
         return x, []
 
 

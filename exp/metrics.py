@@ -8,20 +8,11 @@ from argparse import ArgumentParser
 import re
 from typing import Tuple, List
 import torch as th
-from src.diffusion.base import DiffusionSampler
-from src.diffusion.beta_schedules import (
-    linear_beta_schedule,
-    respaced_beta_schedule,
-)
 from src.utils.net import get_device, Device
-from src.model.guided_diff.unet import NUM_CLASSES, load_guided_diff_unet
-from src.model.guided_diff.classifier import load_guided_classifier
 from src.model.resnet import load_classifier_t
-from src.guidance.base import GuidanceSampler, MCMCGuidanceSampler
-from src.guidance.classifier_full import ClassifierFullGuidance
-from src.samplers.mcmc import AnnealedHMCScoreSampler
-from src.utils.metrics import accuracy, hard_label_from_logit, top_n_accuracy
-from exp.utils import SimulationConfig, setup_results_dir, get_step_size
+from src.model.guided_diff.classifier import load_guided_classifier
+from src.utils.metrics import accuracy, hard_label_from_logit, prob_vec_from_logit, r3_accuracy, top_n_accuracy
+from exp.utils import SimulationConfig
 
 
 def main():
@@ -39,19 +30,23 @@ def main():
         print("Computing accuracy")
 
         classifier_path = models_dir / f"{config.classifier}.pt"
+        print(config.classifier)
         assert classifier_path.exists(), f"Model '{classifier_path}' does not exist."
         if "mnist" in config.classifier:
             channels, image_size = 1, 28
+            batch_size = 10
             classifier = load_classifier_t(model_path=classifier_path, dev=device)
             classifier.eval()
-        elif "256x256_diffusion" in config.classifier:
+        elif "256x256" in config.classifier:
             channels, image_size = 3, 256
+            batch_size = 5
             classifier = load_guided_classifier(model_path=classifier_path, dev=device, image_size=image_size)
             classifier.eval()
         else:
-            print(f"Incorrect model '{args.diff_model}'")
+            print(f"Incorrect model '{config.diff_model}'")
 
-        compute_acc_full(classifier, classes_and_samples, 10, device)
+        simple_acc, r3_acc = compute_acc(classifier, classes_and_samples, batch_size, device)
+        print(f"Acc: {simple_acc.item():.4f}\nR3 acc: {r3_acc.item():.4f}")
         # compute_top_n_acc(classifier, classes_and_samples[:10], 10, device, 10)
 
 
@@ -75,35 +70,12 @@ def compute_top_n_acc(classifier, classes_and_samples, batch_size, device, n):
     print(acc)
 
 
-def compute_acc_full(classifier, classes_and_samples, batch_size, device):
-    pred_logits = []
-    true_classes = []
-    classes_path, samples_path = classes_and_samples[0]
-    samples = th.load(samples_path)
-    print("check sum", samples.sum())
-    print(samples.size(0), "samples")
-    true_classes = th.load(classes_path).detach().cpu()
-    compute_acc(classifier, samples, true_classes, device)
-
-
-def compute_acc(classifier, samples, true_classes, device):
-    num_samples = samples.size(0)
-    ts = th.zeros((num_samples,)).to(device)
-    pred_logits = classifier(samples.to(device), ts).detach().cpu()
-    print("logits", pred_logits.sum())
-    print(true_classes.sum())
-    acc = accuracy(hard_label_from_logit(pred_logits), true_classes)
-    print(acc)
-
-
-def _compute_acc(classifier, classes_and_samples, batch_size, device):
+def compute_acc(classifier, classes_and_samples, batch_size, device):
     pred_logits = []
     true_classes = []
     for i, (classes_path, samples_path) in enumerate(classes_and_samples):
         print(f"File {i+1}/{len(classes_and_samples)}")
         samples = th.load(samples_path)
-        print("check sum", samples.sum())
-        print(samples.size(0), "samples")
         num_samples = samples.size(0)
         for batch in th.chunk(samples, num_samples // batch_size):
             batch = batch.to(device)
@@ -114,8 +86,9 @@ def _compute_acc(classifier, classes_and_samples, batch_size, device):
         true_classes.append(classes)
     pred_logits = th.cat(pred_logits, dim=0)
     true_classes = th.cat(true_classes, dim=0)
-    acc = accuracy(hard_label_from_logit(pred_logits), true_classes)
-    print(acc)
+    simple_acc = accuracy(hard_label_from_logit(pred_logits), true_classes)
+    r3_acc = r3_accuracy(prob_vec_from_logit(pred_logits), true_classes)
+    return simple_acc, r3_acc
 
 
 PATTERN = re.compile(r".*_(\d+)_(\d+).th")

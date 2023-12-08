@@ -13,6 +13,12 @@ def prob_vec_from_logit(logit):
     return F.softmax(logit, dim=1)
 
 
+def r3_accuracy(prob_vec, true_class):
+    """Compute accuracy with the condition that the prediction is correct only when p(y_true | x) > 50%"""
+    probs_y_true = prob_vec[th.arange(prob_vec.size(0)), true_class]
+    return (probs_y_true > 0.5).float().mean()
+
+
 def accuracy(pred_class, true_class):
     """Accuracy from hard labels"""
     return (pred_class == true_class).float().mean()

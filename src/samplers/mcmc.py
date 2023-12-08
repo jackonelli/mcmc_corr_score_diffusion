@@ -372,7 +372,7 @@ class AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize(MCMCSampler):
         lower = {"stepsize": None, "accept": 0}
         if t < self.respaced_T - 2:
             prev_respaced_t = self.time_steps[t_idx + 1].item()
-            self.sampler.step_sizes[t] = self.res[prev_respaced_t]["step_sizes"][-1]
+            self.sampler.step_sizes[t] = th.tensor(self.res[prev_respaced_t]["step_sizes"][-1])
 
         i = 0
         n_batches = int(np.ceil(x.shape[0] / self.batch_size))
