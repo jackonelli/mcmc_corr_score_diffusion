@@ -89,31 +89,24 @@ def main():
             reverse=True,
             diff_cond=config.class_cond,
         )
-    step_sizes *= 100
+    factor = 100
+    step_sizes = {t: s * factor for t, s in step_sizes.items()}
     img, label = get_mnist_batch(1)
     samples = [img.clone()]
     img, label = img.to(device), label.to(device)
     mcmc_sampler.set_gradient_function(guid_sampler.grad)
     x_tau = img.clone()
     num_mcmc_steps = 10
+    # for t, s in step_sizes.items():
+    #     print(f"{t}: {s}")
     for tau in range(num_mcmc_steps):
         print(f"{tau+1}/{num_mcmc_steps}")
-        x_tau_plus_1 = mcmc_sampler.sample_step(x_tau, 1, label)
+        x_tau_plus_1 = mcmc_sampler.sample_step(x_tau, 0, 0, label)
         samples.append(x_tau_plus_1.clone().detach().cpu())
         x_tau = x_tau_plus_1
     samples = th.stack(samples)
     th.save(samples, Path.cwd() / "results/single_sample_hmc.th")
-
-    # print("Sampling...")
-    # for batch in range(config.num_samples // config.batch_size):
-    #     print(f"{(batch+1) * config.batch_size}/{config.num_samples}")
-    #     classes = th.randint(low=0, high=num_classes, size=(config.batch_size,)).long().to(device)
-    #     samples, _ = guid_sampler.sample(
-    #         config.batch_size, classes, device, th.Size((channels, image_size, image_size)), verbose=True
-    #     )
-    #     samples = samples.detach().cpu()
-    #     th.save(samples, sim_dir / f"samples_{args.sim_batch}_{batch}.th")
-    #     th.save(classes, sim_dir / f"classes_{args.sim_batch}_{batch}.th")
+    print(mcmc_sampler.accept_ratio)
 
 
 def get_mnist_batch(num_samples):

@@ -78,7 +78,7 @@ class AnnealedLAScoreSampler(MCMCSampler):
         self.n_trapets = n_trapets
 
     @th.no_grad()
-    def sample_step(self, x, t, text_embeddings=None):
+    def sample_step(self, x, t, classes=None):
         dims = x.dim()
         self.accept_ratio[t] = list()
         self.all_accepts[t] = list()
@@ -86,11 +86,12 @@ class AnnealedLAScoreSampler(MCMCSampler):
         for i in range(self.num_samples_per_step):
             ss = self.step_sizes[t]
             std = (2 * ss) ** 0.5
-            grad = self.gradient_function(x, t, text_embeddings)
-            noise = th.randn_like(x) * std
+            grad = self.gradient_function(x, t, classes)
             mean_x = x + grad * ss
+
+            noise = th.randn_like(x) * std
             x_hat = mean_x + noise
-            grad_hat = self.gradient_function(x_hat, t, text_embeddings)
+            grad_hat = self.gradient_function(x_hat, t, classes)
             mean_x_hat = x_hat + grad_hat * ss
             # Correction
             logp_reverse = -0.5 * th.sum((x - mean_x_hat) ** 2) / std**2
@@ -99,20 +100,20 @@ class AnnealedLAScoreSampler(MCMCSampler):
             def energy_s(ss_):
                 diff = x_hat - x
                 x_ = x + ss_[0] * diff
-                energy = th.unsqueeze(th.sum(self.gradient_function(x_, t, text_embeddings) * diff), dim=0)
+                energy = th.unsqueeze(th.sum(self.gradient_function(x_, t, classes) * diff), dim=0)
                 for j in range(1, len(ss_)):
                     x_ = x + ss_[j] * diff
                     energy = th.concatenate(
                         (
                             energy,
-                            th.unsqueeze(th.sum(self.gradient_function(x_, t, text_embeddings) * diff), dim=0),
+                            th.unsqueeze(th.sum(self.gradient_function(x_, t, classes) * diff), dim=0),
                         )
                     )
                 return energy
 
-            s = th.linspace(0, 1, steps=self.n_trapets).cuda()
-            energys = energy_s(s)
-            diff_logp_x = th.trapezoid(energys, s)
+            intermediate_steps = th.linspace(0, 1, steps=self.n_trapets).cuda()
+            energys = energy_s(intermediate_steps)
+            diff_logp_x = th.trapezoid(energys, intermediate_steps)
             logp_accept = diff_logp_x + logp_reverse - logp_forward
 
             u = th.rand(x.shape[0]).to(x.device)
@@ -124,6 +125,32 @@ class AnnealedLAScoreSampler(MCMCSampler):
             x = accept * x_hat + (1 - accept) * x
 
         return x
+
+    def get_mean(self, x, t, t_idx, ss, classes):
+        """Get mean of transition distribution"""
+        grad = self.gradient_function(x, t, t_idx, classes)
+        return x + grad * ss
+
+    @staticmethod
+    def transition_factor(x, mean_x, x_hat, mean_x_hat, ss):
+        std = (2 * ss) ** 0.5
+        logp_reverse = -0.5 * th.sum((x - mean_x_hat) ** 2) / std**2
+        logp_forward = -0.5 * th.sum((x_hat - mean_x) ** 2) / std**2
+        return logp_reverse, logp_forward
+
+    def estimate_energy_diff(self, x, x_hat, t, t_idx, ss_, classes):
+        diff = x_hat - x
+        x_ = x + ss_[0] * diff
+        energies = th.unsqueeze(th.sum(self.gradient_function(x_, t, t_idx, classes) * diff), dim=0)
+        for j in range(1, len(ss_)):
+            x_ = x + ss_[j] * diff
+            energies = th.concatenate(
+                (
+                    energies,
+                    th.unsqueeze(th.sum(self.gradient_function(x_, t, t_idx, classes) * diff), dim=0),
+                )
+            )
+        return th.trapezoid(energies)
 
 
 class AnnealedHMCScoreSampler(MCMCSampler):
@@ -202,6 +229,7 @@ class AnnealedHMCScoreSampler(MCMCSampler):
 
             diff_logp_x = energy_steps(xs, grads)
             logp_accept = logp_v - logp_v_p + diff_logp_x
+            # print("log_a", logp_accept)
             u = th.rand(x_next.shape[0]).to(x_next.device)
             accept = (
                 (u < th.exp(logp_accept))
@@ -215,6 +243,17 @@ class AnnealedHMCScoreSampler(MCMCSampler):
             self.accept_ratio[t].append((th.sum(accept) / accept.shape[0]).detach().cpu().item())
             self.all_accepts[t].append(accept.detach().cpu().squeeze())
         return x
+
+    # TODO: Finish refactor
+    def estimate_energy(self, xs_, grads_, dims):
+        e = (grads_[0] * (xs_[1] - xs_[0])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)
+        e = th.cat((e, (grads_[1] * (xs_[1] - xs_[0])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)), 1)
+        energy = th.trapz(e)
+        for j in range(1, len(xs_) - 1):
+            e = (grads_[j] * (xs_[j + 1] - xs_[j])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)
+            e = th.cat((e, (grads_[j + 1] * (xs_[j + 1] - xs_[j])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)), 1)
+            energy += th.trapz(e)
+        return energy
 
 
 def _leapfrog_step(

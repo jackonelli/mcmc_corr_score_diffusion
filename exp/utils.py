@@ -39,7 +39,7 @@ class SimulationConfig:
     # accept ratio bounds in percent
     mcmc_bounds: Optional[Tuple[float, float]]
     # Seed
-    seed: Optional[int]
+    seed: Optional[int] = None
     # Meta
     results_dir: Path = Path.cwd() / "results"
 
@@ -69,6 +69,8 @@ class SimulationConfig:
 
 
 def get_step_size(step_size_dir: Path, name: str, steps: int, bounds: Tuple[float, float]):
+    # print("Warning: using steps from T_resp = 500")
+    # steps = 500
     path = step_size_dir / f"{name}_{steps}_{bounds[0]}_{bounds[1]}.p"
     assert path.exists(), f"Step size file '{path}' not found"
     with open(path, "rb") as f:

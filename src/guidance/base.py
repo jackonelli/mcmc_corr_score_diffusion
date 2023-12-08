@@ -117,6 +117,7 @@ class MCMCGuidanceSampler(GuidanceSampler):
         self.rng_state = None
 
     def grad(self, x_t, t, t_idx, classes):
+        """Compute"""
         sigma_t = self.diff_proc.sigma_t(t_idx, x_t)
         t_tensor = th.full((x_t.shape[0],), t, device=x_t.device)
         args = [x_t, t_tensor]
@@ -205,9 +206,9 @@ class MCMCGuidanceSamplerStacking(MCMCGuidanceSampler):
             print("Diff step: ", t.item())
             if self.reverse:
                 for i in range(n_batches - 1):
-                    x_tm1 = x[idx[i]: idx[i + 1]].to(device)
-                    x_tm1 = reverse_func(self, t, t_idx, x_tm1, classes[idx[i]: idx[i + 1]], device, self.diff_cond)
-                    x[idx[i]: idx[i + 1]] = x_tm1.detach().cpu()
+                    x_tm1 = x[idx[i] : idx[i + 1]].to(device)
+                    x_tm1 = reverse_func(self, t, t_idx, x_tm1, classes[idx[i] : idx[i + 1]], device, self.diff_cond)
+                    x[idx[i] : idx[i + 1]] = x_tm1.detach().cpu()
                     del x_tm1
                     gc.collect()
                     torch.cuda.empty_cache()

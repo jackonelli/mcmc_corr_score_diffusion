@@ -16,6 +16,7 @@ from src.diffusion.beta_schedules import (
 from src.utils.net import get_device, Device
 from src.model.guided_diff.unet import NUM_CLASSES, load_guided_diff_unet
 from src.model.guided_diff.classifier import load_guided_classifier
+from src.model.resnet import load_classifier_t
 from src.guidance.base import GuidanceSampler, MCMCGuidanceSampler
 from src.guidance.classifier_full import ClassifierFullGuidance
 from src.samplers.mcmc import AnnealedHMCScoreSampler
@@ -32,16 +33,26 @@ def main():
     # Hyper/meta params
     channels, image_size = config.num_channels, config.image_size
     models_dir = Path.cwd() / "models"
+
     if args.metric == "acc" or args.metric == "all":
         # Load classifier
         print("Computing accuracy")
+
         classifier_path = models_dir / f"{config.classifier}.pt"
         assert classifier_path.exists(), f"Model '{classifier_path}' does not exist."
-        classifier = load_guided_classifier(model_path=classifier_path, dev=device, image_size=image_size)
-        classifier.eval()
+        if "mnist" in config.classifier:
+            channels, image_size = 1, 28
+            classifier = load_classifier_t(model_path=classifier_path, dev=device)
+            classifier.eval()
+        elif "256x256_diffusion" in config.classifier:
+            channels, image_size = 3, 256
+            classifier = load_guided_classifier(model_path=classifier_path, dev=device, image_size=image_size)
+            classifier.eval()
+        else:
+            print(f"Incorrect model '{args.diff_model}'")
 
-        # compute_acc(classifier, classes_and_samples, 10, device)
-        compute_top_n_acc(classifier, classes_and_samples[:10], 10, device, 10)
+        compute_acc_full(classifier, classes_and_samples, 10, device)
+        # compute_top_n_acc(classifier, classes_and_samples[:10], 10, device, 10)
 
 
 def compute_top_n_acc(classifier, classes_and_samples, batch_size, device, n):
@@ -64,12 +75,35 @@ def compute_top_n_acc(classifier, classes_and_samples, batch_size, device, n):
     print(acc)
 
 
-def compute_acc(classifier, classes_and_samples, batch_size, device):
+def compute_acc_full(classifier, classes_and_samples, batch_size, device):
+    pred_logits = []
+    true_classes = []
+    classes_path, samples_path = classes_and_samples[0]
+    samples = th.load(samples_path)
+    print("check sum", samples.sum())
+    print(samples.size(0), "samples")
+    true_classes = th.load(classes_path).detach().cpu()
+    compute_acc(classifier, samples, true_classes, device)
+
+
+def compute_acc(classifier, samples, true_classes, device):
+    num_samples = samples.size(0)
+    ts = th.zeros((num_samples,)).to(device)
+    pred_logits = classifier(samples.to(device), ts).detach().cpu()
+    print("logits", pred_logits.sum())
+    print(true_classes.sum())
+    acc = accuracy(hard_label_from_logit(pred_logits), true_classes)
+    print(acc)
+
+
+def _compute_acc(classifier, classes_and_samples, batch_size, device):
     pred_logits = []
     true_classes = []
     for i, (classes_path, samples_path) in enumerate(classes_and_samples):
         print(f"File {i+1}/{len(classes_and_samples)}")
         samples = th.load(samples_path)
+        print("check sum", samples.sum())
+        print(samples.size(0), "samples")
         num_samples = samples.size(0)
         for batch in th.chunk(samples, num_samples // batch_size):
             batch = batch.to(device)
@@ -94,10 +128,10 @@ def collect_samples(res_dir: Path, sim_name: str) -> Tuple[List[Tuple[Path, Path
     """
     classes = []
     samples = []
-    for sub_dir in res_dir.glob(f"{sim_name}_*"):
+    for sub_dir in res_dir.glob(f"{sim_name}*"):
         print("Checking sub dir", sub_dir)
         config = SimulationConfig.from_json(sub_dir / "config.json")
-        # assert sim_name == config.name
+        assert config.name in sim_name
         classes.extend(sorted([path.name for path in sub_dir.glob("classes_*_*.th")]))
         classes = [sub_dir / cl for cl in classes]
         samples.extend(sorted([path.name for path in sub_dir.glob("samples_*_*.th")]))
