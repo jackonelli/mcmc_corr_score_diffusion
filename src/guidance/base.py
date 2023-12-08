@@ -27,7 +27,11 @@ class GuidanceSampler:
         self.guidance = guidance
         self.grads = {"uncond": dict(), "class": dict()}
         self.diff_cond = diff_cond
-        self.rng_state = None
+        current_rng_state = th.get_rng_state()
+        initial_seed = th.initial_seed()
+        th.manual_seed(initial_seed)
+        self.rng_state = th.get_rng_state()
+        th.set_rng_state(current_rng_state)
 
     @th.no_grad()
     def sample(self, num_samples: int, classes: th.Tensor, device: th.device, shape: tuple, verbose=False):
@@ -46,12 +50,6 @@ class GuidanceSampler:
         steps = []
         x_tm1 = th.randn((num_samples,) + shape).to(device)
         self.verbose_counter = 0
-
-        current_rng_state = th.get_rng_state()
-        initial_seed = th.initial_seed()
-        th.manual_seed(initial_seed)
-        self.rng_state = th.get_rng_state()
-        th.set_rng_state(current_rng_state)
 
         for t, t_idx in zip(self.diff_proc.time_steps.__reversed__(), reversed(self.diff_proc.time_steps_idx)):
             if verbose and self.diff_proc.verbose_split[self.verbose_counter] == t:
@@ -114,7 +112,6 @@ class MCMCGuidanceSampler(GuidanceSampler):
         self.mcmc_sampler = mcmc_sampler
         self.mcmc_sampler.set_gradient_function(self.grad)
         self.reverse = reverse
-        self.rng_state = None
 
     def grad(self, x_t, t, t_idx, classes):
         """Compute"""
@@ -148,12 +145,6 @@ class MCMCGuidanceSampler(GuidanceSampler):
 
         steps = []
         x_tm1 = th.randn((num_samples,) + shape).to(device)
-
-        current_rng_state = th.get_rng_state()
-        initial_seed = th.initial_seed()
-        th.manual_seed(initial_seed)
-        self.rng_state = th.get_rng_state()
-        th.set_rng_state(current_rng_state)
 
         verbose_counter = 0
         for t, t_idx in zip(self.diff_proc.time_steps.__reversed__(), reversed(self.diff_proc.time_steps_idx)):
@@ -195,12 +186,6 @@ class MCMCGuidanceSamplerStacking(MCMCGuidanceSampler):
         n_batches = int(np.ceil(num_samples / batch_size))
         idx = np.array([i * batch_size for i in range(n_batches)] + [num_samples - 1])
         x = th.randn((num_samples,) + shape)
-
-        current_rng_state = th.get_rng_state()
-        initial_seed = th.initial_seed()
-        th.manual_seed(initial_seed)
-        self.rng_state = th.get_rng_state()
-        th.set_rng_state(current_rng_state)
 
         for t, t_idx in zip(self.diff_proc.time_steps.__reversed__(), reversed(self.diff_proc.time_steps_idx)):
             print("Diff step: ", t.item())
