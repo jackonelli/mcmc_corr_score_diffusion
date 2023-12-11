@@ -34,6 +34,8 @@ from src.utils.seeding import set_seed
 def main():
     args = parse_args()
     accept_rate_bound_pct = [int(x) for x in args.accept_rate_bound]
+    assert len(accept_rate_bound_pct) == 2
+    print(f"Searching for acc rate in [{accept_rate_bound_pct[0]}, {accept_rate_bound_pct[1]}]%")
     set_seed(args.seed)
     sim_dir = _setup_results_dir(Path.cwd() / "results", args)
     device = get_device(Device.GPU)
@@ -77,7 +79,6 @@ def main():
     a = 1  # 0.05
     b = 1  # 1.6
     step_sizes = {t.item(): a * beta**b for t, beta in zip(time_steps, betas)}
-    print(step_sizes)
     # step_sizes = a * diff_sampler.betas**b
 
     batch_size = args.batch_size

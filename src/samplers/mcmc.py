@@ -153,6 +153,65 @@ class AnnealedLAScoreSampler(MCMCSampler):
         return th.trapezoid(energies)
 
 
+class AnnealedUHMCScoreSampler(MCMCSampler):
+    """Annealed Metropolis-Hasting Adjusted Hamiltonian Monte Carlo
+
+    Trapezoidal rule is computed with the intermediate steps of HMC (leapfrog steps)
+    """
+
+    def __init__(
+        self,
+        num_samples_per_step: int,
+        step_sizes: Dict[int, float],
+        damping_coeff: float,
+        mass_diag_sqrt: th.Tensor,
+        num_leapfrog_steps: int,
+        gradient_function: Callable,
+    ):
+        """
+        @param num_samples_per_step: Number of HMC steps per timestep t
+        @param step_sizes: Step size for leapfrog steps for each t
+        @param damping_coeff: Damping coefficient
+        @param mass_diag_sqrt: Square root of mass diagonal matrix for each t
+        @param num_leapfrog_steps: Number of leapfrog steps per HMC step
+        @param gradient_function: Function that returns the score for a given x, t, and text_embedding
+        """
+        super().__init__(
+            num_samples_per_step=num_samples_per_step, step_sizes=step_sizes, gradient_function=gradient_function
+        )
+        self._damping_coeff = damping_coeff
+        self._mass_diag_sqrt = mass_diag_sqrt
+        self._num_leapfrog_steps = num_leapfrog_steps
+        self._sync_function = None
+
+    def leapfrog_step(self, x, v, t, t_idx, classes):
+        step_size = self.step_sizes[t]
+        return _leapfrog_step(
+            x,
+            v,
+            lambda _x: self.gradient_function(_x, t, t_idx, classes),
+            step_size,
+            self._mass_diag_sqrt[t_idx],
+            self._num_leapfrog_steps,
+        )
+
+    @th.no_grad()
+    def sample_step(self, x, t, t_idx, classes=None):
+        # Sample Momentum
+        v = th.randn_like(x) * self._mass_diag_sqrt[t_idx]
+        self.accept_ratio[t] = list()
+        self.all_accepts[t] = list()
+
+        for _ in range(self.num_samples_per_step):
+            # Partial Momentum Refreshment
+            eps = th.randn_like(x)
+            v_prime = (
+                v * self._damping_coeff + np.sqrt(1.0 - self._damping_coeff**2) * eps * self._mass_diag_sqrt[t_idx]
+            )
+            x, v, _, _ = self.leapfrog_step(x, v_prime, t, t_idx, classes)
+        return x
+
+
 class AnnealedHMCScoreSampler(MCMCSampler):
     """Annealed Metropolis-Hasting Adjusted Hamiltonian Monte Carlo
 

@@ -4,7 +4,7 @@ from pathlib import Path
 import json
 from datetime import datetime
 from copy import deepcopy
-from typing import Tuple
+from typing import Tuple, Union
 import pickle
 import random
 import numpy as np
@@ -36,8 +36,8 @@ class SimulationConfig:
     # MCMC
     mcmc_method: Optional[str]
     mcmc_steps: Optional[int]
-    # accept ratio bounds in percent
-    mcmc_bounds: Optional[Tuple[float, float]]
+    # accept ratio bounds in percent or a str indicating beta sch. based step sizes.
+    mcmc_bounds: Optional[Union[str, Tuple[float, float]]]
     # Seed
     seed: Optional[int] = None
     # Meta
@@ -49,7 +49,8 @@ class SimulationConfig:
             cfg = json.load(cfg_file)
         cfg = SimulationConfig(**cfg)
         if cfg.mcmc_bounds is not None:
-            cfg.mcmc_bounds = tuple(cfg.mcmc_bounds)
+            if not isinstance(cfg.mcmc_bounds, str):
+                cfg.mcmc_bounds = tuple(cfg.mcmc_bounds)
         cfg.results_dir = Path(cfg.results_dir)
         cfg._validate()
         return cfg
@@ -57,9 +58,11 @@ class SimulationConfig:
     def _validate(self):
         if self.mcmc_method is not None:
             assert self.mcmc_steps is not None and self.mcmc_bounds is not None
-            for b in self.mcmc_bounds:
-                assert b >= 0 and b <= 100
-            assert self.mcmc_bounds[0] < self.mcmc_bounds[1]
+            if not isinstance(self.mcmc_bounds, str):
+                for b in self.mcmc_bounds:
+                    # Safety check to find if decimal value entered instead of pct.
+                    assert b >= 1 and b <= 100
+                assert self.mcmc_bounds[0] < self.mcmc_bounds[1]
 
     def save(self, sim_dir: Path):
         tmp_config = deepcopy(self)
