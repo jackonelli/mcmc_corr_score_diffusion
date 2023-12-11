@@ -28,7 +28,7 @@ class MCMCSampler(ABC):
         self.gradient_function = gradient_function
 
 
-class AnnealedULASampler(MCMCSampler):
+class AnnealedULAScoreSampler(MCMCSampler):
     """
     Annealed Unadjusted-Langevin Algorithm
     """
@@ -95,20 +95,20 @@ class AnnealedLAScoreSampler(MCMCSampler):
         self.n_trapets = n_trapets
 
     @th.no_grad()
-    def sample_step(self, x, t, classes=None):
+    def sample_step(self, x, t, t_idx, classes=None):
         dims = x.dim()
         self.accept_ratio[t] = list()
         self.all_accepts[t] = list()
 
         for i in range(self.num_samples_per_step):
-            ss = self.step_sizes[t]
+            ss = self.step_sizes[t_idx]
             std = (2 * ss) ** 0.5
-            grad = self.gradient_function(x, t, classes)
+            grad = self.gradient_function(x, t, t_idx, classes)
             mean_x = x + grad * ss
 
             noise = th.randn_like(x) * std
             x_hat = mean_x + noise
-            grad_hat = self.gradient_function(x_hat, t, classes)
+            grad_hat = self.gradient_function(x_hat, t, t_idx, classes)
             mean_x_hat = x_hat + grad_hat * ss
             # Correction
             logp_reverse = -0.5 * th.sum((x - mean_x_hat) ** 2) / std**2
@@ -117,20 +117,14 @@ class AnnealedLAScoreSampler(MCMCSampler):
             def energy_s(ss_):
                 diff = x_hat - x
                 x_ = x + ss_[0] * diff
-                energy = th.unsqueeze(th.sum(self.gradient_function(x_, t, classes) * diff), dim=0)
+                e = (self.gradient_function(x_, t, t_idx, classes) * diff).sum(dim=tuple(range(1, dims))).reshape(-1, 1)
                 for j in range(1, len(ss_)):
                     x_ = x + ss_[j] * diff
-                    energy = th.concatenate(
-                        (
-                            energy,
-                            th.unsqueeze(th.sum(self.gradient_function(x_, t, classes) * diff), dim=0),
-                        )
-                    )
-                return energy
+                    e = th.cat((e, (self.gradient_function(x_, t, t_idx, classes) * diff).sum(dim=tuple(range(1, dims))).reshape(-1, 1)), 1)
+                return th.trapz(e)
 
             intermediate_steps = th.linspace(0, 1, steps=self.n_trapets).cuda()
-            energys = energy_s(intermediate_steps)
-            diff_logp_x = th.trapezoid(energys, intermediate_steps)
+            diff_logp_x = energy_s(intermediate_steps)
             logp_accept = diff_logp_x + logp_reverse - logp_forward
 
             u = th.rand(x.shape[0]).to(x.device)

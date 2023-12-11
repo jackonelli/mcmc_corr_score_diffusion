@@ -30,9 +30,9 @@ from diffusers.utils import (
     is_bs4_available,
     is_ftfy_available,
     logging,
-    randn_tensor,
     replace_example_docstring,
 )
+from diffusers.utils.torch_utils import randn_tensor
 
 logger = logging.get_logger(__name__)
 if is_bs4_available():
@@ -311,6 +311,11 @@ class IFPipeline(DiffusionPipeline, LoraLoaderMixin):
             watermarker=watermarker,
         )
         self.register_to_config(requires_safety_checker=requires_safety_checker)
+        current_rng_state = torch.get_rng_state()
+        initial_seed = torch.initial_seed()
+        torch.manual_seed(initial_seed)
+        self.rng_state = torch.get_rng_state()
+        torch.set_rng_state(current_rng_state)
 
     def enable_sequential_cpu_offload(self, gpu_id=0):
         r"""
@@ -1047,15 +1052,20 @@ class IFPipeline(DiffusionPipeline, LoraLoaderMixin):
                     noise_pred, _ = noise_pred.split(model_input.shape[1], dim=1)
 
                 # compute the previous noisy sample x_t -> x_t-1
+
+                current_rng_state = torch.get_rng_state()
+                torch.set_rng_state(self.rng_state)
                 intermediate_images = self.scheduler.step(
                     noise_pred, t, intermediate_images, **extra_step_kwargs, return_dict=False
                 )[0]
+                self.rng_state = torch.get_rng_state()
+                torch.set_rng_state(current_rng_state)
 
                 if t > 0:  # 50:
                     # The score functions in the last 50 steps don't really change the image
                     intermediate_images_canvas = make_canvas(intermediate_images, canvas_size, sizes,
                                                              in_channels=self.unet.config.in_channels)
-                    intermediate_images = sampler.sample_step(intermediate_images_canvas, t-1, prompt_embeds)
+                    intermediate_images = sampler.sample_step(intermediate_images_canvas, t-1, t-1, prompt_embeds)
                     intermediate_images = extract_latents(intermediate_images, sizes)
 
                 # call the callback, if provided

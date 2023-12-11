@@ -19,7 +19,8 @@ from src.model.resnet import load_classifier_t
 from src.model.unet import load_mnist_diff
 from src.guidance.base import GuidanceSampler, MCMCGuidanceSampler
 from src.guidance.classifier_full import ClassifierFullGuidance
-from src.samplers.mcmc import AnnealedHMCScoreSampler
+from src.samplers.mcmc import AnnealedHMCScoreSampler, AnnealedLAScoreSampler, AnnealedUHMCScoreSampler, \
+    AnnealedULAScoreSampler
 from exp.utils import SimulationConfig, setup_results_dir, get_step_size
 from src.utils.seeding import set_seed
 
@@ -75,9 +76,19 @@ def main():
     else:
         assert config.mcmc_steps is not None and config.mcmc_bounds is not None
         step_sizes = get_step_size(
-            models_dir / "step_sizes", config.name, config.num_respaced_diff_steps, config.mcmc_bounds
+            models_dir / "step_sizes", config.mcmc_method, config.num_respaced_diff_steps, config.mcmc_bounds
         )
-        mcmc_sampler = AnnealedHMCScoreSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
+        if config.mcmc_method == "hmc":
+            mcmc_sampler = AnnealedHMCScoreSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
+        elif config.mcmc_method == "la":
+            mcmc_sampler = AnnealedLAScoreSampler(config.mcmc_steps, step_sizes, None)
+        elif config.mcmc_method == "uhmc":
+            mcmc_sampler = AnnealedUHMCScoreSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
+        elif config.mcmc_method == "ula":
+            mcmc_sampler = AnnealedULAScoreSampler(config.mcmc_steps, step_sizes, None)
+        else:
+            print(f"Incorrect MCMC method: '{config.mcmc_method}'")
+
         guid_sampler = MCMCGuidanceSampler(
             diff_model=diff_model,
             diff_proc=diff_sampler,

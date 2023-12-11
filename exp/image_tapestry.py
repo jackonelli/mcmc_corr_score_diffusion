@@ -8,7 +8,13 @@ from src.samplers.mcmc import AnnealedHMCScoreSampler
 import torch
 import pickle
 import numpy as np
+from src.utils.seeding import set_seed
 
+# Set Seed
+seed = 0
+
+generator = torch.Generator('cuda').manual_seed(seed)
+set_seed(seed)
 
 has_cuda = torch.cuda.is_available()
 device = torch.device('cpu' if not has_cuda else 'cuda')
@@ -55,7 +61,7 @@ if __name__ == '__main__':
     steps = 1000
 
     # Save image
-    save_file = 'space_seed_0_1000_overlap'
+    save_file = 'space_seed0_1000_overlap'
 
     # Stage 2
     stage2 = False
@@ -63,12 +69,8 @@ if __name__ == '__main__':
     # Construct Sampler
     sampler = AnnealedHMCScoreSampler(mcmc_steps, step_sizes, 0.9, stage_1.scheduler.betas, 3, None)
 
-    # Set Seed
-    seed = 0
-    generator = torch.Generator('cuda').manual_seed(seed)
-
     color_lookup = {}
-    np.random.seed(seed)
+
     for k, v in context.items():
         color_lookup[v['string']] = (np.random.uniform(size=(3,)), k[0]**2)
 
