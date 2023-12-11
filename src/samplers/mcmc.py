@@ -44,17 +44,34 @@ class AnnealedULASampler(MCMCSampler):
         )
         self._sync_function = None
         self._noise_function = None
-        self._gradient_fn_unnorm = None
+        self.gradient_function = None
 
     @th.no_grad()
-    def sample_step(self, x: th.Tensor, t: int, text_embeddings: th.Tensor):
+    # NB: t_idx not in use.
+    def sample_step(self, x: th.Tensor, t: int, t_idx: int, classes: th.Tensor):
         for i in range(self.num_samples_per_step):
             ss = self.step_sizes[t]
             std = (2 * ss) ** 0.5
-            grad = self._gradient_fn_unnorm(x, t, text_embeddings)
+            grad = self.gradient_function(x, t, t_idx, classes)
             noise = th.randn_like(x) * std
             x = x + grad * ss + noise
         return x
+
+    # @th.no_grad()
+    # def sample_step(self, x, t, t_idx, classes=None):
+    #     # Sample Momentum
+    #     v = th.randn_like(x) * self._mass_diag_sqrt[t_idx]
+    #     self.accept_ratio[t] = list()
+    #     self.all_accepts[t] = list()
+
+    #     for _ in range(self.num_samples_per_step):
+    #         # Partial Momentum Refreshment
+    #         eps = th.randn_like(x)
+    #         v_prime = (
+    #             v * self._damping_coeff + np.sqrt(1.0 - self._damping_coeff**2) * eps * self._mass_diag_sqrt[t_idx]
+    #         )
+    #         x, v, _, _ = self.leapfrog_step(x, v_prime, t, t_idx, classes)
+    #     return x
 
 
 class AnnealedLAScoreSampler(MCMCSampler):
