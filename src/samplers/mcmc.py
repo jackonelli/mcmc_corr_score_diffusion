@@ -120,7 +120,15 @@ class AnnealedLAScoreSampler(MCMCSampler):
                 e = (self.gradient_function(x_, t, t_idx, classes) * diff).sum(dim=tuple(range(1, dims))).reshape(-1, 1)
                 for j in range(1, len(ss_)):
                     x_ = x + ss_[j] * diff
-                    e = th.cat((e, (self.gradient_function(x_, t, t_idx, classes) * diff).sum(dim=tuple(range(1, dims))).reshape(-1, 1)), 1)
+                    e = th.cat(
+                        (
+                            e,
+                            (self.gradient_function(x_, t, t_idx, classes) * diff)
+                            .sum(dim=tuple(range(1, dims)))
+                            .reshape(-1, 1),
+                        ),
+                        1,
+                    )
                 return th.trapz(e)
 
             intermediate_steps = th.linspace(0, 1, steps=self.n_trapets).cuda()

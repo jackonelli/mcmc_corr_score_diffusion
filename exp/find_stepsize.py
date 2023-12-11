@@ -85,10 +85,12 @@ def main():
     num_samples = args.num_samples
 
     mcmc_steps = args.n_mcmc_steps
-    if args.mcmc == "HMC":
+    if args.mcmc == "hmc":
         mcmc_sampler = AnnealedHMCScoreSampler(mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
-    else:
+    elif args.mcmc == "la":
         mcmc_sampler = AnnealedLAScoreSampler(mcmc_steps, step_sizes, None)
+    else:
+        print(f"Incorrect MCMC method: '{args.mcmc}'")
     max_iter = args.max_iter
 
     guidance = ClassifierFullGuidance(classifier, lambda_=args.guid_scale)
@@ -160,7 +162,7 @@ def parse_args():
         "--accept_rate_bound", default=[0.6, 0.8], nargs="+", type=float, help="Acceptance ratio bounds"
     )
     parser.add_argument("--max_iter", default=20, type=int, help="Number of search iterations per time step")
-    parser.add_argument("--mcmc", default="HMC", type=str, choices=["HMC", "LA"], help="Type of MCMC sampler")
+    parser.add_argument("--mcmc", default="hmc", type=str, choices=["hmc", "la"], help="Type of MCMC sampler")
     parser.add_argument("--n_mcmc_steps", default=1, type=int, help="Number of MCMC steps")
     parser.add_argument(
         "--respaced_num_diff_steps",

@@ -19,8 +19,12 @@ from src.model.resnet import load_classifier_t
 from src.model.unet import load_mnist_diff
 from src.guidance.base import GuidanceSampler, MCMCGuidanceSampler
 from src.guidance.classifier_full import ClassifierFullGuidance
-from src.samplers.mcmc import AnnealedHMCScoreSampler, AnnealedLAScoreSampler, AnnealedUHMCScoreSampler, \
-    AnnealedULAScoreSampler
+from src.samplers.mcmc import (
+    AnnealedHMCScoreSampler,
+    AnnealedLAScoreSampler,
+    AnnealedUHMCScoreSampler,
+    AnnealedULAScoreSampler,
+)
 from exp.utils import SimulationConfig, setup_results_dir, get_step_size
 from src.utils.seeding import set_seed
 
@@ -46,6 +50,7 @@ def main():
     channels, image_size = config.num_channels, config.image_size
     # Load diff. and classifier models
     if "mnist" in config.diff_model:
+        dataset_name = "mnist"
         channels, image_size = 1, 28
         beta_schedule, post_var = improved_beta_schedule, "beta"
         num_classes = 10
@@ -54,6 +59,7 @@ def main():
         classifier = load_classifier_t(model_path=classifier_path, dev=device)
         classifier.eval()
     elif "256x256_diffusion" in config.diff_model:
+        dataset_name = "imagenet"
         beta_schedule, post_var = linear_beta_schedule, "learned"
         num_classes = 1000
         diff_model = load_guided_diff_unet(model_path=diff_model_path, dev=device, class_cond=config.class_cond)
@@ -75,9 +81,7 @@ def main():
         guid_sampler = GuidanceSampler(diff_model, diff_sampler, guidance, diff_cond=config.class_cond)
     else:
         assert config.mcmc_steps is not None and config.mcmc_bounds is not None
-        step_sizes = get_step_size(
-            models_dir / "step_sizes", config.mcmc_method, config.num_respaced_diff_steps, config.mcmc_bounds
-        )
+        step_sizes = get_step_size(models_dir / "step_sizes", dataset_name, config.mcmc_method)
         if config.mcmc_method == "hmc":
             mcmc_sampler = AnnealedHMCScoreSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
         elif config.mcmc_method == "la":

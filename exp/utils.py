@@ -71,10 +71,10 @@ class SimulationConfig:
             json.dump(asdict(tmp_config), outfile, indent=4, sort_keys=False)
 
 
-def get_step_size(step_size_dir: Path, name: str, steps: int, bounds: Tuple[float, float]):
+def get_step_size(step_size_dir: Path, dataset_name: str, mcmc_method: str):
     # print("Warning: using steps from T_resp = 500")
     # steps = 500
-    path = step_size_dir / f"{name}_{steps}_{bounds[0]}_{bounds[1]}.p"
+    path = step_size_dir / f"{dataset_name}_{mcmc_method}.p"
     assert path.exists(), f"Step size file '{path}' not found"
     with open(path, "rb") as f:
         res = pickle.load(f)
