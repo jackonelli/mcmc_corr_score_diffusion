@@ -45,6 +45,7 @@ class AnnealedULAEnergySampler(MCMCSampler):
         @param num_samples_per_step: Number of ULA steps per timestep t
         @param step_sizes: Step sizes for each t
         @param gradient_function: Function that returns the score for a given x, t, and text_embedding
+        @param energy_function: Function that returns the energy for a given x, t, and text_embedding
         """
         super().__init__(
             num_samples_per_step=num_samples_per_step, step_sizes=step_sizes, gradient_function=gradient_function,
@@ -129,8 +130,7 @@ class AnnealedLAScoreSampler(MCMCSampler):
 
 
 class AnnealedLAEnergySampler(MCMCSampler):
-    """Annealed Metropolis-Hasting Adjusted Langevin Algorithm
-
+    """Annealed Metropolis-Hasting Adjusted Langevin Algorithm using energy parameterization
     """
 
     def __init__(self, num_samples_per_step: int, step_sizes, gradient_function, energy_function=None):
@@ -205,9 +205,7 @@ def estimate_energy_diff_linear(gradient_function, x, x_hat, t, t_idx, ss_, clas
 
 
 class AnnealedUHMCScoreSampler(MCMCSampler):
-    """Annealed Metropolis-Hasting Adjusted Hamiltonian Monte Carlo
-
-    Trapezoidal rule is computed with the intermediate steps of HMC (leapfrog steps)
+    """Annealed Unadjusted Hamiltonian Monte Carlo using score parameterization
     """
 
     def __init__(
@@ -233,18 +231,6 @@ class AnnealedUHMCScoreSampler(MCMCSampler):
         self._damping_coeff = damping_coeff
         self._mass_diag_sqrt = mass_diag_sqrt
         self._num_leapfrog_steps = num_leapfrog_steps
-        self._sync_function = None
-
-    def leapfrog_step(self, x, v, t, t_idx, classes):
-        step_size = self.step_sizes[t]
-        return _leapfrog_step(
-            x,
-            v,
-            lambda _x: self.gradient_function(_x, t, t_idx, classes),
-            step_size,
-            self._mass_diag_sqrt[t_idx],
-            self._num_leapfrog_steps,
-        )
 
     @th.no_grad()
     def sample_step(self, x, t, t_idx, classes=None):
@@ -255,11 +241,59 @@ class AnnealedUHMCScoreSampler(MCMCSampler):
 
         for _ in range(self.num_samples_per_step):
             # Partial Momentum Refreshment
-            eps = th.randn_like(x)
-            v_prime = (
-                v * self._damping_coeff + np.sqrt(1.0 - self._damping_coeff**2) * eps * self._mass_diag_sqrt[t_idx]
-            )
-            x, v, _, _ = self.leapfrog_step(x, v_prime, t, t_idx, classes)
+            v_prime = get_v_prime(v=v, damping_coeff=self._damping_coeff, mass_diag_sqrt=self._mass_diag_sqrt[t])
+
+            x, v, _, _ = leapfrog_steps(x_0=x, v_0=v_prime, t=t, t_idx=t_idx,gradient_function=self.gradient_function,
+                                        step_size=self.step_sizes[t], mass_diag_sqrt=self._mass_diag_sqrt[t],
+                                        num_steps=self._num_leapfrog_steps, classes=classes)
+        return x
+
+
+class AnnealedUHMCEnergySampler(MCMCSampler):
+    """Annealed Unadjusted Hamiltonian Monte Carlo using energy-parameterization
+    """
+
+    def __init__(
+        self,
+        num_samples_per_step: int,
+        step_sizes: Dict[int, float],
+        damping_coeff: float,
+        mass_diag_sqrt: th.Tensor,
+        num_leapfrog_steps: int,
+        gradient_function: Callable,
+        energy_function: Optional[Callable] = None,
+    ):
+        """
+        @param num_samples_per_step: Number of HMC steps per timestep t
+        @param step_sizes: Step size for leapfrog steps for each t
+        @param damping_coeff: Damping coefficient
+        @param mass_diag_sqrt: Square root of mass diagonal matrix for each t
+        @param num_leapfrog_steps: Number of leapfrog steps per HMC step
+        @param gradient_function: Function that returns the score for a given x, t, and text_embedding
+        @param energy_function: Function that returns the energy for a given x, t, and text_embedding
+        """
+        super().__init__(
+            num_samples_per_step=num_samples_per_step, step_sizes=step_sizes, gradient_function=gradient_function,
+            energy_function=energy_function
+        )
+        self._damping_coeff = damping_coeff
+        self._mass_diag_sqrt = mass_diag_sqrt
+        self._num_leapfrog_steps = num_leapfrog_steps
+
+    def sample_step(self, x, t, t_idx, classes=None):
+        # Sample Momentum
+        v = th.randn_like(x) * self._mass_diag_sqrt[t_idx]
+        self.accept_ratio[t] = list()
+        self.all_accepts[t] = list()
+
+        for _ in range(self.num_samples_per_step):
+            # Partial Momentum Refreshment
+            v_prime = get_v_prime(v=v, damping_coeff=self._damping_coeff, mass_diag_sqrt=self._mass_diag_sqrt[t])
+
+            x, v, _, _ = leapfrog_steps(x_0=x, v_0=v_prime, t=t, t_idx=t_idx,gradient_function=self.gradient_function,
+                                        step_size=self.step_sizes[t], mass_diag_sqrt=self._mass_diag_sqrt[t],
+                                        num_steps=self._num_leapfrog_steps, classes=classes)
+            x = x.detach()
         return x
 
 
@@ -293,17 +327,6 @@ class AnnealedHMCScoreSampler(MCMCSampler):
         self._mass_diag_sqrt = mass_diag_sqrt
         self._num_leapfrog_steps = num_leapfrog_steps
 
-    def leapfrog_step(self, x, v, t, t_idx, classes):
-        step_size = self.step_sizes[t]
-        return _leapfrog_step(
-            x,
-            v,
-            lambda _x: self.gradient_function(_x, t, t_idx, classes),
-            step_size,
-            self._mass_diag_sqrt[t_idx],
-            self._num_leapfrog_steps,
-        )
-
     @th.no_grad()
     def sample_step(self, x, t, t_idx, classes=None):
         dims = x.dim()
@@ -315,17 +338,20 @@ class AnnealedHMCScoreSampler(MCMCSampler):
 
         for i in range(self.num_samples_per_step):
             # Partial Momentum Refreshment
-            eps = th.randn_like(x)
-            v_prime = (
-                v * self._damping_coeff + np.sqrt(1.0 - self._damping_coeff**2) * eps * self._mass_diag_sqrt[t_idx]
-            )
-            x_next, v_next, xs, grads = self.leapfrog_step(x, v_prime, t, t_idx, classes)
+            v_prime = get_v_prime(v=v, damping_coeff=self._damping_coeff, mass_diag_sqrt=self._mass_diag_sqrt[t])
 
-            logp_v_p = -0.5 * (v_prime**2 / self._mass_diag_sqrt[t_idx] ** 2).sum(dim=tuple(range(1, dims)))
-            logp_v = -0.5 * (v_next**2 / self._mass_diag_sqrt[t_idx] ** 2).sum(dim=tuple(range(1, dims)))
+            x_next, v_next, xs, grads = leapfrog_steps(x_0=x, v_0=v_prime, t=t, t_idx=t_idx,
+                                                       gradient_function=self.gradient_function,
+                                                       step_size=self.step_sizes[t],
+                                                       mass_diag_sqrt=self._mass_diag_sqrt[t],
+                                                       num_steps=self._num_leapfrog_steps, classes=classes)
 
-            diff_logp_x = self.estimate_energy_diff(xs, grads, dims)
-            logp_accept = logp_v - logp_v_p + diff_logp_x
+            logp_v_p, logp_v = transition_hmc(v_prime=v_prime, v_next=v_next,
+                                              mass_diag_sqrt=self._mass_diag_sqrt[t_idx], dims=dims)
+
+            # Energy diff estimation
+            energy_diff = estimate_energy_diff(xs, grads, dims)
+            logp_accept = logp_v - logp_v_p + energy_diff
 
             u = th.rand(x_next.shape[0]).to(x_next.device)
             accept = (
@@ -341,27 +367,89 @@ class AnnealedHMCScoreSampler(MCMCSampler):
             self.all_accepts[t].append(accept.detach().cpu().squeeze())
         return x
 
-    # TODO: Finish refactor
-    def estimate_energy_diff(self, xs_, grads_, dims):
-        e = (grads_[0] * (xs_[1] - xs_[0])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)
-        e = th.cat((e, (grads_[1] * (xs_[1] - xs_[0])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)), 1)
-        energy = th.trapz(e)
-        for j in range(1, len(xs_) - 1):
-            e = (grads_[j] * (xs_[j + 1] - xs_[j])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)
-            e = th.cat(
-                (e, (grads_[j + 1] * (xs_[j + 1] - xs_[j])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)), 1
+
+class AnnealedHMCEnergySampler(MCMCSampler):
+    """Annealed Metropolis-Hasting Adjusted Hamiltonian Monte Carlo using energy-parameterization
+    """
+
+    def __init__(
+        self,
+        num_samples_per_step: int,
+        step_sizes: Dict[int, float],
+        damping_coeff: float,
+        mass_diag_sqrt: th.Tensor,
+        num_leapfrog_steps: int,
+        gradient_function: Callable,
+        energy_function: Optional[Callable] = None,
+    ):
+        """
+        @param num_samples_per_step: Number of HMC steps per timestep t
+        @param step_sizes: Step size for leapfrog steps for each t
+        @param damping_coeff: Damping coefficient
+        @param mass_diag_sqrt: Square root of mass diagonal matrix for each t
+        @param num_leapfrog_steps: Number of leapfrog steps per HMC step
+        @param gradient_function: Function that returns the score for a given x, t, and text_embedding
+        @param energy_function: Function that returns the energy for a given x, t, and text_embedding
+        """
+        super().__init__(
+            num_samples_per_step=num_samples_per_step, step_sizes=step_sizes, gradient_function=gradient_function,
+            energy_function=energy_function
+        )
+        self._damping_coeff = damping_coeff
+        self._mass_diag_sqrt = mass_diag_sqrt
+        self._num_leapfrog_steps = num_leapfrog_steps
+
+    @th.no_grad()
+    def sample_step(self, x, t, t_idx, classes=None):
+        dims = x.dim()
+
+        # Sample Momentum
+        v = th.randn_like(x) * self._mass_diag_sqrt[t_idx]
+        self.accept_ratio[t] = list()
+        self.all_accepts[t] = list()
+
+        for i in range(self.num_samples_per_step):
+            # Partial Momentum Refreshment
+            v_prime = get_v_prime(v=v, damping_coeff=self._damping_coeff, mass_diag_sqrt=self._mass_diag_sqrt[t])
+
+            x_next, v_next, _, _ = leapfrog_steps(x_0=x, v_0=v_prime, t=t, t_idx=t_idx,
+                                                  gradient_function=self.gradient_function,
+                                                  step_size=self.step_sizes[t],
+                                                  mass_diag_sqrt=self._mass_diag_sqrt[t],
+                                                  num_steps=self._num_leapfrog_steps, classes=classes)
+
+            logp_v_p, logp_v = transition_hmc(v_prime=v_prime, v_next=v_next,
+                                              mass_diag_sqrt=self._mass_diag_sqrt[t_idx], dims=dims)
+
+            # Energy diff estimation
+            energy_diff = self.energy_function(x_next, t, t_idx, classes) - self.energy_function(x, t, t_idx, classes)
+            logp_accept = logp_v - logp_v_p + energy_diff
+
+            u = th.rand(x_next.shape[0]).to(x_next.device)
+            accept = (
+                (u < th.exp(logp_accept))
+                .to(th.float32)
+                .reshape((x_next.shape[0],) + tuple(([1 for _ in range(dims - 1)])))
             )
-            energy += th.trapz(e)
-        return energy
+
+            # update samples
+            x = accept * x_next + (1 - accept) * x
+            v = accept * v_next + (1 - accept) * v_prime
+            self.accept_ratio[t].append((th.sum(accept) / accept.shape[0]).detach().cpu().item())
+            self.all_accepts[t].append(accept.detach().cpu().squeeze())
+        return x
 
 
-def _leapfrog_step(
+def leapfrog_steps(
     x_0: th.Tensor,
     v_0: th.Tensor,
-    gradient_target: Callable,
+    t: int,
+    t_idx: int,
+    gradient_function: Callable,
     step_size: float,
     mass_diag_sqrt: th.Tensor,
     num_steps: int,
+    classes: Optional[th.Tensor],
 ):
     """Multiple leapfrog steps with"""
     x_k = x_0.clone()
@@ -372,17 +460,43 @@ def _leapfrog_step(
     mass_diag = mass_diag_sqrt**2.0
     xs, grads = list(), list()
     xs.append(x_k)
-    grad = gradient_target(x_k)
-    grads.append(grad.clone())
+    grad = gradient_function(x_k, t, t_idx, classes)
+    grads.append(grad.clone().detach())
 
     for _ in range(num_steps):  # Inefficient version - should combine half steps
         v_k += 0.5 * step_size * grad  # half step in v
         x_k += step_size * v_k / mass_diag  # Step in x
-        xs.append(x_k.clone())
-        grad = gradient_target(x_k)
-        grads.append(grad.clone())
+        xs.append(x_k.clone().detach())
+        grad = gradient_function(x_k, t, t_idx, classes)
+        grads.append(grad.clone().detach())
         v_k += 0.5 * step_size * grad  # half step in v
+        x_k = x_k.detach()
     return x_k, v_k, xs, grads
+
+
+def get_v_prime(v, damping_coeff, mass_diag_sqrt):
+    eps = th.randn_like(v)
+    v_prime = v * damping_coeff + np.sqrt(1.0 - damping_coeff ** 2) * eps * mass_diag_sqrt
+    return v_prime
+
+
+def transition_hmc(v_prime, v_next, mass_diag_sqrt, dims):
+    logp_v_p = -0.5 * (v_prime**2 / mass_diag_sqrt ** 2).sum(dim=tuple(range(1, dims)))
+    logp_v = -0.5 * (v_next**2 / mass_diag_sqrt ** 2).sum(dim=tuple(range(1, dims)))
+    return logp_v_p, logp_v
+
+
+def estimate_energy_diff(xs_, grads_, dims):
+    e = (grads_[0] * (xs_[1] - xs_[0])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)
+    e = th.cat((e, (grads_[1] * (xs_[1] - xs_[0])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)), 1)
+    energy = th.trapz(e)
+    for j in range(1, len(xs_) - 1):
+        e = (grads_[j] * (xs_[j + 1] - xs_[j])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)
+        e = th.cat(
+            (e, (grads_[j + 1] * (xs_[j + 1] - xs_[j])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)), 1
+        )
+        energy += th.trapz(e)
+    return energy
 
 
 class AdaptiveStepSizeMCMCSamplerWrapper(MCMCSampler):
@@ -413,6 +527,7 @@ class AdaptiveStepSizeMCMCSamplerWrapper(MCMCSampler):
         while not step_found and i < self.max_iter:
             torch.manual_seed(t)
             x_ = self.sampler.sample_step(x, t, t_idx, classes)
+            x_ = x_.detach()
             a_rate = np.mean(self.sampler.accept_ratio[t])
             step_s = self.sampler.step_sizes[t].clone()
             self.res[t]["accepts"].append(a_rate)

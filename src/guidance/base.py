@@ -149,7 +149,6 @@ class MCMCGuidanceSampler(GuidanceSampler):
         class_score = self.guidance.grad(x_t, t_tensor, classes, pred_noise)
         return class_score - pred_noise / sigma_t
 
-    # @th.no_grad()
     def sample(self, num_samples: int, classes: th.Tensor, device: th.device, shape: tuple, verbose=False):
         """Sampling from the backward process
         Sample points from the data distribution
