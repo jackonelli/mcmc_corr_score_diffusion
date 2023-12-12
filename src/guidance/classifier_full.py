@@ -42,3 +42,11 @@ class ClassifierFullGuidance(Guidance):
         else:
             grad_ = th.zeros_like(x_t)
         return grad_
+
+    @th.no_grad()
+    def log_prob(self, x_t, t, y):
+        logits = self.classifier(x_t, t)
+        log_p = logits_to_log_prob(logits)
+        # Get the log. probabilities of the correct classes
+        y_log_probs = log_p[th.arange(log_p.size(0)), y]
+        return y_log_probs

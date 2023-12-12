@@ -1,22 +1,25 @@
 import torch
 import torch as th
 import numpy as np
-from typing import Callable, Dict
+from typing import Callable, Dict, Optional
 import itertools
 from abc import ABC, abstractmethod
 import gc
 
 
 class MCMCSampler(ABC):
-    def __init__(self, num_samples_per_step: int, step_sizes: Dict[int, float], gradient_function: Callable):
+    def __init__(self, num_samples_per_step: int, step_sizes: Dict[int, float], gradient_function: Callable,
+                 energy_function: Optional[Callable] = None):
         """
         @param num_samples_per_step: Number of MCMC steps per timestep t
         @param step_sizes: Step sizes for each t
         @param gradient_function: Function that returns the score for a given x, t, and text_embedding
+        @param energy_function: Function that returns the energy for a given x, t, and text_embedding
         """
         self.step_sizes = step_sizes
         self.num_samples_per_step = num_samples_per_step
         self.gradient_function = gradient_function
+        self.energy_function = energy_function
         self.accept_ratio = dict()
         self.all_accepts = dict()
 
@@ -26,6 +29,34 @@ class MCMCSampler(ABC):
 
     def set_gradient_function(self, gradient_function):
         self.gradient_function = gradient_function
+
+    def set_energy_function(self, energy_function):
+        self.energy_function = energy_function
+
+
+class AnnealedULAEnergySampler(MCMCSampler):
+    """
+    Annealed Unadjusted-Langevin Algorithm
+    """
+
+    def __init__(self, num_samples_per_step: int, step_sizes: Dict[int, float], gradient_function: Callable,
+                 energy_function: Optional[Callable] = None):
+        """
+        @param num_samples_per_step: Number of ULA steps per timestep t
+        @param step_sizes: Step sizes for each t
+        @param gradient_function: Function that returns the score for a given x, t, and text_embedding
+        """
+        super().__init__(
+            num_samples_per_step=num_samples_per_step, step_sizes=step_sizes, gradient_function=gradient_function,
+            energy_function=energy_function
+        )
+
+    # NB: t_idx not in use.
+    def sample_step(self, x: th.Tensor, t: int, t_idx: int, classes: th.Tensor):
+        for i in range(self.num_samples_per_step):
+            x, _, _ = langevin_step(x, t, t_idx, classes, self.step_sizes, self.gradient_function)
+            x = x.detach()
+        return x
 
 
 class AnnealedULAScoreSampler(MCMCSampler):
@@ -42,36 +73,13 @@ class AnnealedULAScoreSampler(MCMCSampler):
         super().__init__(
             num_samples_per_step=num_samples_per_step, step_sizes=step_sizes, gradient_function=gradient_function
         )
-        self._sync_function = None
-        self._noise_function = None
-        self.gradient_function = None
 
     @th.no_grad()
     # NB: t_idx not in use.
     def sample_step(self, x: th.Tensor, t: int, t_idx: int, classes: th.Tensor):
         for i in range(self.num_samples_per_step):
-            ss = self.step_sizes[t]
-            std = (2 * ss) ** 0.5
-            grad = self.gradient_function(x, t, t_idx, classes)
-            noise = th.randn_like(x) * std
-            x = x + grad * ss + noise
+            x, _, _ = langevin_step(x, t, t_idx, classes, self.step_sizes, self.gradient_function)
         return x
-
-    # @th.no_grad()
-    # def sample_step(self, x, t, t_idx, classes=None):
-    #     # Sample Momentum
-    #     v = th.randn_like(x) * self._mass_diag_sqrt[t_idx]
-    #     self.accept_ratio[t] = list()
-    #     self.all_accepts[t] = list()
-
-    #     for _ in range(self.num_samples_per_step):
-    #         # Partial Momentum Refreshment
-    #         eps = th.randn_like(x)
-    #         v_prime = (
-    #             v * self._damping_coeff + np.sqrt(1.0 - self._damping_coeff**2) * eps * self._mass_diag_sqrt[t_idx]
-    #         )
-    #         x, v, _, _ = self.leapfrog_step(x, v_prime, t, t_idx, classes)
-    #     return x
 
 
 class AnnealedLAScoreSampler(MCMCSampler):
@@ -90,8 +98,6 @@ class AnnealedLAScoreSampler(MCMCSampler):
         super().__init__(
             num_samples_per_step=num_samples_per_step, step_sizes=step_sizes, gradient_function=gradient_function
         )
-        self._sync_function = None
-        self._noise_function = None
         self.n_trapets = n_trapets
 
     @th.no_grad()
@@ -101,39 +107,15 @@ class AnnealedLAScoreSampler(MCMCSampler):
         self.all_accepts[t] = list()
 
         for i in range(self.num_samples_per_step):
-            ss = self.step_sizes[t_idx]
-            std = (2 * ss) ** 0.5
-            grad = self.gradient_function(x, t, t_idx, classes)
-            mean_x = x + grad * ss
+            x_hat, mean_x, ss = langevin_step(x, t, t_idx, classes, self.step_sizes, self.gradient_function)
 
-            noise = th.randn_like(x) * std
-            x_hat = mean_x + noise
-            grad_hat = self.gradient_function(x_hat, t, t_idx, classes)
-            mean_x_hat = x_hat + grad_hat * ss
-            # Correction
-            logp_reverse = -0.5 * th.sum((x - mean_x_hat) ** 2) / std**2
-            logp_forward = -0.5 * th.sum((x_hat - mean_x) ** 2) / std**2
+            mean_x_hat = get_mean(self.gradient_function, x_hat, t, t_idx, ss, classes)
+            logp_reverse, logp_forward = transition_factor(x, mean_x, x_hat, mean_x_hat, ss)
 
-            def energy_s(ss_):
-                diff = x_hat - x
-                x_ = x + ss_[0] * diff
-                e = (self.gradient_function(x_, t, t_idx, classes) * diff).sum(dim=tuple(range(1, dims))).reshape(-1, 1)
-                for j in range(1, len(ss_)):
-                    x_ = x + ss_[j] * diff
-                    e = th.cat(
-                        (
-                            e,
-                            (self.gradient_function(x_, t, t_idx, classes) * diff)
-                            .sum(dim=tuple(range(1, dims)))
-                            .reshape(-1, 1),
-                        ),
-                        1,
-                    )
-                return th.trapz(e)
-
-            intermediate_steps = th.linspace(0, 1, steps=self.n_trapets).cuda()
-            diff_logp_x = energy_s(intermediate_steps)
-            logp_accept = diff_logp_x + logp_reverse - logp_forward
+            intermediate_steps = th.linspace(0, 1, steps=self.n_trapets).to(x.device)
+            energy_diff = estimate_energy_diff_linear(self.gradient_function, x, x_hat, t, t_idx, intermediate_steps,
+                                                      classes, dims)
+            logp_accept = energy_diff + logp_reverse - logp_forward
 
             u = th.rand(x.shape[0]).to(x.device)
             accept = (
@@ -145,31 +127,81 @@ class AnnealedLAScoreSampler(MCMCSampler):
 
         return x
 
-    def get_mean(self, x, t, t_idx, ss, classes):
-        """Get mean of transition distribution"""
-        grad = self.gradient_function(x, t, t_idx, classes)
-        return x + grad * ss
 
-    @staticmethod
-    def transition_factor(x, mean_x, x_hat, mean_x_hat, ss):
-        std = (2 * ss) ** 0.5
-        logp_reverse = -0.5 * th.sum((x - mean_x_hat) ** 2) / std**2
-        logp_forward = -0.5 * th.sum((x_hat - mean_x) ** 2) / std**2
-        return logp_reverse, logp_forward
+class AnnealedLAEnergySampler(MCMCSampler):
+    """Annealed Metropolis-Hasting Adjusted Langevin Algorithm
 
-    def estimate_energy_diff(self, x, x_hat, t, t_idx, ss_, classes):
-        diff = x_hat - x
-        x_ = x + ss_[0] * diff
-        energies = th.unsqueeze(th.sum(self.gradient_function(x_, t, t_idx, classes) * diff), dim=0)
-        for j in range(1, len(ss_)):
-            x_ = x + ss_[j] * diff
-            energies = th.concatenate(
-                (
-                    energies,
-                    th.unsqueeze(th.sum(self.gradient_function(x_, t, t_idx, classes) * diff), dim=0),
-                )
+    """
+
+    def __init__(self, num_samples_per_step: int, step_sizes, gradient_function, energy_function=None):
+        """
+        @param num_samples_per_step: Number of LA steps per timestep t
+        @param step_sizes: Step sizes for each t
+        @param gradient_function: Function that returns the score for a given x, t, and text_embedding
+        @param energy_function: Function that returns the energy for a given x, t, and text_embedding
+        """
+        super().__init__(
+            num_samples_per_step=num_samples_per_step, step_sizes=step_sizes, gradient_function=gradient_function,
+            energy_function=energy_function
+        )
+
+    def sample_step(self, x, t, t_idx, classes=None):
+        dims = x.dim()
+        self.accept_ratio[t] = list()
+        self.all_accepts[t] = list()
+
+        for i in range(self.num_samples_per_step):
+            x_hat, mean_x, ss = langevin_step(x, t, t_idx, classes, self.step_sizes, self.gradient_function)
+
+            mean_x_hat = get_mean(self.gradient_function, x_hat, t, t_idx, ss, classes)
+            logp_reverse, logp_forward = transition_factor(x, mean_x, x_hat, mean_x_hat, ss)
+
+            energy_diff = self.energy_function(x_hat, t, t_idx, classes) - self.energy_function(x, t, t_idx, classes)
+            logp_accept = energy_diff + logp_reverse - logp_forward
+
+            u = th.rand(x.shape[0]).to(x.device)
+            accept = (
+                (u < th.exp(logp_accept)).to(th.float32).reshape((x.shape[0],) + tuple(([1 for _ in range(dims - 1)])))
             )
-        return th.trapezoid(energies)
+            self.accept_ratio[t].append((th.sum(accept) / accept.shape[0]).detach().cpu().item())
+            self.all_accepts[t].append(accept.detach().cpu())
+            x = accept * x_hat + (1 - accept) * x
+
+        return x
+
+
+def langevin_step(x, t, t_idx, classes, step_sizes, gradient_function):
+    ss = step_sizes[t]
+    std = (2 * ss) ** 0.5
+    mean_x = get_mean(gradient_function, x, t, t_idx, ss, classes)
+    noise = th.randn_like(x) * std
+    x_hat = mean_x + noise
+    return x_hat, mean_x, ss
+
+
+def get_mean(gradient_function, x, t, t_idx, ss, classes):
+    """Get mean of transition distribution"""
+    grad = gradient_function(x, t, t_idx, classes)
+    return x + grad * ss
+
+
+def transition_factor(x, mean_x, x_hat, mean_x_hat, ss):
+    std = (2 * ss) ** 0.5
+    logp_reverse = -0.5 * th.sum((x - mean_x_hat) ** 2) / std**2
+    logp_forward = -0.5 * th.sum((x_hat - mean_x) ** 2) / std**2
+    return logp_reverse, logp_forward
+
+
+def estimate_energy_diff_linear(gradient_function, x, x_hat, t, t_idx, ss_, classes, dims):
+    diff = x_hat - x
+    x_ = x + ss_[0] * diff
+    e = (gradient_function(x_, t, t_idx, classes) * diff).sum(dim=tuple(range(1, dims))).reshape(-1, 1)
+    for j in range(1, len(ss_)):
+        x_ = x + ss_[j] * diff
+        e = th.cat((e,
+                    (gradient_function(x_, t, t_idx, classes) * diff).sum(dim=tuple(range(1, dims))).reshape(
+                        -1, 1)), 1)
+    return th.trapz(e)
 
 
 class AnnealedUHMCScoreSampler(MCMCSampler):
@@ -260,7 +292,6 @@ class AnnealedHMCScoreSampler(MCMCSampler):
         self._damping_coeff = damping_coeff
         self._mass_diag_sqrt = mass_diag_sqrt
         self._num_leapfrog_steps = num_leapfrog_steps
-        self._sync_function = None
 
     def leapfrog_step(self, x, v, t, t_idx, classes):
         step_size = self.step_sizes[t]
@@ -293,21 +324,9 @@ class AnnealedHMCScoreSampler(MCMCSampler):
             logp_v_p = -0.5 * (v_prime**2 / self._mass_diag_sqrt[t_idx] ** 2).sum(dim=tuple(range(1, dims)))
             logp_v = -0.5 * (v_next**2 / self._mass_diag_sqrt[t_idx] ** 2).sum(dim=tuple(range(1, dims)))
 
-            def energy_steps(xs_, grads_):
-                e = (grads_[0] * (xs_[1] - xs_[0])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)
-                e = th.cat((e, (grads_[1] * (xs_[1] - xs_[0])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)), 1)
-                energy = th.trapz(e)
-                for j in range(1, len(xs_) - 1):
-                    e = (grads_[j] * (xs_[j + 1] - xs_[j])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)
-                    e = th.cat(
-                        (e, (grads_[j + 1] * (xs_[j + 1] - xs_[j])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)), 1
-                    )
-                    energy += th.trapz(e)
-                return energy
-
-            diff_logp_x = energy_steps(xs, grads)
+            diff_logp_x = self.estimate_energy_diff(xs, grads, dims)
             logp_accept = logp_v - logp_v_p + diff_logp_x
-            # print("log_a", logp_accept)
+
             u = th.rand(x_next.shape[0]).to(x_next.device)
             accept = (
                 (u < th.exp(logp_accept))
@@ -323,13 +342,15 @@ class AnnealedHMCScoreSampler(MCMCSampler):
         return x
 
     # TODO: Finish refactor
-    def estimate_energy(self, xs_, grads_, dims):
+    def estimate_energy_diff(self, xs_, grads_, dims):
         e = (grads_[0] * (xs_[1] - xs_[0])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)
         e = th.cat((e, (grads_[1] * (xs_[1] - xs_[0])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)), 1)
         energy = th.trapz(e)
         for j in range(1, len(xs_) - 1):
             e = (grads_[j] * (xs_[j + 1] - xs_[j])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)
-            e = th.cat((e, (grads_[j + 1] * (xs_[j + 1] - xs_[j])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)), 1)
+            e = th.cat(
+                (e, (grads_[j + 1] * (xs_[j + 1] - xs_[j])).sum(dim=tuple(range(1, dims))).reshape(-1, 1)), 1
+            )
             energy += th.trapz(e)
         return energy
 
@@ -461,10 +482,10 @@ class AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize(MCMCSampler):
             torch.manual_seed(t)
             accepts = list()
             for j in range(n_batches - 1):
-                x_ = x[idx[j] : idx[j + 1]].to(self.device)
-                y_ = text_embeddings[idx[j] : idx[j + 1]].to(self.device)
+                x_ = x[idx[j]: idx[j + 1]].to(self.device)
+                y_ = text_embeddings[idx[j]: idx[j + 1]].to(self.device)
                 x_ = self.sampler.sample_step(x_, t, t_idx, y_)
-                x_next[idx[j] : idx[j + 1]] = x_.detach().cpu()
+                x_next[idx[j]: idx[j + 1]] = x_.detach().cpu()
                 accepts += list(itertools.chain(*[acc.numpy().tolist() for acc in self.sampler.all_accepts[t]]))
                 del x_
                 del y_

@@ -11,11 +11,14 @@ from einops import rearrange, reduce
 from src.model.base import EnergyModel
 
 
-def load_mnist_diff(diff_path: Path, device, image_size: int = 28):
+def load_mnist_diff(diff_path: Path, device, image_size: int = 28, energy: bool = False):
     """Load UNet diffusion model for MNIST"""
     time_emb_dim = 112
     channels = 1
-    unet = UNet(image_size, time_emb_dim, channels)
+    if energy:
+        unet = UNetEnergy(image_size, time_emb_dim, channels)
+    else:
+        unet = UNet(image_size, time_emb_dim, channels)
     unet.load_state_dict(th.load(diff_path))
     unet.to(device)
     unet.eval()
@@ -192,8 +195,8 @@ class UNetEnergy(UNet, EnergyModel):
         EnergyModel.__init__(self)
 
     def energy(self, x: th.Tensor, time: th.Tensor):
-        score = super().forward(x, time)
-        return ((score - x) ** 2).sum(dim=tuple(i for i in range(1, x.dim())))
+        out = super().forward(x, time)
+        return ((out - x) ** 2).sum(dim=tuple(i for i in range(1, x.dim())))
 
     def forward(self, x: th.Tensor, time: th.Tensor):
         energy = self.energy(x, time)
