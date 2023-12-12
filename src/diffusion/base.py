@@ -23,6 +23,7 @@ class DiffusionSampler(ABC):
         betas: th.Tensor,
         time_steps: th.Tensor,
         posterior_variance="beta",
+        energy: bool = False,
     ):
         self.time_steps = time_steps
         self.time_steps_idx = [i for i in range(len(time_steps))]
@@ -47,6 +48,12 @@ class DiffusionSampler(ABC):
             raise NotImplementedError
 
         self.posterior_log_variance_clipped = _compute_post_log_var(self.betas)
+
+        if energy:
+            self.require_grad = True
+        else:
+            self.require_grad = False
+
         current_rng_state = th.get_rng_state()
         initial_seed = th.initial_seed()
         th.manual_seed(initial_seed)
@@ -65,21 +72,26 @@ class DiffusionSampler(ABC):
             self.posterior_variance = self.posterior_variance.to(device)
         self.posterior_log_variance_clipped = self.posterior_log_variance_clipped.to(device)
 
-    @th.no_grad()
     def sample(self, model: nn.Module, num_samples: int, device: th.device, shape: tuple, verbose=False):
         """Sampling from the backward process
-        Sample points from the data distribution
+                Sample points from the data distribution
 
-        Args:
-            model (model to predict noise)
-            num_samples (number of samples)
-            device (the device the model is on)
-            shape (shape of data, e.g., (1, 28, 28))
+                Args:
+                    model (model to predict noise)
+                    num_samples (number of samples)
+                    device (the device the model is on)
+                    shape (shape of data, e.g., (1, 28, 28))
 
-        Returns:
-            all x through the (predicted) reverse diffusion steps
-        """
+                Returns:
+                    all x through the (predicted) reverse diffusion steps
+                """
+        if self.require_grad:
+            return self._sample_require_grad(model, num_samples, device, shape, verbose)
+        else:
+            return self._sample(model, num_samples, device, shape, verbose)
 
+    @th.no_grad()
+    def _sample(self, model: nn.Module, num_samples: int, device: th.device, shape: tuple, verbose=False):
         steps = []
         x_tm1 = th.randn((num_samples,) + shape).to(device)
         verbose_counter = 0
@@ -101,6 +113,34 @@ class DiffusionSampler(ABC):
                 log_var, _ = self._clip_var(x_tm1, t_idx_tensor, log_var)
                 sqrt_post_var_t = th.exp(0.5 * log_var)
             x_tm1 = self._sample_x_tm1_given_x_t(x_tm1, t_idx, pred_noise, sqrt_post_var_t=sqrt_post_var_t)
+            # steps.append((t, x_tm1.detach().cpu()))
+
+        return x_tm1, steps
+
+    def _sample_require_grad(self, model: nn.Module, num_samples: int, device: th.device, shape: tuple, verbose=False):
+        steps = []
+        x_tm1 = th.randn((num_samples,) + shape).to(device)
+        verbose_counter = 0
+
+        for t, t_idx in zip(self.time_steps.__reversed__(), reversed(self.time_steps_idx)):
+            x_tm1 = x_tm1.requires_grad_(True)
+            t_tensor = th.full((x_tm1.shape[0],), t.item(), device=device)
+            t_idx_tensor = th.full((x_tm1.shape[0],), t_idx, device=device)
+            if verbose and self.verbose_split[verbose_counter] == t:
+                print("Diff step", t.item())
+                verbose_counter += 1
+
+            # Use the model to predict noise and use the noise to step back
+            if not isinstance(self.posterior_variance, str):
+                pred_noise = model(x_tm1, t_tensor)
+                sqrt_post_var_t = th.sqrt(extract(self.posterior_variance, t_idx, x_tm1))
+                assert pred_noise.size() == x_tm1.size()
+            else:
+                pred_noise, log_var = model(x_tm1, t_tensor).split(x_tm1.size(1), dim=1)
+                log_var, _ = self._clip_var(x_tm1, t_idx_tensor, log_var)
+                sqrt_post_var_t = th.exp(0.5 * log_var)
+            x_tm1 = self._sample_x_tm1_given_x_t(x_tm1, t_idx, pred_noise, sqrt_post_var_t=sqrt_post_var_t)
+            x_tm1 = x_tm1.detach()
             # steps.append((t, x_tm1.detach().cpu()))
 
         return x_tm1, steps

@@ -60,6 +60,14 @@ class ReconstructionGuidance(Guidance):
         """
         return mean_x_0_given_x_t(x_t, pred_noise_t, self.alpha_bars[t])
 
+    @th.no_grad()
+    def log_prob(self, x_t, t, y):
+        logits = self.classifier(x_t, t)
+        log_p = logits_to_log_prob(logits)
+        # Get the log. probabilities of the correct classes
+        y_log_probs = log_p[th.arange(log_p.size(0)), y]
+        return y_log_probs
+
 
 def mean_x_0_given_x_t(x_t: th.Tensor, noise_pred_t: th.Tensor, a_bar_t: th.Tensor):
     """Compute E[x_0|x_t] using Tweedie's formula
