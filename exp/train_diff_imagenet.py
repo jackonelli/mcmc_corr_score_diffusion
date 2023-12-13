@@ -1,7 +1,9 @@
 """Script for training a UNet-based unconditional diffusion model for MNIST"""
 
 
+from argparse import ArgumentParser
 import sys
+
 
 sys.path.append(".")
 from pathlib import Path
@@ -10,45 +12,75 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 from src.data.imagenet import get_imagenet_data_loaders
 from src.diffusion.base import DiffusionSampler
+from src.diffusion.trainer import LearnedVarDiffusion
 from src.diffusion.beta_schedules import improved_beta_schedule
-from src.model.imagenet import UNet, DiffusionModel, load_imagenet_diff_from_checkpoint
+from src.model.guided_diff.unet import initialise_diff_unet, load_pretrained_diff_unet
 from src.utils.net import get_device, Device
 
 
 def main():
-    image_size = 112  # 224
-    time_emb_dim = 112
-    channels = 3
+    args = parse_args()
+    # Diff params
     num_diff_steps = 1000
-    batch_size = 64
-    dataloader_train, dataloader_val = get_imagenet_data_loaders(Path("/data/small-imagenet"), image_size, batch_size)
 
-    model_path = Path.cwd() / "models" / "uncond_unet_imagenet.pt"
-    if not model_path.parent.exists():
-        print(f"Save dir. '{model_path.parent}' does not exist.")
-        return
+    # Dataset params
+    image_size = 128  # 224
+    channels = 3
+    batch_size = args.batch_size
+    dataloader_train, dataloader_val = get_imagenet_data_loaders(
+        Path.home() / "data/small-imagenet", image_size, batch_size
+    )
 
-    dev = get_device(Device.GPU)
-    if model_path.exists():
-        print(f"Load existing model: {model_path.stem}")
-        unet = load_imagenet_diff_from_checkpoint(model_path, dev, image_size)
+    # Model params
+    device = get_device(Device.GPU)
+    if args.load_weights:
+        param_path = Path.cwd() / "models" / f"{args.load_weights}.pt"
+        diff_model = load_pretrained_diff_unet(
+            model_path=param_path, image_size=image_size, dev=device, class_cond=args.class_cond
+        )
+        diff_model.train()
     else:
-        unet = UNet(image_size, time_emb_dim, channels).to(dev)
+        diff_model = initialise_diff_unet(image_size=image_size, dev=device, class_cond=args.class_cond)
+        diff_model.train()
 
-    unet.train()
+    model_path = Path.cwd() / "models" / "imagenet_diff_128.pt"
+    assert model_path.parent.exists(), f"Save dir. '{model_path.parent}' does not exist."
+    x_t = th.randn((batch_size, channels, image_size, image_size)).to(device)
+    ts = th.randint(low=0, high=num_diff_steps, size=(batch_size,)).to(device)
+    out = diff_model(x_t, ts)
+    print(out.size())
+
+    # if model_path.exists():
+    #     print(f"Load existing model: {model_path.stem}")
+    #     unet = load_imagenet_diff_from_checkpoint(model_path, device, image_size)
+    # else:
+    #     unet = UNet(image_size, time_emb_dim, channels).to(device)
+
     betas = improved_beta_schedule(num_timesteps=num_diff_steps)
     time_steps = th.tensor([i for i in range(num_diff_steps)])
     diff_sampler = DiffusionSampler(betas, time_steps)
 
-    diffm = DiffusionModel(model=unet, loss_f=F.mse_loss, noise_scheduler=diff_sampler)
+    diffm = LearnedVarDiffusion(model=diff_model, loss_f=F.mse_loss, noise_scheduler=diff_sampler)
 
-    diffm.to(dev)
-    trainer = pl.Trainer(max_epochs=20, num_sanity_val_steps=0, accelerator="gpu", devices=1)
+    # diffm.to(device)
+    trainer = pl.Trainer(max_epochs=args.max_epochs, num_sanity_val_steps=1, accelerator="gpu", devices=1)
 
     trainer.fit(diffm, dataloader_train, dataloader_val)
 
     print("Saving model")
-    th.save(unet.state_dict(), model_path)
+    th.save(diff_model.state_dict(), model_path)
+
+
+def parse_args():
+    parser = ArgumentParser(prog="Sample from diffusion model")
+    parser.add_argument("--load_weights", type=str, help="Diffusion model file (without '.pt' extension)")
+    parser.add_argument("--class_cond", action="store_true", help="Use class conditional diff. model")
+    parser.add_argument("--max_epochs", type=int, default=2000, help="Max epochs")
+    parser.add_argument("--batch_size", type=int, default=64, help="Batch size")
+    parser.add_argument(
+        "--sim_batch", type=int, default=0, help="Simulation batch index, indexes parallell simulations."
+    )
+    return parser.parse_args()
 
 
 if __name__ == "__main__":

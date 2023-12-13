@@ -30,7 +30,53 @@ from src.model.guided_diff.nn import (
 NUM_CLASSES = 1000
 
 
-def load_guided_diff_unet(
+def initialise_diff_unet(
+    dev,
+    attention_resolutions=(32, 16, 8),
+    channel_mult=None,
+    class_cond=True,
+    dropout=0.0,
+    image_size=256,
+    learn_sigma=True,
+    num_channels=256,
+    num_head_channels=64,
+    num_heads=4,
+    num_heads_upsample=-1,
+    num_res_blocks=2,
+    resblock_updown=True,
+    use_checkpoint=False,
+    use_fp16=True,
+    use_new_attention_order=False,
+    use_scale_shift_norm=True,
+):
+    # dist_util.setup_dist()
+
+    model = UNetModel(
+        image_size=image_size,
+        in_channels=3,
+        model_channels=num_channels,
+        out_channels=(3 if not learn_sigma else 6),
+        num_res_blocks=num_res_blocks,
+        attention_resolutions=attention_ds(attention_resolutions, image_size),
+        dropout=dropout,
+        channel_mult=parse_channel_mult(channel_mult, image_size),
+        num_classes=(NUM_CLASSES),
+        use_checkpoint=use_checkpoint,
+        use_fp16=use_fp16,
+        num_heads=num_heads,
+        num_head_channels=num_head_channels,
+        num_heads_upsample=num_heads_upsample,
+        use_scale_shift_norm=use_scale_shift_norm,
+        resblock_updown=resblock_updown,
+        use_new_attention_order=use_new_attention_order,
+    )
+    model.to(dev)
+    if use_fp16:
+        model.convert_to_fp16()
+    return model
+
+
+def load_pretrained_diff_unet(
     model_path: Path,
     dev,
     attention_resolutions=(32, 16, 8),
@@ -61,7 +107,7 @@ def load_guided_diff_unet(
         attention_resolutions=attention_ds(attention_resolutions, image_size),
         dropout=dropout,
         channel_mult=parse_channel_mult(channel_mult, image_size),
-        num_classes=(NUM_CLASSES if class_cond else None),
+        num_classes=(NUM_CLASSES),
         use_checkpoint=use_checkpoint,
         use_fp16=use_fp16,
         num_heads=num_heads,
@@ -184,8 +230,8 @@ class UNetModel(nn.Module):
             linear(time_embed_dim, time_embed_dim),
         )
 
-        if self.num_classes is not None:
-            self.label_emb = nn.Embedding(num_classes, time_embed_dim)
+        # if self.num_classes is not None:
+        self.label_emb = nn.Embedding(num_classes, time_embed_dim)
 
         ch = input_ch = int(channel_mult[0] * model_channels)
         self.input_blocks = nn.ModuleList([TimestepEmbedSequential(conv_nd(dims, in_channels, ch, 3, padding=1))])
@@ -346,16 +392,16 @@ class UNetModel(nn.Module):
         :param y: an [N] Tensor of labels, if class-conditional.
         :return: an [N x 2*C x ...] Tensor of outputs.
         """
-        assert (y is not None) == (
-            self.num_classes is not None
-        ), "must specify y if and only if the model is class-conditional"
+        # assert (y is not None) == (
+        #     self.num_classes is not None
+        # ), "must specify y if and only if the model is class-conditional"
 
         hs = []
         emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
 
-        if self.num_classes is not None:
-            assert y.shape == (x.shape[0],)
-            emb = emb + self.label_emb(y)
+        # if self.num_classes is not None:
+        #    assert y.shape == (x.shape[0],)
+        #    emb = emb + self.label_emb(y)
 
         h = x.type(self.dtype)
         for module in self.input_blocks:
@@ -732,7 +778,7 @@ class QKVAttention(nn.Module):
 @th.no_grad()
 def test():
     dev = dist_util.dev()
-    model = load_guided_diff_unet(
+    model = load_pretrained_diff_unet(
         model_path=Path.cwd() / "models" / "256x256_diffusion_uncond.pt", dev=dev, class_cond=False
     )
     model.eval()
