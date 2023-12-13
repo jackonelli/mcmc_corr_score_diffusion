@@ -17,11 +17,14 @@ def load_mnist_diff(diff_path: Path, device, image_size: int = 28, energy: bool 
     channels = 1
     if energy:
         unet = UNetEnergy(image_size, time_emb_dim, channels)
+        unet.load_state_dict(th.load(diff_path))
+        unet.to(device)
+        unet.train()
     else:
         unet = UNet(image_size, time_emb_dim, channels)
-    unet.load_state_dict(th.load(diff_path))
-    unet.to(device)
-    unet.eval()
+        unet.load_state_dict(th.load(diff_path))
+        unet.to(device)
+        unet.eval()
     return unet
 
 

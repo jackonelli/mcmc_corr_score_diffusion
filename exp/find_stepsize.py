@@ -15,6 +15,8 @@ from src.samplers.mcmc import (
     AdaptiveStepSizeMCMCSamplerWrapper,
     AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize,
     AnnealedLAScoreSampler,
+    AnnealedHMCEnergySampler,
+    AnnealedLAEnergySampler
 )
 from src.model.resnet import load_classifier_t
 from src.utils.net import Device, get_device
@@ -45,13 +47,15 @@ def main():
     diff_model_path = models_dir / f"{args.diff_model}.pt"
     class_model_path = models_dir / f"{args.class_model}.pt"
     if "mnist" in args.diff_model:
+        dataset_name = "mnist"
         channels, image_size = 1, 28
         beta_schedule = improved_beta_schedule
-        diff_model = load_mnist_diff(diff_model_path, device)
+        diff_model = load_mnist_diff(diff_model_path, device, energy=args.energy)
         classifier = load_classifier_t(models_dir / class_model_path, device)
         posterior_variance = "beta"
         num_classes = 10
     elif "256x256_diffusion" in args.diff_model:
+        dataset_name = "imagenet"
         channels, image_size = 3, 256
         beta_schedule = linear_beta_schedule
         diff_model = load_guided_diff_unet(model_path=diff_model_path, dev=device, class_cond=args.class_cond)
@@ -86,9 +90,15 @@ def main():
 
     mcmc_steps = args.n_mcmc_steps
     if args.mcmc == "hmc":
-        mcmc_sampler = AnnealedHMCScoreSampler(mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
+        if args.energy:
+            mcmc_sampler = AnnealedHMCEnergySampler(mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
+        else:
+            mcmc_sampler = AnnealedHMCScoreSampler(mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
     elif args.mcmc == "la":
-        mcmc_sampler = AnnealedLAScoreSampler(mcmc_steps, step_sizes, None)
+        if args.energy:
+            mcmc_sampler = AnnealedLAEnergySampler(mcmc_steps, step_sizes, None)
+        else:
+            mcmc_sampler = AnnealedLAScoreSampler(mcmc_steps, step_sizes, None)
     else:
         print(f"Incorrect MCMC method: '{args.mcmc}'")
     max_iter = args.max_iter
@@ -134,7 +144,7 @@ def main():
 
     adaptive_step_sizes = sampler.res
     lower_bound, upper_bound = accept_rate_bound_pct
-    save_path = sim_dir / f"mnist_{respaced_T}_{lower_bound}_{upper_bound}.p"
+    save_path = sim_dir / f"{dataset_name}_{respaced_T}_{lower_bound}_{upper_bound}.p"
     pickle.dump(adaptive_step_sizes, open(save_path, "wb"))
 
 
@@ -159,7 +169,7 @@ def parse_args():
     parser.add_argument("--batch_size", default=10, type=int, help="Batch size")
     parser.add_argument("--num_samples", default=120, type=int, help="Number of samples for estimate acceptance ratio")
     parser.add_argument(
-        "--accept_rate_bound", default=[0.6, 0.8], nargs="+", type=float, help="Acceptance ratio bounds"
+        "--accept_rate_bound", default=[55, 65], nargs="+", type=float, help="Acceptance ratio bounds"
     )
     parser.add_argument("--max_iter", default=20, type=int, help="Number of search iterations per time step")
     parser.add_argument("--mcmc", default="hmc", type=str, choices=["hmc", "la"], help="Type of MCMC sampler")
@@ -174,6 +184,7 @@ def parse_args():
     parser.add_argument("--class_model", type=str, help="Classifier model file (withouth '.pt' extension)")
     parser.add_argument("--class_cond", action="store_true", help="Use classconditional diff. model")
     parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--energy", type=bool, default=False, help="Energy-parameterization")
     return parser.parse_args()
 
 
