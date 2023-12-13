@@ -16,7 +16,7 @@ from src.model.guided_diff.unet import load_guided_diff_unet
 from src.model.guided_diff.classifier import load_guided_classifier
 from src.guidance.base import MCMCGuidanceSampler
 from src.guidance.classifier_full import ClassifierFullGuidance
-from src.samplers.mcmc import AnnealedULASampler, AnnealedUHMCScoreSampler
+from src.samplers.mcmc import AnnealedULAScoreSampler, AnnealedUHMCScoreSampler
 from exp.utils import SimulationConfig, setup_results_dir
 from src.utils.seeding import set_seed
 
@@ -59,6 +59,8 @@ def main():
 
     # Compute step lengths
     step_size_time_steps = th.arange(0, config.num_diff_steps)
+    assert isinstance(config.mcmc_bounds, str)
+    print(f"Using {config.mcmc_bounds} beta schedule.")
     if config.mcmc_bounds == "linear":
         step_size_betas = linear_beta_schedule(num_timesteps=config.num_diff_steps)
     elif config.mcmc_bounds == "cos":
@@ -68,11 +70,13 @@ def main():
 
     # Gradient function is None here, but is set later in MCMCGuidanceSampler
     if config.mcmc_method == "uhmc":
+        print("Using the step size 0.6 * beta_t^1.5")
         step_sizes = {int(t.item()): 0.6 * beta**1.5 for (t, beta) in zip(step_size_time_steps, step_size_betas)}
         mcmc_sampler = AnnealedUHMCScoreSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
     elif config.mcmc_method == "ula":
+        print("Using the step size 0.5 * beta_t")
         step_sizes = {int(t.item()): 0.5 * beta for (t, beta) in zip(step_size_time_steps, step_size_betas)}
-        mcmc_sampler = AnnealedULASampler(config.mcmc_steps, step_sizes, None)
+        mcmc_sampler = AnnealedULAScoreSampler(config.mcmc_steps, step_sizes, None)
     else:
         print(f"Incorrect MCMC method: '{config.mcmc_method}'")
     guid_sampler = MCMCGuidanceSampler(
