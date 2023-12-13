@@ -53,24 +53,25 @@ def main():
         respaced_T=config.num_respaced_diff_steps,
     )
     diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance=post_var)
+    guidance = ClassifierFullGuidance(classifier, lambda_=config.guid_scale)
 
+    assert config.mcmc_steps is not None
+
+    # Compute step lengths
+    step_size_time_steps = th.arange(0, config.num_diff_steps)
     if config.mcmc_bounds == "linear":
         step_size_betas = linear_beta_schedule(num_timesteps=config.num_diff_steps)
     elif config.mcmc_bounds == "cos":
         step_size_betas = improved_beta_schedule(num_timesteps=config.num_diff_steps)
     else:
         print(f"Incorrect step length: '{config.mcmc_bounds}'")
-    step_size_time_steps = th.arange(0, config.num_diff_steps)
-    step_sizes = {int(t.item()): 0.6 * beta**1.5 for (t, beta) in zip(step_size_time_steps, step_size_betas)}
-
-    guidance = ClassifierFullGuidance(classifier, lambda_=config.guid_scale)
-
-    assert config.mcmc_steps is not None
 
     # Gradient function is None here, but is set later in MCMCGuidanceSampler
     if config.mcmc_method == "uhmc":
+        step_sizes = {int(t.item()): 0.6 * beta**1.5 for (t, beta) in zip(step_size_time_steps, step_size_betas)}
         mcmc_sampler = AnnealedUHMCScoreSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
     elif config.mcmc_method == "ula":
+        step_sizes = {int(t.item()): 0.5 * beta for (t, beta) in zip(step_size_time_steps, step_size_betas)}
         mcmc_sampler = AnnealedULASampler(config.mcmc_steps, step_sizes, None)
     else:
         print(f"Incorrect MCMC method: '{config.mcmc_method}'")
