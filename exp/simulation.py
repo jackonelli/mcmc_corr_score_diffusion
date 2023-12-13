@@ -13,7 +13,7 @@ from src.diffusion.beta_schedules import (
     respaced_beta_schedule,
 )
 from src.utils.net import get_device, Device
-from src.model.guided_diff.unet import load_guided_diff_unet
+from src.model.guided_diff.unet import load_pretrained_diff_unet
 from src.model.guided_diff.classifier import load_guided_classifier
 from src.model.resnet import load_classifier_t
 from src.model.unet import load_mnist_diff
@@ -62,7 +62,7 @@ def main():
         dataset_name = "imagenet"
         beta_schedule, post_var = linear_beta_schedule, "learned"
         num_classes = 1000
-        diff_model = load_guided_diff_unet(model_path=diff_model_path, dev=device, class_cond=config.class_cond)
+        diff_model = load_pretrained_diff_unet(model_path=diff_model_path, dev=device, class_cond=config.class_cond)
         diff_model.eval()
         classifier = load_guided_classifier(model_path=classifier_path, dev=device, image_size=image_size)
         classifier.eval()

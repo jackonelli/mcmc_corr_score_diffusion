@@ -16,7 +16,7 @@ from src.diffusion.base import DiffusionSampler
 from src.diffusion.beta_schedules import improved_beta_schedule, linear_beta_schedule, respaced_beta_schedule
 from src.model.unet import load_mnist_diff
 from src.utils.vis import plot_samples_grid
-from src.model.guided_diff.unet import load_guided_diff_unet
+from src.model.guided_diff.unet import load_pretrained_diff_unet
 from src.model.guided_diff.classifier import load_guided_classifier
 
 
@@ -37,7 +37,7 @@ def main():
     elif "256x256_diffusion" in args.diff_model:
         channels, image_size = 3, 256
         beta_schedule = linear_beta_schedule
-        diff_model = load_guided_diff_unet(model_path=diff_model_path, dev=device, class_cond=args.class_cond)
+        diff_model = load_pretrained_diff_unet(model_path=diff_model_path, dev=device, class_cond=args.class_cond)
         diff_model.eval()
         if args.class_cond:
             print("Using class conditional diffusion model")

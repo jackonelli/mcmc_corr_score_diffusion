@@ -17,7 +17,7 @@ from src.model.unet import load_mnist_diff
 from src.model.imagenet import load_imagenet_diff
 from src.utils.net import get_device, Device
 from src.utils.vis import plot_samples_grid
-from src.model.guided_diff.unet import load_guided_diff_unet
+from src.model.guided_diff.unet import load_pretrained_diff_unet
 
 
 def main():
@@ -39,7 +39,7 @@ def main():
         beta_schedule, var_mode = improved_beta_schedule, "beta"
     elif "256x256_diffusion" in args.model:
         assert not (args.class_cond and "uncond" in args.model)
-        diff_model = load_guided_diff_unet(model_path=model_path, dev=device, class_cond=args.class_cond)
+        diff_model = load_pretrained_diff_unet(model_path=model_path, dev=device, class_cond=args.class_cond)
         diff_model.eval()
         if args.class_cond:
             print("Using class conditional diffusion model")

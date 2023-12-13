@@ -16,7 +16,7 @@ from src.samplers.mcmc import (
     AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize,
     AnnealedLAScoreSampler,
     AnnealedHMCEnergySampler,
-    AnnealedLAEnergySampler
+    AnnealedLAEnergySampler,
 )
 from src.model.resnet import load_classifier_t
 from src.utils.net import Device, get_device
@@ -26,7 +26,7 @@ from src.diffusion.beta_schedules import (
     respaced_beta_schedule,
     linear_beta_schedule,
 )
-from src.model.guided_diff.unet import load_guided_diff_unet
+from src.model.guided_diff.unet import load_pretrained_diff_unet
 from src.model.guided_diff.classifier import load_guided_classifier
 from src.model.unet import load_mnist_diff
 from exp.utils import timestamp
@@ -58,7 +58,7 @@ def main():
         dataset_name = "imagenet"
         channels, image_size = 3, 256
         beta_schedule = linear_beta_schedule
-        diff_model = load_guided_diff_unet(model_path=diff_model_path, dev=device, class_cond=args.class_cond)
+        diff_model = load_pretrained_diff_unet(model_path=diff_model_path, dev=device, class_cond=args.class_cond)
         diff_model.eval()
         if args.class_cond:
             print("Using class conditional diffusion model")
@@ -168,9 +168,7 @@ def parse_args():
     parser.add_argument("--num_diff_steps", default=1000, type=int, help="Num diffusion steps")
     parser.add_argument("--batch_size", default=10, type=int, help="Batch size")
     parser.add_argument("--num_samples", default=120, type=int, help="Number of samples for estimate acceptance ratio")
-    parser.add_argument(
-        "--accept_rate_bound", default=[55, 65], nargs="+", type=float, help="Acceptance ratio bounds"
-    )
+    parser.add_argument("--accept_rate_bound", default=[55, 65], nargs="+", type=float, help="Acceptance ratio bounds")
     parser.add_argument("--max_iter", default=20, type=int, help="Number of search iterations per time step")
     parser.add_argument("--mcmc", default="hmc", type=str, choices=["hmc", "la"], help="Type of MCMC sampler")
     parser.add_argument("--n_mcmc_steps", default=1, type=int, help="Number of MCMC steps")
@@ -182,7 +180,7 @@ def parse_args():
     )
     parser.add_argument("--diff_model", type=str, help="Diffusion model file (withouth '.pt' extension)")
     parser.add_argument("--class_model", type=str, help="Classifier model file (withouth '.pt' extension)")
-    parser.add_argument("--class_cond", action="store_true", help="Use classconditional diff. model")
+    parser.add_argument("--class_cond", action="store_true", help="Use class conditional diff. model")
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--energy", type=bool, default=False, help="Energy-parameterization")
     return parser.parse_args()

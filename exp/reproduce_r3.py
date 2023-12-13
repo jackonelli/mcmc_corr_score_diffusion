@@ -12,7 +12,7 @@ from src.diffusion.beta_schedules import (
     respaced_beta_schedule,
 )
 from src.utils.net import get_device, Device
-from src.model.guided_diff.unet import load_guided_diff_unet
+from src.model.guided_diff.unet import load_pretrained_diff_unet
 from src.model.guided_diff.classifier import load_guided_classifier
 from src.guidance.base import MCMCGuidanceSampler
 from src.guidance.classifier_full import ClassifierFullGuidance
@@ -42,7 +42,7 @@ def main():
     channels, image_size = config.num_channels, config.image_size
     num_classes = 1000
     beta_schedule, post_var = linear_beta_schedule, "learned"
-    diff_model = load_guided_diff_unet(model_path=diff_model_path, dev=device, class_cond=config.class_cond)
+    diff_model = load_pretrained_diff_unet(model_path=diff_model_path, dev=device, class_cond=config.class_cond)
     diff_model.eval()
     classifier = load_guided_classifier(model_path=classifier_path, dev=device, image_size=image_size)
     classifier.eval()
