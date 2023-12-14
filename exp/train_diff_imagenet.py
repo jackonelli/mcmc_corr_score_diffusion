@@ -1,12 +1,13 @@
 """Script for training a UNet-based unconditional diffusion model for MNIST"""
 
 
-from argparse import ArgumentParser
 import sys
 
-
 sys.path.append(".")
+from argparse import ArgumentParser
 from pathlib import Path
+from typing import Tuple
+import json
 import torch as th
 import torch.nn.functional as F
 import pytorch_lightning as pl
@@ -16,6 +17,7 @@ from src.diffusion.trainer import LearnedVarDiffusion
 from src.diffusion.beta_schedules import improved_beta_schedule
 from src.model.guided_diff.unet import initialise_diff_unet, load_pretrained_diff_unet
 from src.utils.net import get_device, Device
+from exp.utils import timestamp
 
 
 def main():
@@ -43,12 +45,7 @@ def main():
         diff_model = initialise_diff_unet(image_size=image_size, dev=device, class_cond=args.class_cond)
         diff_model.train()
 
-    model_path = Path.cwd() / "models" / "imagenet_diff_128.pt"
-    assert model_path.parent.exists(), f"Save dir. '{model_path.parent}' does not exist."
-    x_t = th.randn((batch_size, channels, image_size, image_size)).to(device)
-    ts = th.randint(low=0, high=num_diff_steps, size=(batch_size,)).to(device)
-    out = diff_model(x_t, ts)
-    print(out.size())
+    save_dir = _setup_results_dir(Path.cwd() / "models/train_imagenet", args)
 
     # if model_path.exists():
     #     print(f"Load existing model: {model_path.stem}")
@@ -68,7 +65,19 @@ def main():
     trainer.fit(diffm, dataloader_train, dataloader_val)
 
     print("Saving model")
-    th.save(diff_model.state_dict(), model_path)
+    th.save(diff_model.state_dict(), save_dir / "imagenet_diff_128.pt")
+
+
+def _setup_results_dir(res_dir: Path, args) -> Path:
+    res_dir.mkdir(exist_ok=True)
+    model_type = "init" if not args.load_weights else "pretrained"
+    sim_dir = res_dir / f"{model_type}_{timestamp()}"
+    sim_dir.mkdir(exist_ok=True)
+    args_dict = vars(args)
+    with open(sim_dir / "args.json", "w") as file:
+        json.dump(args_dict, file, indent=2)
+
+    return sim_dir
 
 
 def parse_args():
