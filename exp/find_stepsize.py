@@ -166,17 +166,17 @@ def parse_args():
     parser = ArgumentParser(prog="Find step size for MCMC for classifier-full guidance")
     parser.add_argument("--guid_scale", default=1.0, type=float, help="Guidance scale")
     parser.add_argument("--num_diff_steps", default=1000, type=int, help="Num diffusion steps")
-    parser.add_argument("--batch_size", default=10, type=int, help="Batch size")
+    parser.add_argument("--batch_size", default=60, type=int, help="Batch size")
     parser.add_argument("--num_samples", default=120, type=int, help="Number of samples for estimate acceptance ratio")
     parser.add_argument(
         "--accept_rate_bound", default=[55, 65], nargs="+", type=float, help="Acceptance ratio bounds"
     )
-    parser.add_argument("--max_iter", default=20, type=int, help="Number of search iterations per time step")
-    parser.add_argument("--mcmc", default="hmc", type=str, choices=["hmc", "la"], help="Type of MCMC sampler")
+    parser.add_argument("--max_iter", default=40, type=int, help="Number of search iterations per time step")
+    parser.add_argument("--mcmc", default="la", type=str, choices=["hmc", "la"], help="Type of MCMC sampler")
     parser.add_argument("--n_mcmc_steps", default=1, type=int, help="Number of MCMC steps")
     parser.add_argument(
         "--respaced_num_diff_steps",
-        default=100,
+        default=1000,
         type=int,
         help="Number of respaced diffusion steps (fewer than or equal to num_diff_steps)",
     )
@@ -184,7 +184,7 @@ def parse_args():
     parser.add_argument("--class_model", type=str, help="Classifier model file (withouth '.pt' extension)")
     parser.add_argument("--class_cond", action="store_true", help="Use classconditional diff. model")
     parser.add_argument("--seed", type=int, default=None)
-    parser.add_argument("--energy", type=bool, default=False, help="Energy-parameterization")
+    parser.add_argument("--energy", type=bool, default=True, help="Energy-parameterization")
     return parser.parse_args()
 
 
