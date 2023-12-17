@@ -549,17 +549,19 @@ class AdaptiveStepSizeMCMCSamplerWrapper(MCMCSampler):
 
                 # New step size
                 step_s_ = step_s.clone()
-                if upper["stepsize"] is None:
-                    new_step_s = step_s_ / 10
-                elif lower["stepsize"] is None:
-                    new_step_s = step_s_ * 10
-                else:
+                if upper["stepsize"] is not None and lower["stepsize"] is not None:
                     suggest_new = torch.exp((torch.log(upper["stepsize"]) + torch.log(lower["stepsize"])) / 2)
                     if suggest_new == step_s_:
                         w = th.rand(1).item()
-                        new_step_s = torch.exp(w * torch.log(upper["stepsize"]) + (1 - w) * torch.log(lower["stepsize"]))
+                        new_step_s = torch.exp(
+                            w * torch.log(upper["stepsize"]) + (1 - w) * torch.log(lower["stepsize"]))
                     else:
                         new_step_s = suggest_new
+                else:
+                    if a_rate > self.accept_rate_bound[1]:
+                        new_step_s = step_s_ / 10
+                    else:  # a_rate < self.accept_rate_bound[0]
+                        new_step_s = step_s_ * 10
 
                 self.sampler.step_sizes[t] = new_step_s
             i += 1
