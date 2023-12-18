@@ -55,6 +55,7 @@ class AnnealedULAEnergySampler(MCMCSampler):
     # NB: t_idx not in use.
     def sample_step(self, x: th.Tensor, t: int, t_idx: int, classes: th.Tensor):
         for i in range(self.num_samples_per_step):
+            x.requires_grad_(True)
             x, _, _ = langevin_step(x, t, t_idx, classes, self.step_sizes, self.gradient_function)
             x = x.detach()
         return x
@@ -151,7 +152,9 @@ class AnnealedLAEnergySampler(MCMCSampler):
         self.all_accepts[t] = list()
 
         for i in range(self.num_samples_per_step):
+            x.requires_grad_(True)
             x_hat, mean_x, ss = langevin_step(x, t, t_idx, classes, self.step_sizes, self.gradient_function)
+            x_hat.requires_grad_(True)
 
             mean_x_hat = get_mean(self.gradient_function, x_hat, t, t_idx, ss, classes)
             logp_reverse, logp_forward = transition_factor(x, mean_x, x_hat, mean_x_hat, ss)
@@ -166,7 +169,7 @@ class AnnealedLAEnergySampler(MCMCSampler):
             self.accept_ratio[t].append((th.sum(accept) / accept.shape[0]).detach().cpu().item())
             self.all_accepts[t].append(accept.detach().cpu())
             x = accept * x_hat + (1 - accept) * x
-
+            x = x.detach()
         return x
 
 
@@ -201,7 +204,7 @@ def estimate_energy_diff_linear(gradient_function, x, x_hat, t, t_idx, ss_, clas
         e = th.cat((e,
                     (gradient_function(x_, t, t_idx, classes) * diff).sum(dim=tuple(range(1, dims))).reshape(
                         -1, 1)), 1)
-    return th.trapz(e)
+    return th.trapz(e, ss_)
 
 
 class AnnealedUHMCScoreSampler(MCMCSampler):
@@ -545,13 +548,20 @@ class AdaptiveStepSizeMCMCSamplerWrapper(MCMCSampler):
                     lower["stepsize"] = step_s
 
                 # New step size
-                new_step_s = step_s.clone()
-                if upper["stepsize"] is None:
-                    new_step_s /= 10
-                elif lower["stepsize"] is None:
-                    new_step_s *= 10
+                step_s_ = step_s.clone()
+                if upper["stepsize"] is not None and lower["stepsize"] is not None:
+                    suggest_new = torch.exp((torch.log(upper["stepsize"]) + torch.log(lower["stepsize"])) / 2)
+                    if suggest_new == step_s_:
+                        w = th.rand(1).item()
+                        new_step_s = torch.exp(
+                            w * torch.log(upper["stepsize"]) + (1 - w) * torch.log(lower["stepsize"]))
+                    else:
+                        new_step_s = suggest_new
                 else:
-                    new_step_s = torch.exp((torch.log(upper["stepsize"]) + torch.log(lower["stepsize"])) / 2)
+                    if a_rate > self.accept_rate_bound[1]:
+                        new_step_s = step_s_ / 10
+                    else:  # a_rate < self.accept_rate_bound[0]
+                        new_step_s = step_s_ * 10
 
                 self.sampler.step_sizes[t] = new_step_s
             i += 1

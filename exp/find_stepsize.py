@@ -182,7 +182,7 @@ def parse_args():
     parser.add_argument("--class_model", type=str, help="Classifier model file (withouth '.pt' extension)")
     parser.add_argument("--class_cond", action="store_true", help="Use class conditional diff. model")
     parser.add_argument("--seed", type=int, default=None)
-    parser.add_argument("--energy", type=bool, default=False, help="Energy-parameterization")
+    parser.add_argument("--energy", type=bool, default=True, help="Energy-parameterization")
     return parser.parse_args()
 
 
