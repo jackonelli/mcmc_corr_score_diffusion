@@ -1,3 +1,4 @@
+from typing import Tuple
 from collections.abc import Callable
 import torch as th
 import torch.nn as nn
@@ -25,9 +26,21 @@ class DiffusionModel(pl.LightningModule):
         if isinstance(self.model, EnergyModel):
             self.require_g = True
 
+    def _process_batch(self, batch) -> Tuple[int, th.Tensor]:
+        """Hack to handle multiple formats of dataloaders"""
+        if isinstance(batch, dict):
+            batch_size = batch["pixel_values"].size(0)
+            x = batch["pixel_values"].to(self.device)
+        else:
+            # Discard label
+            x, _ = batch
+            x = x.to(self.device)
+            batch_size = x.size(0)
+        return batch_size, x
+
     def training_step(self, batch, batch_idx):
-        batch_size = batch["pixel_values"].shape[0]
-        x = batch["pixel_values"].to(self.device)
+        batch_size = batch["x"].size(0)
+        x = batch["x"].to(self.device)
 
         # Algorithm 1 line 3: sample t uniformally for every example in the batch
         T = self.noise_scheduler.time_steps.size(0)
@@ -58,8 +71,8 @@ class DiffusionModel(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         th.set_grad_enabled(True)
-        batch_size = batch["pixel_values"].shape[0]
-        x = batch["pixel_values"].to(self.device)
+        batch_size = batch["x"].size(0)
+        x = batch["x"].to(self.device)
 
         rng_state = th.get_rng_state()
         th.manual_seed(self.i_batch_val)
@@ -109,7 +122,7 @@ class LearnedVarDiffusion(pl.LightningModule):
             self.require_g = True
 
     def training_step(self, batch, batch_idx):
-        batch_size = batch["pixel_values"].shape[0]
+        batch_size = batch["pixel_values"].size(0)
         x = batch["pixel_values"].to(self.device)
 
         # Algorithm 1 line 3: sample t uniformally for every example in the batch
@@ -141,7 +154,7 @@ class LearnedVarDiffusion(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         th.set_grad_enabled(True)
-        batch_size = batch["pixel_values"].shape[0]
+        batch_size = batch["pixel_values"].size(0)
         x = batch["pixel_values"].to(self.device)
 
         rng_state = th.get_rng_state()
@@ -198,7 +211,7 @@ class DiffusionClassifier(pl.LightningModule):
         self.i_epoch = 0
 
     def training_step(self, batch, batch_idx):
-        batch_size = batch["pixel_values"].shape[0]
+        batch_size = batch["pixel_values"].size(0)
         x = batch["pixel_values"].to(self.device).float()
         y = batch["label"].to(self.device).long()
 
@@ -227,7 +240,7 @@ class DiffusionClassifier(pl.LightningModule):
         return [optimizer], [scheduler]
 
     def validation_step(self, batch, batch_idx):
-        batch_size = batch["pixel_values"].shape[0]
+        batch_size = batch["pixel_values"].size(0)
         x = batch["pixel_values"].to(self.device)
         y = batch["label"].to(self.device)
 
