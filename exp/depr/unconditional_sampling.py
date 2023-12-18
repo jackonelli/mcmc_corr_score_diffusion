@@ -48,7 +48,7 @@ def main():
         channels, image_size = 3, 256
         beta_schedule, var_mode = linear_beta_schedule, "learned"
     elif "mnist" in args.model:
-        diff_model = load_mnist_diff(model_path, device)
+        diff_model = load_mnist_diff(model_path, device, energy=args.energy)
         channels, image_size = 1, 28
         beta_schedule, var_mode = improved_beta_schedule, "beta"
     else:
@@ -58,7 +58,7 @@ def main():
         T=args.num_diff_steps,
         respaced_T=args.respaced_num_diff_steps,
     )
-    diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance=var_mode)
+    diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance=var_mode, energy=args.energy)
 
     print("Sampling...")
     samples, _ = diff_sampler.sample(
@@ -85,6 +85,7 @@ def parse_args():
     parser.add_argument("--model", type=str, help="Model file (withouth '.pt' extension)")
     parser.add_argument("--plot", action="store_true", help="enables plots")
     parser.add_argument("--class_cond", action="store_true", help="Use class conditional diff. model")
+    parser.add_argument("--energy", action="store_true", help="Using energy-parameterization")
     return parser.parse_args()
 
 

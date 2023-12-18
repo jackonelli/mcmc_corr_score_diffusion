@@ -61,7 +61,7 @@ def main():
     step_size_time_steps = th.arange(0, config.num_diff_steps)
     assert isinstance(config.mcmc_bounds, str)
     print(f"Using {config.mcmc_bounds} beta schedule.")
-    if config.mcmc_bounds == "linear":
+    if config.mcmc_bounds == "lin":
         step_size_betas = linear_beta_schedule(num_timesteps=config.num_diff_steps)
     elif config.mcmc_bounds == "cos":
         step_size_betas = improved_beta_schedule(num_timesteps=config.num_diff_steps)
