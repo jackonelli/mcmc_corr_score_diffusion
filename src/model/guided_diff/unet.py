@@ -107,7 +107,7 @@ def load_pretrained_diff_unet(
         attention_resolutions=attention_ds(attention_resolutions, image_size),
         dropout=dropout,
         channel_mult=parse_channel_mult(channel_mult, image_size),
-        num_classes=(NUM_CLASSES),
+        num_classes=(NUM_CLASSES if class_cond else None),
         use_checkpoint=use_checkpoint,
         use_fp16=use_fp16,
         num_heads=num_heads,
@@ -230,8 +230,8 @@ class UNetModel(nn.Module):
             linear(time_embed_dim, time_embed_dim),
         )
 
-        # if self.num_classes is not None:
-        self.label_emb = nn.Embedding(num_classes, time_embed_dim)
+        if self.num_classes is not None:
+            self.label_emb = nn.Embedding(num_classes, time_embed_dim)
 
         ch = input_ch = int(channel_mult[0] * model_channels)
         self.input_blocks = nn.ModuleList([TimestepEmbedSequential(conv_nd(dims, in_channels, ch, 3, padding=1))])
@@ -392,16 +392,16 @@ class UNetModel(nn.Module):
         :param y: an [N] Tensor of labels, if class-conditional.
         :return: an [N x 2*C x ...] Tensor of outputs.
         """
-        # assert (y is not None) == (
-        #     self.num_classes is not None
-        # ), "must specify y if and only if the model is class-conditional"
+        assert (y is not None) == (
+            self.num_classes is not None
+        ), "must specify y if and only if the model is class-conditional"
 
         hs = []
         emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
 
-        # if self.num_classes is not None:
-        #    assert y.shape == (x.shape[0],)
-        #    emb = emb + self.label_emb(y)
+        if self.num_classes is not None:
+            assert y.shape == (x.shape[0],)
+            emb = emb + self.label_emb(y)
 
         h = x.type(self.dtype)
         for module in self.input_blocks:
