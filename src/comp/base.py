@@ -26,14 +26,15 @@ class ProductCompSampler:
     """Sampling from product distribution of diffusion models"""
 
     def __init__(
-        self, diff_model_1: nn.Module, diff_model_2: nn.Module, diff_proc: DiffusionSampler, diff_cond: bool = False
+        self,
+        diff_model_1: nn.Module,
+        diff_model_2: nn.Module,
+        diff_proc: DiffusionSampler,
     ):
         self.diff_model_1 = diff_model_1
         self.diff_model_2 = diff_model_2
         self.diff_proc = diff_proc
-        self.guidance = guidance
         self.grads = {"diff_1": dict(), "diff_2": dict()}
-        self.diff_cond = diff_cond
 
         self.require_g = False
         if "energy" in dir(self.diff_model_1) or "energy" in dir(self.diff_model_2):
@@ -46,7 +47,7 @@ class ProductCompSampler:
         self.rng_state = th.get_rng_state()
         th.set_rng_state(current_rng_state)
 
-    def sample(self, num_samples: int, classes: th.Tensor, device: th.device, shape: tuple, verbose=False):
+    def sample(self, num_samples: int, device: th.device, shape: tuple, verbose=False):
         """Sample points from the data distribution by running the reverse process
 
         Args:
@@ -70,43 +71,11 @@ class ProductCompSampler:
             if self.require_g:
                 x_tm1 = reverse_func_require_grad(self, t, t_idx, x_tm1, classes, device, self.diff_cond)
             else:
-                x_tm1 = reverse_func(self, t, t_idx, x_tm1, classes, device, self.diff_cond)
+                x_tm1 = reverse_func_prod(self, t, t_idx, x_tm1, device)
             x_tm1 = x_tm1.detach()
             # steps.append(x_tm1.detach().cpu())
 
         return x_tm1, steps
-
-    def _sample_x_tm1_given_x_t(self, x_t: th.Tensor, t_idx: int, pred_noise: th.Tensor, sqrt_post_var_t: th.Tensor):
-        """Denoise the input tensor at a given timestep using the predicted noise based on a product distribution.
-
-        Args:
-            x_t (any shape),
-            t_idx (timestep index at which to denoise),
-            predicted_noise (noise predicted at the timestep)
-
-        Returns:
-            x_tm1 (x[t-1] denoised sample by one step - x_t.shape)
-        """
-        b_t = extract(self.diff_proc.betas, t_idx, x_t)
-        a_t = extract(self.diff_proc.alphas, t_idx, x_t)
-        a_bar_t = extract(self.diff_proc.alphas_bar, t_idx, x_t)
-
-        if t_idx > 0:
-            current_rng_state = th.get_rng_state()
-            th.set_rng_state(self.rng_state)
-            z = th.randn_like(x_t)
-            self.rng_state = th.get_rng_state()
-            th.set_rng_state(current_rng_state)
-        else:
-            z = 0
-
-        sigma_t = self.diff_proc.sigma_t(t_idx, x_t)
-        t_tensor = th.full((x_t.shape[0],), t_idx, device=x_t.device)
-        # self.grads["diff_1"][t_idx] = th.norm(-pred_noise).detach().cpu()
-        m_tm1 = (x_t + b_t / (th.sqrt(1 - a_bar_t)) * -pred_noise) / a_t.sqrt()
-        noise = sqrt_post_var_t * z
-        xtm1 = m_tm1 + noise
-        return xtm1
 
 
 @th.no_grad()
@@ -129,7 +98,7 @@ def reverse_func_prod(model, t, t_idx, x_tm1, device):
         assert pred_noise.size() == x_tm1.size()
         log_var, _ = model.diff_proc._clip_var(x_tm1, t_idx_tensor, log_var)
         sqrt_post_var_t = th.exp(0.5 * log_var)
-    x_tm1 = model._sample_x_tm1_given_x_t(x_tm1, t_idx, pred_noise, sqrt_post_var_t=sqrt_post_var_t)
+    x_tm1 = model.diff_proc._sample_x_tm1_given_x_t(x_tm1, t_idx, pred_noise, sqrt_post_var_t=sqrt_post_var_t)
     return x_tm1
 
 

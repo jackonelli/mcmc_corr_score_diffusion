@@ -72,7 +72,7 @@ class Bar:
 class Gmm:
     """Gaussian mixture model with Gaussians spread equiangularly on a ring with fixed radius"""
 
-    def __init__(self, n_comp=8, std=0.075, radius=0.5):
+    def __init__(self, n_comp=8, std=0.03, radius=0.5):
         means_x = th.cos(2 * np.pi * th.linspace(0, (n_comp - 1) / n_comp, n_comp))
         means_y = th.sin(2 * np.pi * th.linspace(0, (n_comp - 1) / n_comp, n_comp))
         self.n_comp = n_comp
