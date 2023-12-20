@@ -6,7 +6,8 @@ from argparse import ArgumentParser
 import torch as th
 import torch.nn.functional as F
 import pytorch_lightning as pl
-from src.diffusion.base import DiffusionModel, DiffusionSampler
+from src.diffusion.base import DiffusionSampler
+from src.diffusion.trainer import DiffusionModel
 from src.diffusion.beta_schedules import improved_beta_schedule
 from src.model.unet import UNet, UNetEnergy
 from src.utils.net import get_device, Device
@@ -23,7 +24,7 @@ def main():
     name = ""
     if args.type == "energy":
         name = args.type
-    model_path = Path.cwd() / "models" / "{}uncond_unet_mnist.pt".format(name)
+    model_path = Path.cwd() / "models" / f"{name}_uncond_unet_mnist.pt"
     if not model_path.parent.exists():
         print(f"Save dir. '{model_path.parent}' does not exist.")
         return
@@ -41,13 +42,12 @@ def main():
     diffm = DiffusionModel(model=unet, loss_f=F.mse_loss, noise_scheduler=diff_sampler)
 
     diffm.to(dev)
-    trainer = pl.Trainer(max_epochs=20, num_sanity_val_steps=0, accelerator="gpu", devices=1, inference_mode=False)
+    trainer = pl.Trainer(max_epochs=1, num_sanity_val_steps=0, accelerator="gpu", devices=1, inference_mode=False)
 
     dataloader_train, dataloader_val = get_mnist_data_loaders(batch_size)
     trainer.fit(diffm, dataloader_train, dataloader_val)
 
-    print("Saving model")
-    model_path = Path.cwd() / "models" / "uncond_unet_mnist.pt".format(name)
+    print(f"Saving model to '{model_path}'")
     th.save(unet.state_dict(), model_path)
 
 

@@ -39,9 +39,7 @@ class DiffusionModel(pl.LightningModule):
         return batch_size, x
 
     def training_step(self, batch, batch_idx):
-        batch_size = batch["x"].size(0)
-        x = batch["x"].to(self.device)
-
+        batch_size, x = self._process_batch(batch)
         # Algorithm 1 line 3: sample t uniformally for every example in the batch
         T = self.noise_scheduler.time_steps.size(0)
         ts = th.randint(0, T, (batch_size,), device=self.device).long()
@@ -71,8 +69,7 @@ class DiffusionModel(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         th.set_grad_enabled(True)
-        batch_size = batch["x"].size(0)
-        x = batch["x"].to(self.device)
+        batch_size, x = self._process_batch(batch)
 
         rng_state = th.get_rng_state()
         th.manual_seed(self.i_batch_val)
