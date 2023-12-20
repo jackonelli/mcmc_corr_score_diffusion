@@ -33,7 +33,7 @@ class GuidanceSampler:
         self.diff_cond = diff_cond
 
         self.require_g = False
-        if 'energy' in dir(self.diff_model):
+        if "energy" in dir(self.diff_model):
             self.require_g = True
 
         # Seed only for noise in reverse step
@@ -228,14 +228,17 @@ class MCMCGuidanceSamplerStacking(MCMCGuidanceSampler):
             print("Diff step: ", t.item())
             if self.reverse:
                 for i in range(n_batches - 1):
-                    x_tm1 = x[idx[i]: idx[i + 1]].to(device)
+                    x_tm1 = x[idx[i] : idx[i + 1]].to(device)
                     if self.require_g:
-                        x_tm1 = reverse_func_require_grad(self, t, t_idx, x_tm1, classes[idx[i]: idx[i + 1]], device,
-                                                          self.diff_cond)
+                        x_tm1 = reverse_func_require_grad(
+                            self, t, t_idx, x_tm1, classes[idx[i] : idx[i + 1]], device, self.diff_cond
+                        )
                     else:
-                        x_tm1 = reverse_func(self, t, t_idx, x_tm1, classes[idx[i]: idx[i + 1]], device, self.diff_cond)
+                        x_tm1 = reverse_func(
+                            self, t, t_idx, x_tm1, classes[idx[i] : idx[i + 1]], device, self.diff_cond
+                        )
 
-                    x[idx[i]: idx[i + 1]] = x_tm1.detach().cpu()
+                    x[idx[i] : idx[i + 1]] = x_tm1.detach().cpu()
                     del x_tm1
                     gc.collect()
                     torch.cuda.empty_cache()

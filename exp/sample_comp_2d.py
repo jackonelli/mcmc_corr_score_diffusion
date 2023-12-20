@@ -45,20 +45,38 @@ def main():
         respaced_T=T,
     )
     diff_proc = DiffusionSampler(betas, time_steps, posterior_variance="beta")
-    prod_sampler = ProductCompSampler(diff_model_gmm, diff_model_bar, diff_proc)
+    prod_sampler = ProductCompSampler(diff_model_gmm, diff_model_bar, diff_proc, use_reverse_step=args.use_rev)
 
-    print("Sampling from GMM model")
-    gmm_samples, _ = diff_proc.sample(diff_model_gmm, args.num_samples, device, th.Size((2,)), verbose=True)
-    gmm_samples = gmm_samples.detach().cpu()
-    th.save(gmm_samples, sim_dir / f"gmm_samples.th")
-    print("Sampling from bar model")
-    bar_samples, _ = diff_proc.sample(diff_model_bar, args.num_samples, device, th.Size((2,)), verbose=True)
-    bar_samples = bar_samples.detach().cpu()
-    th.save(bar_samples, sim_dir / f"bar_samples.th")
-    print("Sampling from product model")
-    prod_samples, _ = prod_sampler.sample(args.num_samples, device, th.Size((2,)), verbose=True)
-    prod_samples = prod_samples.detach().cpu()
-    th.save(prod_samples, sim_dir / f"prod_samples.th")
+    # print("Sampling from GMM model")
+    # gmm_samples, _ = diff_proc.sample(diff_model_gmm, args.num_samples, device, th.Size((2,)), verbose=True)
+    # gmm_samples = gmm_samples.detach().cpu()
+    # th.save(gmm_samples, sim_dir / f"gmm_samples.th")
+    # print("Sampling from bar model")
+    # bar_samples, _ = diff_proc.sample(diff_model_bar, args.num_samples, device, th.Size((2,)), verbose=True)
+    # bar_samples = bar_samples.detach().cpu()
+    # th.save(bar_samples, sim_dir / f"bar_samples.th")
+    if args.mcmc is None:
+        print("Sampling from product model with reverse process")
+        prod_samples, _ = prod_sampler.sample(args.num_samples, device, th.Size((2,)), verbose=True)
+        prod_samples = prod_samples.detach().cpu()
+        th.save(prod_samples, sim_dir / f"prod_samples_reverse.th")
+    elif args.mcmc == "hmc":
+        print("Sampling from product model")
+        mcmc_steps = 10
+        step_sizes = {int(t): 0.03 for t in range(0, T)}
+        n_trapets = 5
+        damping_coeff = 0.5
+        leapfrog_steps = 3
+        mcmc_sampler = AnnealedHMCScoreSampler(
+            mcmc_steps, step_sizes, damping_coeff, th.ones_like(betas), leapfrog_steps, prod_sampler.grad
+        )
+        prod_samples, _ = prod_sampler.mcmc_sample(args.num_samples, mcmc_sampler, device, th.Size((2,)), verbose=True)
+        prod_samples = prod_samples.detach().cpu()
+        th.save(
+            prod_samples, sim_dir / f"prod_samples_{args.mcmc}_{'with' if prod_sampler.reverse else 'without'}_rev.th"
+        )
+    else:
+        pass
     print(f"Results written to '{sim_dir}'")
 
 
@@ -74,6 +92,8 @@ def load_diff_model(diff_model_path, T, device):
 def parse_args():
     parser = ArgumentParser(prog="Sample from diffusion model")
     parser.add_argument("--num_samples", type=int, required=True, help="Number of samples")
+    parser.add_argument("--mcmc", type=str, default=None, help="MCMC method: {'la', 'hmc'}")
+    parser.add_argument("--use_rev", action="store_true", help="Use reverse step")
     parser.add_argument("--seed", type=Optional[int], default=None, help="Manual seed")
     parser.add_argument(
         "--sim_batch", type=int, default=0, help="Simulation batch index, indexes parallell simulations."

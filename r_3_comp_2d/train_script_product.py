@@ -54,9 +54,7 @@ def main():
     bounds_inner = jnp.array([[-scale, scale], [-1.0, 1.0]])
 
     # Bar
-    _, dataset_sample_bar, pdf_outer, pdf_inner = bar(
-        scale=scale, r=r, prob_inside=prob_inside
-    )
+    _, dataset_sample_bar, pdf_outer, pdf_inner = bar(scale=scale, r=r, prob_inside=prob_inside)
 
     # Get models (train new model or load from file) - energy and score param
     print("Getting model params")
@@ -146,9 +144,7 @@ def main():
             if grad:
                 samples_dict[name.split("_")[0] + "_reverse"] = grad_sample
 
-            file_samples = (
-                args.exp_name / f"samples_{model_id}.p"
-            )  # File to save samples
+            file_samples = args.exp_name / f"samples_{model_id}.p"  # File to save samples
             print(f"Saving samples at {file_samples}")
             pickle.dump(samples_dict, open(file_samples, "wb"))
 
@@ -221,9 +217,7 @@ def train_single_model(
         start_time = time.time()
         loss, params, opt_state = update(params, opt_state, next(rng_seq), x)
         duration_update = time.time() - start_time
-        ema_params = jax.tree_map(
-            lambda e, p: e * EMA + p * (1 - EMA), ema_params, params
-        )
+        ema_params = jax.tree_map(lambda e, p: e * EMA + p * (1 - EMA), ema_params, params)
 
         if itr % 100 == 0:
             print(itr, loss, "time:", duration_update)
@@ -257,9 +251,7 @@ def train_single_model(
     return ema_params
 
 
-def sampling_product_distribution(
-    params, ebm=True, sampler="HMC", n_trapets=5, grad=False, batch_size=2000, seed=None
-):
+def sampling_product_distribution(params, ebm=True, sampler="HMC", n_trapets=5, grad=False, batch_size=2000, seed=None):
     partial_forward_fn_product = partial(forward_fn_product, n_steps=N_STEPS, ebm=ebm)
     forward_product = hk.multi_transform(partial_forward_fn_product)
     if seed is not None:
@@ -306,9 +298,7 @@ def sampling_product_distribution(
     ula_step_size = 0.001
 
     means = jax.random.normal(next(rng_seq), (n_mode, dim))
-    initial_dist = distrax.MultivariateNormalDiag(
-        means[0] * 0 + init_mu, init_std * jnp.ones_like(means[0])
-    )
+    initial_dist = distrax.MultivariateNormalDiag(means[0] * 0 + init_mu, init_std * jnp.ones_like(means[0]))
 
     n_stepss = [100]
 
@@ -421,9 +411,7 @@ def sampling_product_distribution(
             rng_seq = hk.PRNGSequence(jax.random.PRNGKey(rand_seed))
         grad_sample = None
         if grad:
-            grad_sample = dual_product_sample_fn(
-                params, next(rng_seq), batch_size, jnp.inf
-            )
+            grad_sample = dual_product_sample_fn(params, next(rng_seq), batch_size, jnp.inf)
 
             # Samples from adding score functions
             # plt.scatter(grad_sample[:, 0], grad_sample[:, 1], color="blue", alpha=0.5)
@@ -452,9 +440,7 @@ def plot_samples(x):
 
 def dist_show_2d(fn, xr, yr):
     nticks = 100
-    x, y = np.meshgrid(
-        np.linspace(xr[0], xr[1], nticks), np.linspace(yr[0], yr[1], nticks)
-    )
+    x, y = np.meshgrid(np.linspace(xr[0], xr[1], nticks), np.linspace(yr[0], yr[1], nticks))
     coord = np.stack([x, y], axis=-1).reshape((-1, 2))
     heatmap = fn(coord).reshape((nticks, nticks))
     plt.imshow(heatmap)
@@ -468,9 +454,7 @@ def parse_args():
         type=Path,
         help="Directory to save parameters and samples to",
     )
-    parser.add_argument(
-        "--pre_trained", action="store_true", help="If set, loads parameters from file."
-    )
+    parser.add_argument("--pre_trained", action="store_true", help="If set, loads parameters from file.")
     parser.add_argument(
         "--num_training_steps",
         default=15001,

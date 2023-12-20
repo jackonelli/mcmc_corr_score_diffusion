@@ -1,12 +1,8 @@
 """Diffusion guidance primitives"""
 from abc import ABC, abstractmethod
 import torch as th
-import torch.cuda
 import torch.nn as nn
-import numpy as np
 from src.diffusion.base import extract, DiffusionSampler
-from src.samplers.mcmc import MCMCSampler
-import gc
 
 
 class ProductComp(ABC):
@@ -30,11 +26,13 @@ class ProductCompSampler:
         diff_model_1: nn.Module,
         diff_model_2: nn.Module,
         diff_proc: DiffusionSampler,
+        use_reverse_step=True,
     ):
         self.diff_model_1 = diff_model_1
         self.diff_model_2 = diff_model_2
         self.diff_proc = diff_proc
         self.grads = {"diff_1": dict(), "diff_2": dict()}
+        self.reverse = use_reverse_step
 
         self.require_g = False
         if "energy" in dir(self.diff_model_1) or "energy" in dir(self.diff_model_2):
@@ -76,6 +74,57 @@ class ProductCompSampler:
             # steps.append(x_tm1.detach().cpu())
 
         return x_tm1, steps
+
+    def mcmc_sample(self, num_samples: int, mcmc_sampler, device: th.device, shape: tuple, verbose=False):
+        """Sample points from the data distribution by running the reverse process
+
+        Args:
+            num_samples (number of samples)
+            classes (num_samples, ): classes to condition on (on for each sample)
+            device (the device the model is on)
+            shape (shape of data, e.g., (1, 28, 28))
+
+        Returns:
+            all x through the (predicted) reverse diffusion steps
+        """
+
+        steps = []
+        x_tm1 = th.randn((num_samples,) + shape).to(device)
+        self.verbose_counter = 0
+
+        for t, t_idx in zip(self.diff_proc.time_steps.__reversed__(), reversed(self.diff_proc.time_steps_idx)):
+            if verbose and self.diff_proc.verbose_split[self.verbose_counter] == t:
+                print("Diff step", t.item())
+                self.verbose_counter += 1
+            if self.reverse:
+                if self.require_g:
+                    x_tm1 = reverse_func_require_grad(self, t, t_idx, x_tm1, classes, device, self.diff_cond)
+                else:
+                    x_tm1 = reverse_func_prod(self, t, t_idx, x_tm1, device)
+                x_tm1 = x_tm1.detach()
+            if t > 0:
+                respaced_t = self.diff_proc.time_steps[t_idx - 1].item()
+                x_tm1 = mcmc_sampler.sample_step(x_tm1, respaced_t, t_idx - 1)
+            # steps.append(x_tm1.detach().cpu())
+
+        return x_tm1, steps
+
+    def grad(self, x_t, t, t_idx, _classes=None):
+        """Gradient of product sampler"""
+        sigma_t = self.diff_proc.sigma_t(t_idx, x_t)
+        t_tensor = th.full((x_t.shape[0],), t, device=x_t.device)
+        args = [x_t, t_tensor]
+        # if self.diff_cond:
+        #     args += [classes]
+        if not isinstance(self.diff_proc.posterior_variance, str):
+            pred_noise_1 = self.diff_model_1(*args)
+            assert pred_noise_1.size() == x_t.size()
+            pred_noise_2 = self.diff_model_2(*args)
+            assert pred_noise_2.size() == x_t.size()
+            pred_noise = pred_noise_1 + pred_noise_2
+        else:
+            raise NotImplemented("Learned variance for product composition, not implemented.")
+        return -pred_noise / sigma_t
 
 
 @th.no_grad()
