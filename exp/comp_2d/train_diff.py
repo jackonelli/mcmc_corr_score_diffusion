@@ -7,17 +7,18 @@ import sys
 sys.path.append(".")
 from argparse import ArgumentParser
 from pathlib import Path
-from typing import Tuple
 import json
 import torch as th
 import torch.nn.functional as F
 import pytorch_lightning as pl
-from src.data.comp_2d import Bar, Gmm, get_data_loader
-from src.model.comp_2d import ResnetDiffusionModel
+from src.data.comp_2d import Bar, GmmRadial
+from src.data.utils import get_full_sample_data_loaders
+from src.model.comp_2d.diffusion import ResnetDiffusionModel
 from src.diffusion.base import DiffusionSampler
+
+# TODO: Move
 from src.diffusion.trainer import DiffusionModel
 from src.diffusion.beta_schedules import improved_beta_schedule
-from src.model.guided_diff.unet import initialise_diff_unet, load_pretrained_diff_unet
 from src.utils.net import get_device, Device
 from exp.utils import timestamp
 
@@ -27,14 +28,11 @@ def main():
     # Diff params
     num_diff_steps = 100
 
-    # Dataset params
-    x_dim = 2  # 224
-    batch_size = args.batch_size
     if args.data == "gmm":
-        dataset = Gmm()
+        dataset = GmmRadial()
     elif args.data == "bar":
         dataset = Bar()
-    dataloader_train, dataloader_val = get_data_loader(
+    dataloader_train, dataloader_val = get_full_sample_data_loaders(
         dataset=dataset, num_samples=100_000, batch_size=args.batch_size, num_val_samples=500
     )
 

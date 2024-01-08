@@ -369,7 +369,7 @@ class AnnealedHMCScoreSampler(MCMCSampler):
         self.accept_ratio[t] = list()
         self.all_accepts[t] = list()
 
-        for i in range(self.num_samples_per_step):
+        for _ in range(self.num_samples_per_step):
             # Partial Momentum Refreshment
             v_prime = get_v_prime(v=v, damping_coeff=self._damping_coeff, mass_diag_sqrt=self._mass_diag_sqrt[t_idx])
 

@@ -13,7 +13,7 @@ from src.diffusion.beta_schedules import (
     respaced_beta_schedule,
 )
 from src.utils.net import get_device, Device
-from src.model.comp_2d import ResnetDiffusionModel
+from src.model.comp_2d.diffusion import ResnetDiffusionModel
 from src.samplers.mcmc import (
     AnnealedHMCScoreSampler,
     AnnealedLAScoreSampler,
@@ -47,14 +47,15 @@ def main():
     diff_proc = DiffusionSampler(betas, time_steps, posterior_variance="beta")
     prod_sampler = ProductCompSampler(diff_model_gmm, diff_model_bar, diff_proc, use_reverse_step=args.use_rev)
 
-    # print("Sampling from GMM model")
-    # gmm_samples, _ = diff_proc.sample(diff_model_gmm, args.num_samples, device, th.Size((2,)), verbose=True)
-    # gmm_samples = gmm_samples.detach().cpu()
-    # th.save(gmm_samples, sim_dir / f"gmm_samples.th")
-    # print("Sampling from bar model")
-    # bar_samples, _ = diff_proc.sample(diff_model_bar, args.num_samples, device, th.Size((2,)), verbose=True)
-    # bar_samples = bar_samples.detach().cpu()
-    # th.save(bar_samples, sim_dir / f"bar_samples.th")
+    if args.sample_separate:
+        print("Sampling from GMM model")
+        gmm_samples, _ = diff_proc.sample(diff_model_gmm, args.num_samples, device, th.Size((2,)), verbose=True)
+        gmm_samples = gmm_samples.detach().cpu()
+        th.save(gmm_samples, sim_dir / f"gmm_samples.th")
+        print("Sampling from bar model")
+        bar_samples, _ = diff_proc.sample(diff_model_bar, args.num_samples, device, th.Size((2,)), verbose=True)
+        bar_samples = bar_samples.detach().cpu()
+        th.save(bar_samples, sim_dir / f"bar_samples.th")
     if args.mcmc is None:
         print("Sampling from product model with reverse process")
         prod_samples, _ = prod_sampler.sample(args.num_samples, device, th.Size((2,)), verbose=True)
@@ -94,6 +95,7 @@ def parse_args():
     parser.add_argument("--num_samples", type=int, required=True, help="Number of samples")
     parser.add_argument("--mcmc", type=str, default=None, help="MCMC method: {'la', 'hmc'}")
     parser.add_argument("--use_rev", action="store_true", help="Use reverse step")
+    parser.add_argument("--sample_separate", action="store_true", help="Use reverse step")
     parser.add_argument("--seed", type=Optional[int], default=None, help="Manual seed")
     parser.add_argument(
         "--sim_batch", type=int, default=0, help="Simulation batch index, indexes parallell simulations."

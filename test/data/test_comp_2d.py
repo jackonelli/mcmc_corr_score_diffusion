@@ -1,12 +1,12 @@
 """Test 2D data for composition"""
 import unittest
 import torch as th
-from src.data.comp_2d import Gmm
+from src.data.comp_2d import GmmRadial
 
 
 class TestGmm2d(unittest.TestCase):
     def test_nll_single_mixt_comp(self):
-        data = Gmm(1)
+        data = GmmRadial(1)
         sample, _ = data.sample(100)
         from torch.distributions.multivariate_normal import MultivariateNormal
 

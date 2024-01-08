@@ -51,7 +51,7 @@ def main():
     dataloader_train, dataloader_val = get_mnist_data_loaders(batch_size)
     trainer.fit(diff_classifier, dataloader_train, dataloader_val)
 
-    print("Saving model")
+    print(f"Saving model to {model_path}")
     th.save(resnet.state_dict(), model_path)
 
 

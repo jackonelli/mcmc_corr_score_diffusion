@@ -190,6 +190,7 @@ class LearnedVarDiffusion(pl.LightningModule):
         self.i_batch_val = 0
 
 
+# TODO: This should be moved
 class DiffusionClassifier(pl.LightningModule):
     """Trainer for learning classification model p(y | x_t),
     where x_t is a noisy sample from a forward diffusion process."""
