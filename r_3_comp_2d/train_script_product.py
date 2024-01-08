@@ -18,12 +18,12 @@ import numpy as np
 import optax
 import matplotlib.pyplot as plt
 
-from src.datasets import toy_gmm, bar
-from src.models import (
+from r_3_comp_2d.datasets import toy_gmm, bar
+from r_3_comp_2d.models import (
     forward_fn,
     forward_fn_product,
 )
-from src.sampler import (
+from r_3_comp_2d.sampler import (
     AnnealedMUHASampler,
     AnnealedMUHADiffSampler,
     AnnealedULASampler,

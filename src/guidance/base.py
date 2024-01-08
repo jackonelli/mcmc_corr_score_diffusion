@@ -127,13 +127,14 @@ class MCMCGuidanceSampler(GuidanceSampler):
         self.mcmc_sampler.set_energy_function(self.energy)
 
     def energy(self, x_t, t, t_idx, classes):
+        sigma_t = self.diff_proc.sigma_t(t_idx, x_t)
         t_tensor = th.full((x_t.shape[0],), t, device=x_t.device)
         args = [x_t, t_tensor]
         if self.diff_cond:
             args += [classes]
         diff_energy = self.diff_model.energy(*args)
         guidance_energy = self.guidance.log_prob(x_t, t_tensor, classes)
-        return guidance_energy + diff_energy
+        return guidance_energy - diff_energy/sigma_t
 
     def grad(self, x_t, t, t_idx, classes):
         """Compute"""
@@ -150,6 +151,7 @@ class MCMCGuidanceSampler(GuidanceSampler):
         return class_score - pred_noise / sigma_t
 
     def grad_energy(self, x_t, t, t_idx, classes):
+        sigma_t = self.diff_proc.sigma_t(t_idx, x_t)
         t_tensor = th.full((x_t.shape[0],), t, device=x_t.device)
         args = [x_t, t_tensor]
         if self.diff_cond:
@@ -159,7 +161,7 @@ class MCMCGuidanceSampler(GuidanceSampler):
         else:
             energy_grad, _ = self.diff_model(*args).split(x_t.size(1), dim=1)
         class_score = self.guidance.grad(x_t, t_tensor, classes, None)
-        return class_score + energy_grad
+        return class_score - energy_grad / sigma_t
 
     def sample(self, num_samples: int, classes: th.Tensor, device: th.device, shape: tuple, verbose=False):
         """Sampling from the backward process

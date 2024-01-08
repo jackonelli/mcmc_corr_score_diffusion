@@ -29,8 +29,8 @@ class DiffusionModel(pl.LightningModule):
     def _process_batch(self, batch) -> Tuple[int, th.Tensor]:
         """Hack to handle multiple formats of dataloaders"""
         if isinstance(batch, dict):
-            batch_size = batch["pixel_values"].size(0)
-            x = batch["pixel_values"].to(self.device)
+            batch_size = batch["x"].size(0)
+            x = batch["x"].to(self.device)
         else:
             # Discard label
             x, _ = batch
