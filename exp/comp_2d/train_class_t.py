@@ -9,7 +9,6 @@ from argparse import ArgumentParser
 from pathlib import Path
 import json
 import torch as th
-import torch.nn.functional as F
 import pytorch_lightning as pl
 from src.data.comp_2d import GmmRadial
 from src.data.utils import get_full_sample_data_loaders
@@ -34,15 +33,6 @@ def main():
 
     # Model params
     device = get_device(Device.GPU)
-    # if args.load_weights:
-    #     param_path = Path.cwd() / "models" / f"{args.load_weights}.pt"
-    #     diff_model = load_pretrained_diff_unet(
-    #         model_path=param_path, image_size=image_size, dev=device, class_cond=args.class_cond
-    #     )
-    #     diff_model.train()
-    # else:
-    #     diff_model = initialise_diff_unet(image_size=image_size, dev=device, class_cond=args.class_cond)
-    #     diff_model.train()
     diff_model = Classifier(x_dim=2, num_classes=dataset.n_comp, num_diff_steps=num_diff_steps)
     diff_model.to(device)
     diff_model.train()
