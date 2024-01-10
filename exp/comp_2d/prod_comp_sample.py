@@ -13,7 +13,7 @@ from src.diffusion.beta_schedules import (
     respaced_beta_schedule,
 )
 from src.utils.net import get_device, Device
-from src.model.comp_2d.diffusion import ResnetDiffusionModel
+from src.model.comp_two_d.diffusion import ResnetDiffusionModel
 from src.samplers.mcmc import (
     AnnealedHMCScoreSampler,
     AnnealedLAScoreSampler,
@@ -31,11 +31,11 @@ def main():
     set_seed(args.seed)
 
     # Setup and assign a directory where simulation results are saved.
-    sim_dir = Path.cwd() / "results/comp_2d"
+    sim_dir = Path.cwd() / "results/comp_two_d"
     sim_dir.mkdir(exist_ok=True)
     device = get_device(Device.GPU)
 
-    models_dir = Path.cwd() / "models/comp_2d"
+    models_dir = Path.cwd() / "models/comp_two_d"
     diff_model_gmm = load_diff_model(models_dir / "gmm.pt", T, device)
     diff_model_bar = load_diff_model(models_dir / "bar.pt", T, device)
 

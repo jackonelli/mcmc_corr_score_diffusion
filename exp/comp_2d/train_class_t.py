@@ -13,7 +13,7 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 from src.data.comp_2d import GmmRadial
 from src.data.utils import get_full_sample_data_loaders
-from src.model.comp_2d.classifier import Classifier
+from src.model.comp_two_d.classifier import Classifier
 from src.diffusion.base import DiffusionSampler
 from src.model.trainers.classifier import DiffusionClassifier
 from src.diffusion.beta_schedules import improved_beta_schedule
