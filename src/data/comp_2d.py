@@ -2,6 +2,8 @@
 import numpy as np
 import torch as th
 
+from src.data.multi_dim_gmm import Gmm
+
 
 class Bar:
     """Uniform distribution in 2D"""
@@ -30,7 +32,26 @@ class Bar:
         return nll.mean().item()
 
 
-class GmmRadial:
+class GmmRadial(Gmm):
+    """Gaussian mixture model with Gaussians spread equiangularly on a ring with fixed radius"""
+
+    def __init__(self, num_comp=8, std=0.03, radius=0.5):
+        means_x = th.cos(2 * np.pi * th.linspace(0, (num_comp - 1) / num_comp, num_comp))
+        means_y = th.sin(2 * np.pi * th.linspace(0, (num_comp - 1) / num_comp, num_comp))
+        means = radius * th.column_stack((means_x, means_y))
+        covs = [std**2 * th.eye(2) for _ in range(num_comp)]
+        super().__init__(means, covs)
+        self.std = std
+
+    def nll(self, x: th.Tensor) -> float:
+        """Compute NLL for GMM
+
+        - log p(x) = - log sum_i w_i N(x; mu_i, std**2 I)
+        """
+        return self.isotropic_nll(x)
+
+
+class _GmmRadial:
     """Gaussian mixture model with Gaussians spread equiangularly on a ring with fixed radius"""
 
     def __init__(self, n_comp=8, std=0.03, radius=0.5):
@@ -91,7 +112,7 @@ import matplotlib.pyplot as plt
 
 
 def test():
-    samples, labels = GmmRadial(n_comp=1).sample(800)
+    samples, labels = GmmRadial(num_comp=1).sample(800)
     plt.scatter(samples[:, 0], samples[:, 1], c=labels)
 
 

@@ -33,7 +33,7 @@ def main():
 
     # Model params
     device = get_device(Device.GPU)
-    diff_model = Classifier(x_dim=2, num_classes=dataset.n_comp, num_diff_steps=num_diff_steps)
+    diff_model = Classifier(x_dim=2, num_classes=dataset.num_comp, num_diff_steps=num_diff_steps)
     diff_model.to(device)
     diff_model.train()
 

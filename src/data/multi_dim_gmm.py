@@ -80,6 +80,17 @@ class Gmm:
         # Mean of samples n
         return th.mean(-unnorm_log_pdf + log_normalisation).item()
 
+    def conditional_nll(self, samples, classes):
+        ll = 0.0
+        for cl in th.arange(classes.max() + 1):
+            mean = self.means[cl]
+            cov = self.covs[cl]
+            cond_samples = samples[classes == cl, :]
+            pdf = MultivariateNormal(loc=mean, covariance_matrix=cov)
+            ll += pdf.log_prob(cond_samples).sum().item()
+        num_samples = classes.size(0)
+        return -ll / num_samples
+
 
 def generate_means(x_dim, num_comp):
     """Generate means on all unit vectors"""
