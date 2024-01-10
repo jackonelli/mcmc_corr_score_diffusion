@@ -119,7 +119,7 @@ class MCMCGuidanceSampler(GuidanceSampler):
         diff_proc: DiffusionSampler,
         guidance: Guidance,
         mcmc_sampler: MCMCSampler,
-        mcmc_sampling_predicate: Callable = lambda _: True,
+        mcmc_sampling_predicate: Callable = lambda t: t > 0,
         reverse=True,
         diff_cond: bool = False,
     ):
@@ -258,13 +258,21 @@ class MCMCGuidanceSamplerStacking(MCMCGuidanceSampler):
 
 
 class GuidanceSamplerAcceptanceComparison:
-
     def __init__(self, guidance_models: List[MCMCGuidanceSampler]):
         self.guidance_models = guidance_models
         self.n_models = len(guidance_models)
 
-    def sample(self, num_samples: int, classes: th.Tensor, device: th.device, shape: tuple, i_model: int = 0,
-               n_per_t: int = 1, seed: int = 0, verbose=False):
+    def sample(
+        self,
+        num_samples: int,
+        classes: th.Tensor,
+        device: th.device,
+        shape: tuple,
+        i_model: int = 0,
+        n_per_t: int = 1,
+        seed: int = 0,
+        verbose=False,
+    ):
         """Sample points from the data distribution by running the reverse process
            asf
 
@@ -282,8 +290,9 @@ class GuidanceSamplerAcceptanceComparison:
         """
 
         x_tm1 = th.randn((num_samples,) + shape).to(device)
-        acceptance = {i: {j.item(): list() for j in self.guidance_models[i].diff_proc.time_steps}
-                      for i in range(self.n_models)}
+        acceptance = {
+            i: {j.item(): list() for j in self.guidance_models[i].diff_proc.time_steps} for i in range(self.n_models)
+        }
 
         verbose_counter = 0
         self_ = self.guidance_models[i_model]
@@ -305,7 +314,7 @@ class GuidanceSamplerAcceptanceComparison:
                     th.manual_seed(seed + t)
                     for j in range(n_per_t):
                         _ = self.guidance_models[i].mcmc_sampler.sample_step(x_tm1, respaced_t, t_idx - 1, classes)
-                        acceptance[i][t.item()-1].append(self.guidance_models[i].mcmc_sampler.all_accepts[respaced_t])
+                        acceptance[i][t.item() - 1].append(self.guidance_models[i].mcmc_sampler.all_accepts[respaced_t])
                 th.set_rng_state(current_rng_state)
             x_tm1 = x_tm1.detach()
 
