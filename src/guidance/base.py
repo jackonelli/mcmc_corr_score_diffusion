@@ -1,5 +1,6 @@
 """Diffusion guidance primitives"""
 from abc import ABC, abstractmethod
+from typing import Callable
 import torch as th
 import torch.cuda
 import torch.nn as nn
@@ -117,7 +118,7 @@ class MCMCGuidanceSampler(GuidanceSampler):
         diff_proc: DiffusionSampler,
         guidance: Guidance,
         mcmc_sampler: MCMCSampler,
-        mcmc_sampling_predicate,
+        mcmc_sampling_predicate: Callable = lambda _: True,
         reverse=True,
         diff_cond: bool = False,
     ):
