@@ -7,6 +7,7 @@ import torch.nn as nn
 import numpy as np
 from src.diffusion.base import extract, DiffusionSampler
 from src.samplers.mcmc import MCMCSampler
+from typing import List
 import gc
 
 
@@ -131,7 +132,7 @@ class MCMCGuidanceSampler(GuidanceSampler):
         self.mcmc_sampler.set_energy_function(self.energy)
 
     def energy(self, x_t, t, t_idx, classes):
-        sigma_t = self.diff_proc.sigma_t(t_idx, x_t)
+        sigma_t = self.diff_proc.sigma_t(t_idx, x_t).squeeze()
         t_tensor = th.full((x_t.shape[0],), t, device=x_t.device)
         args = [x_t, t_tensor]
         if self.diff_cond:
@@ -254,6 +255,61 @@ class MCMCGuidanceSamplerStacking(MCMCGuidanceSampler):
                 respaced_t = self.diff_proc.time_steps[t_idx - 1].item()
                 x = self.mcmc_sampler.sample_step(x, respaced_t, t_idx - 1, classes)
         return x, []
+
+
+class GuidanceSamplerAcceptanceComparison:
+
+    def __init__(self, guidance_models: List[MCMCGuidanceSampler]):
+        self.guidance_models = guidance_models
+        self.n_models = len(guidance_models)
+
+    def sample(self, num_samples: int, classes: th.Tensor, device: th.device, shape: tuple, i_model: int = 0,
+               n_per_t: int = 1, seed: int = 0, verbose=False):
+        """Sample points from the data distribution by running the reverse process
+           asf
+
+        Args:
+            num_samples (number of samples)
+            classes (num_samples, ): classes to condition on (on for each sample)
+            device (the device the model is on)
+            shape (shape of data, e.g., (1, 28, 28))
+            i_model (which model to use for reverse)
+            n_per_t (number of samples per timestep for estimating the acceptance ratio)
+            seed (same seed for each model)
+
+        Returns:
+            acceptance ratios for each model
+        """
+
+        x_tm1 = th.randn((num_samples,) + shape).to(device)
+        acceptance = {i: {j.item(): list() for j in self.guidance_models[i].diff_proc.time_steps}
+                      for i in range(self.n_models)}
+
+        verbose_counter = 0
+        self_ = self.guidance_models[i_model]
+        for t, t_idx in zip(self_.diff_proc.time_steps.__reversed__(), reversed(self_.diff_proc.time_steps_idx)):
+            if verbose and self_.diff_proc.verbose_split[verbose_counter] == t:
+                print("Diff step", t.item())
+                verbose_counter += 1
+
+            if self_.reverse:
+                if self_.require_g:
+                    x_tm1 = reverse_func_require_grad(self_, t, t_idx, x_tm1, classes, device, self_.diff_cond)
+                else:
+                    x_tm1 = reverse_func(self_, t, t_idx, x_tm1, classes, device, self_.diff_cond)
+
+            if t > 0:
+                current_rng_state = th.get_rng_state()
+                respaced_t = self_.diff_proc.time_steps[t_idx - 1].item()
+                for i in range(self.n_models):
+                    th.manual_seed(seed + t)
+                    for j in range(n_per_t):
+                        _ = self.guidance_models[i].mcmc_sampler.sample_step(x_tm1, respaced_t, t_idx - 1, classes)
+                        acceptance[i][t.item()-1].append(self.guidance_models[i].mcmc_sampler.all_accepts[respaced_t])
+                th.set_rng_state(current_rng_state)
+            x_tm1 = x_tm1.detach()
+
+        return x_tm1, acceptance
 
 
 @th.no_grad()

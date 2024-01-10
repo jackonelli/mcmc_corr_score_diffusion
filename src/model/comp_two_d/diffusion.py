@@ -1,5 +1,7 @@
 import torch.nn as nn
 import torch.nn.functional as F
+from src.model.base import EnergyModel
+import torch as th
 
 
 class ResnetDiffusionModel(nn.Module):
@@ -72,6 +74,36 @@ class Block(nn.Module):
         h_out = F.silu(h_out)
         h_out = self.layer_out(h_out)
         return h_in + h_out
+
+
+class ResnetDiffusionModelEnergy(ResnetDiffusionModel, EnergyModel):
+    def __init__(
+        self,
+        num_diff_steps: int,
+        n_layers: int = 4,
+        x_dim: int = 2,
+        h_dim: int = 128,
+        emb_dim: int = 32,
+        widen: int = 2,
+        emb_type: str = "learned"
+    ):
+        ResnetDiffusionModel.__init__(self,
+                                      num_diff_steps=num_diff_steps,
+                                      n_layers=n_layers,
+                                      x_dim=x_dim,
+                                      h_dim=h_dim,
+                                      emb_dim=emb_dim,
+                                      widen=widen,
+                                      emb_type=emb_type)
+        EnergyModel.__init__(self)
+
+    def energy(self, x: th.Tensor, time: th.Tensor):
+        out = super().forward(x, time)
+        return ((out - x) ** 2).sum(dim=tuple(i for i in range(1, x.dim())))
+
+    def forward(self, x: th.Tensor, time: th.Tensor):
+        energy = self.energy(x, time)
+        return th.autograd.grad(energy, x, grad_outputs=th.ones_like(energy), create_graph=True)[0]
 
 
 # class JaxResnetDiffusionModel(hk.Module):

@@ -13,8 +13,8 @@ from src.diffusion.beta_schedules import (
     respaced_beta_schedule,
 )
 from src.utils.net import get_device, Device
-from src.model.comp_2d.diffusion import ResnetDiffusionModel
-from src.model.comp_2d.classifier import load_classifier
+from src.model.comp_two_d.diffusion import ResnetDiffusionModel
+from src.model.comp_two_d.classifier import load_classifier
 from src.guidance.classifier_full import ClassifierFullGuidance
 from src.guidance.base import GuidanceSampler, MCMCGuidanceSampler
 from src.samplers.mcmc import (
@@ -35,11 +35,11 @@ def main():
     set_seed(args.seed)
 
     # Setup and assign a directory where simulation results are saved.
-    sim_dir = Path.cwd() / "results/comp_2d"
+    sim_dir = Path.cwd() / "results/comp_two_d"
     sim_dir.mkdir(exist_ok=True)
     device = get_device(Device.GPU)
 
-    models_dir = Path.cwd() / "models/comp_2d"
+    models_dir = Path.cwd() / "models/comp_two_d"
     diff_model = load_diff_model(models_dir / "gmm.pt", T, device)
     classifier = load_classifier(models_dir / "class_t_gmm.pt", num_classes, device, num_diff_steps=T)
 
@@ -100,7 +100,6 @@ def parse_args():
     parser.add_argument("--num_samples", type=int, required=True, help="Number of samples")
     parser.add_argument("--mcmc", type=str, default=None, help="MCMC method: {'la', 'hmc'}")
     parser.add_argument("--use_rev", action="store_true", help="Use reverse step")
-    parser.add_argument("--sample_separate", action="store_true", help="Use reverse step")
     parser.add_argument("--seed", type=Optional[int], default=None, help="Manual seed")
     parser.add_argument(
         "--sim_batch", type=int, default=0, help="Simulation batch index, indexes parallell simulations."

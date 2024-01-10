@@ -13,7 +13,7 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 from src.data.comp_2d import Bar, GmmRadial
 from src.data.utils import get_full_sample_data_loaders
-from src.model.comp_2d.diffusion import ResnetDiffusionModel
+from src.model.comp_two_d.diffusion import ResnetDiffusionModel, ResnetDiffusionModelEnergy
 from src.diffusion.base import DiffusionSampler
 
 # TODO: Move
@@ -47,7 +47,10 @@ def main():
     # else:
     #     diff_model = initialise_diff_unet(image_size=image_size, dev=device, class_cond=args.class_cond)
     #     diff_model.train()
-    diff_model = ResnetDiffusionModel(num_diff_steps=num_diff_steps)
+    if args.energy:
+        diff_model = ResnetDiffusionModelEnergy(num_diff_steps=num_diff_steps)
+    else:
+        diff_model = ResnetDiffusionModel(num_diff_steps=num_diff_steps)
     diff_model.to(device)
     diff_model.train()
 
@@ -63,8 +66,12 @@ def main():
 
     trainer.fit(diffm, dataloader_train, dataloader_val)
 
+    model_name = 'score'
+    if args.energy:
+        model_name = 'energy'
+
     print("Saving model")
-    th.save(diff_model.state_dict(), save_dir / f"2d_comp_{args.data}.pt")
+    th.save(diff_model.state_dict(), save_dir / f"2d_comp_{args.data}_{model_name}.pt")
 
 
 def _setup_results_dir(res_dir: Path, args) -> Path:
@@ -83,6 +90,7 @@ def parse_args():
     parser.add_argument("--data", type=str, required=True, choices=["gmm", "bar"], help="Source dataset")
     parser.add_argument("--max_epochs", type=int, default=200, help="Max epochs")
     parser.add_argument("--batch_size", type=int, default=1000, help="Batch size")
+    parser.add_argument("--energy", action="store_true", help='Use energy-parameterization instead of score')
     parser.add_argument(
         "--sim_batch", type=int, default=0, help="Simulation batch index, indexes parallell simulations."
     )

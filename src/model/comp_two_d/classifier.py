@@ -1,6 +1,6 @@
 from functools import partial
 import torch.nn as nn
-from src.model.comp_2d.diffusion import Block
+from src.model.comp_two_d.diffusion import Block
 
 
 def load_classifier(params_path, num_classes, device, x_dim=2, num_diff_steps=100):

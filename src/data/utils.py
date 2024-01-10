@@ -5,11 +5,13 @@ import numpy as np
 from torch.utils.data import Dataset, DataLoader
 
 
-def collate_fn(batch):
-    return {
-        "x": th.stack([x for x, _ in batch]),
-        "labels": th.tensor([y for _, y in batch]),
-    }
+def construct_collate_fn(keys):
+    def collate_fn(batch):
+        return {
+            keys["x"]: th.stack([x for x, _ in batch]),
+            keys["y"]: th.tensor([y for _, y in batch]),
+        }
+    return collate_fn
 
 
 def reverse_transform(tensor):
@@ -25,9 +27,15 @@ def reverse_transform(tensor):
     return transf(tensor)
 
 
-def get_full_sample_data_loaders(dataset, num_samples: int, batch_size: int, num_val_samples=500):
+def get_full_sample_data_loaders(dataset, num_samples: int, batch_size: int, num_val_samples=500,
+                                 keys_collate_fn=None):
+    if keys_collate_fn is None:
+        keys_collate_fn = {'x': 'pixel_values', 'y': 'labels'}
+
     train = FullSampleDataset(dataset, num_samples)
     val = FullSampleDataset(dataset, num_val_samples)
+
+    collate_fn = construct_collate_fn(keys_collate_fn)
 
     dataloader_train = DataLoader(
         train,
