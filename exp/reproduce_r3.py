@@ -84,6 +84,7 @@ def main():
         diff_proc=diff_sampler,
         guidance=guidance,
         mcmc_sampler=mcmc_sampler,
+        mcmc_sampling_predicate=lambda t: t > 50,
         reverse=True,
         diff_cond=config.class_cond,
     )

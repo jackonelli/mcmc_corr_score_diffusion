@@ -117,11 +117,14 @@ class MCMCGuidanceSampler(GuidanceSampler):
         diff_proc: DiffusionSampler,
         guidance: Guidance,
         mcmc_sampler: MCMCSampler,
+        mcmc_sampling_predicate,
         reverse=True,
         diff_cond: bool = False,
     ):
         super().__init__(diff_model=diff_model, diff_proc=diff_proc, guidance=guidance, diff_cond=diff_cond)
         self.mcmc_sampler = mcmc_sampler
+        # Function which maps diff step t to a bool, controlling for which timesteps to to MCMC sampling.
+        self._mcmc_sampling_predicate = mcmc_sampling_predicate
         self.mcmc_sampler.set_gradient_function(self.grad)
         self.reverse = reverse
         self.mcmc_sampler.set_energy_function(self.energy)
@@ -134,7 +137,7 @@ class MCMCGuidanceSampler(GuidanceSampler):
             args += [classes]
         diff_energy = self.diff_model.energy(*args)
         guidance_energy = self.guidance.log_prob(x_t, t_tensor, classes)
-        return guidance_energy - diff_energy/sigma_t
+        return guidance_energy - diff_energy / sigma_t
 
     def grad(self, x_t, t, t_idx, classes):
         """Compute"""
@@ -193,7 +196,7 @@ class MCMCGuidanceSampler(GuidanceSampler):
                 else:
                     x_tm1 = reverse_func(self, t, t_idx, x_tm1, classes, device, self.diff_cond)
 
-            if t > 0:
+            if self._mcmc_sampling_predicate(t):
                 respaced_t = self.diff_proc.time_steps[t_idx - 1].item()
                 x_tm1 = self.mcmc_sampler.sample_step(x_tm1, respaced_t, t_idx - 1, classes)
             x_tm1 = x_tm1.detach()
