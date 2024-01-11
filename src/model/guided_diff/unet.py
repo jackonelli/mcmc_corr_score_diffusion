@@ -29,6 +29,16 @@ from src.model.guided_diff.nn import (
 
 NUM_CLASSES = 1000
 
+IMAGE_RES_TO_CHANNEL_MAP = {
+    64: 192,
+    256: 256,
+}
+
+IMAGE_RES_TO_NUM_RES_BLOCKS = {
+    64: 3,
+    256: 2,
+}
+
 
 def initialise_diff_unet(
     dev,
@@ -38,11 +48,9 @@ def initialise_diff_unet(
     dropout=0.0,
     image_size=256,
     learn_sigma=True,
-    num_channels=256,
     num_head_channels=64,
     num_heads=4,
     num_heads_upsample=-1,
-    num_res_blocks=2,
     resblock_updown=True,
     use_checkpoint=False,
     use_fp16=True,
@@ -54,13 +62,13 @@ def initialise_diff_unet(
     model = UNetModel(
         image_size=image_size,
         in_channels=3,
-        model_channels=num_channels,
+        model_channels=IMAGE_RES_TO_CHANNEL_MAP[image_size],
         out_channels=(3 if not learn_sigma else 6),
-        num_res_blocks=num_res_blocks,
+        num_res_blocks=IMAGE_RES_TO_NUM_RES_BLOCKS[image_size],
         attention_resolutions=attention_ds(attention_resolutions, image_size),
         dropout=dropout,
         channel_mult=parse_channel_mult(channel_mult, image_size),
-        num_classes=(NUM_CLASSES),
+        num_classes=(NUM_CLASSES if class_cond else None),
         use_checkpoint=use_checkpoint,
         use_fp16=use_fp16,
         num_heads=num_heads,
@@ -85,39 +93,33 @@ def load_pretrained_diff_unet(
     dropout=0.0,
     image_size=256,
     learn_sigma=True,
-    num_channels=256,
     num_head_channels=64,
     num_heads=4,
     num_heads_upsample=-1,
-    num_res_blocks=2,
     resblock_updown=True,
     use_checkpoint=False,
     use_fp16=True,
     use_new_attention_order=False,
     use_scale_shift_norm=True,
 ):
-    # dist_util.setup_dist()
-
-    model = UNetModel(
-        image_size=image_size,
-        in_channels=3,
-        model_channels=num_channels,
-        out_channels=(3 if not learn_sigma else 6),
-        num_res_blocks=num_res_blocks,
-        attention_resolutions=attention_ds(attention_resolutions, image_size),
+    model = initialise_diff_unet(
+        dev=dev,
+        attention_resolutions=attention_resolutions,
+        channel_mult=channel_mult,
+        class_cond=class_cond,
         dropout=dropout,
-        channel_mult=parse_channel_mult(channel_mult, image_size),
-        num_classes=(NUM_CLASSES if class_cond else None),
+        image_size=image_size,
+        learn_sigma=learn_sigma,
+        num_head_channels=num_head_channels,
+        num_heads=num_heads,
+        num_heads_upsample=num_heads_upsample,
+        resblock_updown=resblock_updown,
         use_checkpoint=use_checkpoint,
         use_fp16=use_fp16,
-        num_heads=num_heads,
-        num_head_channels=num_head_channels,
-        num_heads_upsample=num_heads_upsample,
-        use_scale_shift_norm=use_scale_shift_norm,
-        resblock_updown=resblock_updown,
         use_new_attention_order=use_new_attention_order,
+        use_scale_shift_norm=use_scale_shift_norm,
     )
-    # model.load_state_dict(dist_util.load_state_dict(str(model_path), map_location="cpu"))
+
     model.load_state_dict(th.load(model_path, map_location="cpu"))
     model.to(dev)
     if use_fp16:
@@ -230,7 +232,7 @@ class UNetModel(nn.Module):
             linear(time_embed_dim, time_embed_dim),
         )
 
-        if self.num_classes is not None:
+        if num_classes is not None:
             self.label_emb = nn.Embedding(num_classes, time_embed_dim)
 
         ch = input_ch = int(channel_mult[0] * model_channels)
@@ -773,28 +775,3 @@ class QKVAttention(nn.Module):
     @staticmethod
     def count_flops(model, _x, y):
         return count_flops_attn(model, _x, y)
-
-
-@th.no_grad()
-def test():
-    dev = dist_util.dev()
-    model = load_pretrained_diff_unet(
-        model_path=Path.cwd() / "models" / "256x256_diffusion_uncond.pt", dev=dev, class_cond=False
-    )
-    model.eval()
-    B = 4
-    test_xs_1 = th.randn(B, 3, 256, 256).to(dev)
-    test_xs_2 = th.randn(B, 3, 256, 256).to(dev)
-    test_ts = th.randint(low=0, high=1000, size=(B,)).to(dev)
-    test_ts = th.ones((B,)).to(dev)
-    test_ys = th.randint(low=0, high=NUM_CLASSES, size=(B,)).to(dev)
-    print("Forward...")
-    pred_noise, log_var = model(test_xs_1, test_ts).split(test_xs_1.size(1), dim=1)
-    for b in range(B):
-        log_var_b = log_var[b]
-        sigma = th.exp(0.5 * log_var_b)
-        print("Sum", sigma.sum())
-
-
-if __name__ == "__main__":
-    test()

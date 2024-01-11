@@ -20,6 +20,11 @@ from src.model.guided_diff.nn import (
     timestep_embedding,
 )
 
+IMAGE_RES_TO_DEPTH = {
+    64: 4,
+    256: 2,
+}
+
 
 def load_guided_classifier(
     model_path: Path,
@@ -27,7 +32,6 @@ def load_guided_classifier(
     image_size,
     use_fp16=True,
     width=128,
-    depth=2,
     attention_resolutions=(32, 16, 8),
     use_scale_shift_norm=True,
     resblock_updown=True,
@@ -38,7 +42,7 @@ def load_guided_classifier(
         in_channels=3,
         model_channels=width,
         out_channels=1000,
-        num_res_blocks=depth,
+        num_res_blocks=IMAGE_RES_TO_DEPTH[image_size],
         attention_resolutions=attention_ds(attention_resolutions, image_size),
         channel_mult=parse_channel_mult(None, image_size),
         use_fp16=use_fp16,

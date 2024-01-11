@@ -36,6 +36,8 @@ class SimulationConfig:
     # MCMC
     mcmc_method: Optional[str]
     mcmc_steps: Optional[int]
+    # Value for disabling MCMC steps:
+    mcmc_lower_t: Optional[int]
     # accept ratio bounds in percent or a str indicating beta sch. based step sizes.
     mcmc_bounds: Optional[Union[str, Tuple[float, float]]]
     # Seed
@@ -85,8 +87,8 @@ def get_step_size(step_size_dir: Path, dataset_name: str, mcmc_method: str):
 
 
 def setup_results_dir(config: SimulationConfig) -> Path:
-    assert config.results_dir.exists()
-    sim_dir = config.results_dir / f"{config.name}_{timestamp()}"
+    config.results_dir.mkdir(exist_ok=True, parents=True)
+    sim_dir = config.results_dir / f"{config.name}_{config.image_size}_{timestamp()}"
     sim_dir.mkdir(exist_ok=True)
     config.save(sim_dir)
     return sim_dir

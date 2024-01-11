@@ -79,12 +79,15 @@ def main():
         mcmc_sampler = AnnealedULAScoreSampler(config.mcmc_steps, step_sizes, None)
     else:
         print(f"Incorrect MCMC method: '{config.mcmc_method}'")
+
+    mcmc_lower_t = config.mcmc_lower_t if config.mcmc_lower_t is not None else 0
+    print(mcmc_lower_t)
     guid_sampler = MCMCGuidanceSampler(
         diff_model=diff_model,
         diff_proc=diff_sampler,
         guidance=guidance,
         mcmc_sampler=mcmc_sampler,
-        mcmc_sampling_predicate=lambda t: t > 50,
+        mcmc_sampling_predicate=lambda t: t > mcmc_lower_t,
         reverse=True,
         diff_cond=config.class_cond,
     )

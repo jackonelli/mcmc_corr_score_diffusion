@@ -11,6 +11,7 @@ def construct_collate_fn(keys):
             keys["x"]: th.stack([x for x, _ in batch]),
             keys["y"]: th.tensor([y for _, y in batch]),
         }
+
     return collate_fn
 
 
@@ -27,10 +28,9 @@ def reverse_transform(tensor):
     return transf(tensor)
 
 
-def get_full_sample_data_loaders(dataset, num_samples: int, batch_size: int, num_val_samples=500,
-                                 keys_collate_fn=None):
+def get_full_sample_data_loaders(dataset, num_samples: int, batch_size: int, num_val_samples=500, keys_collate_fn=None):
     if keys_collate_fn is None:
-        keys_collate_fn = {'x': 'pixel_values', 'y': 'labels'}
+        keys_collate_fn = {"x": "x", "y": "labels"}
 
     train = FullSampleDataset(dataset, num_samples)
     val = FullSampleDataset(dataset, num_val_samples)
