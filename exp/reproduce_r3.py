@@ -14,7 +14,7 @@ from src.diffusion.beta_schedules import (
 from src.utils.net import get_device, Device
 from src.model.guided_diff.unet import load_pretrained_diff_unet
 from src.model.guided_diff.classifier import load_guided_classifier
-from src.guidance.base import MCMCGuidanceSampler
+from src.guidance.base import GuidanceSampler, MCMCGuidanceSampler
 from src.guidance.classifier_full import ClassifierFullGuidance
 from src.samplers.mcmc import AnnealedULAScoreSampler, AnnealedUHMCScoreSampler
 from exp.utils import SimulationConfig, setup_results_dir
@@ -55,42 +55,45 @@ def main():
     diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance=post_var)
     guidance = ClassifierFullGuidance(classifier, lambda_=config.guid_scale)
 
-    assert config.mcmc_steps is not None
-
-    # Compute step lengths
-    step_size_time_steps = th.arange(0, config.num_diff_steps)
-    assert isinstance(config.mcmc_bounds, str)
-    print(f"Using {config.mcmc_bounds} beta schedule.")
-    if config.mcmc_bounds == "lin":
-        step_size_betas = linear_beta_schedule(num_timesteps=config.num_diff_steps)
-    elif config.mcmc_bounds == "cos":
-        step_size_betas = improved_beta_schedule(num_timesteps=config.num_diff_steps)
-    else:
-        print(f"Incorrect step length: '{config.mcmc_bounds}'")
-
     # Gradient function is None here, but is set later in MCMCGuidanceSampler
-    if config.mcmc_method == "uhmc":
-        print("Using the step size 0.6 * beta_t^1.5")
-        step_sizes = {int(t.item()): 0.6 * beta**1.5 for (t, beta) in zip(step_size_time_steps, step_size_betas)}
-        mcmc_sampler = AnnealedUHMCScoreSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
-    elif config.mcmc_method == "ula":
-        print("Using the step size 0.5 * beta_t")
-        step_sizes = {int(t.item()): 0.5 * beta for (t, beta) in zip(step_size_time_steps, step_size_betas)}
-        mcmc_sampler = AnnealedULAScoreSampler(config.mcmc_steps, step_sizes, None)
+    if config.mcmc_method is None:
+        guid_sampler = GuidanceSampler(diff_model, diff_sampler, guidance, diff_cond=config.class_cond)
     else:
-        print(f"Incorrect MCMC method: '{config.mcmc_method}'")
+        assert config.mcmc_steps is not None
 
-    mcmc_lower_t = config.mcmc_lower_t if config.mcmc_lower_t is not None else 0
-    print(mcmc_lower_t)
-    guid_sampler = MCMCGuidanceSampler(
-        diff_model=diff_model,
-        diff_proc=diff_sampler,
-        guidance=guidance,
-        mcmc_sampler=mcmc_sampler,
-        mcmc_sampling_predicate=lambda t: t > mcmc_lower_t,
-        reverse=True,
-        diff_cond=config.class_cond,
-    )
+        # Compute step lengths
+        step_size_time_steps = th.arange(0, config.num_diff_steps)
+        assert isinstance(config.mcmc_bounds, str)
+        print(f"Using {config.mcmc_bounds} beta schedule.")
+        if config.mcmc_bounds == "lin":
+            step_size_betas = linear_beta_schedule(num_timesteps=config.num_diff_steps)
+        elif config.mcmc_bounds == "cos":
+            step_size_betas = improved_beta_schedule(num_timesteps=config.num_diff_steps)
+        else:
+            print(f"Incorrect step length: '{config.mcmc_bounds}'")
+
+        if config.mcmc_method == "uhmc":
+            print("Using the step size 0.6 * beta_t^1.5")
+            step_sizes = {int(t.item()): 0.6 * beta**1.5 for (t, beta) in zip(step_size_time_steps, step_size_betas)}
+            mcmc_sampler = AnnealedUHMCScoreSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
+        elif config.mcmc_method == "ula":
+            print("Using the step size 0.5 * beta_t")
+            step_sizes = {int(t.item()): 0.5 * beta for (t, beta) in zip(step_size_time_steps, step_size_betas)}
+            mcmc_sampler = AnnealedULAScoreSampler(config.mcmc_steps, step_sizes, None)
+        else:
+            print(f"Incorrect MCMC method: '{config.mcmc_method}'")
+
+        mcmc_lower_t = config.mcmc_lower_t if config.mcmc_lower_t is not None else 0
+        print(mcmc_lower_t)
+        guid_sampler = MCMCGuidanceSampler(
+            diff_model=diff_model,
+            diff_proc=diff_sampler,
+            guidance=guidance,
+            mcmc_sampler=mcmc_sampler,
+            mcmc_sampling_predicate=lambda t: t > mcmc_lower_t,
+            reverse=True,
+            diff_cond=config.class_cond,
+        )
 
     print("Sampling...")
     for batch in range(config.num_samples // config.batch_size):
