@@ -106,6 +106,17 @@ class ResnetDiffusionModelEnergy(ResnetDiffusionModel, EnergyModel):
         return th.autograd.grad(energy, x, grad_outputs=th.ones_like(energy), create_graph=True)[0]
 
 
+def load_diff_model_gmm(diff_model_path, T, device, energy=False):
+    assert diff_model_path.exists(), f"Model '{diff_model_path}' does not exist."
+    if energy:
+        diff_model = ResnetDiffusionModelEnergy(num_diff_steps=T)
+    else:
+        diff_model = ResnetDiffusionModel(num_diff_steps=T)
+    diff_model.load_state_dict(th.load(diff_model_path))
+    diff_model.to(device)
+    # diff_model.eval()
+    return diff_model
+
 # class JaxResnetDiffusionModel(hk.Module):
 #     """Resnet score model.
 #

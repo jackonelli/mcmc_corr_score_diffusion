@@ -27,6 +27,7 @@ class MCMCSampler(ABC):
         self.energy_function = energy_function
         self.accept_ratio = dict()
         self.all_accepts = dict()
+        self.energy_dif = dict()
 
     @abstractmethod
     def sample_step(self, *args, **kwargs):
@@ -37,6 +38,34 @@ class MCMCSampler(ABC):
 
     def set_energy_function(self, energy_function):
         self.energy_function = energy_function
+
+
+class MCMCMHCorrSampler(MCMCSampler):
+
+    def __init__(
+            self,
+            num_samples_per_step: int,
+            step_sizes: Dict[int, float],
+            gradient_function: Callable,
+            energy_function: Optional[Callable] = None,
+    ):
+        """
+        @param num_samples_per_step: Number of MCMC steps per timestep t
+        @param step_sizes: Step sizes for each t
+        @param gradient_function: Function that returns the score for a given x, t, and text_embedding
+        @param energy_function: Function that returns the energy for a given x, t, and text_embedding
+        """
+        super().__init__(num_samples_per_step=num_samples_per_step,
+                         step_sizes=step_sizes,
+                         gradient_function=gradient_function,
+                         energy_function=energy_function)
+        self.accept_ratio = dict()
+        self.all_accepts = dict()
+        self.energy_diff = dict()
+
+    @abstractmethod
+    def sample_step(self, *args, **kwargs):
+        raise NotImplementedError
 
 
 class AnnealedULAEnergySampler(MCMCSampler):
@@ -96,7 +125,7 @@ class AnnealedULAScoreSampler(MCMCSampler):
         return x
 
 
-class AnnealedLAScoreSampler(MCMCSampler):
+class AnnealedLAScoreSampler(MCMCMHCorrSampler):
     """Annealed Metropolis-Hasting Adjusted Langevin Algorithm
 
     A straight line is used to compute the trapezoidal rule
@@ -119,6 +148,7 @@ class AnnealedLAScoreSampler(MCMCSampler):
         dims = x.dim()
         self.accept_ratio[t] = list()
         self.all_accepts[t] = list()
+        self.energy_diff[t] = list()
 
         for i in range(self.num_samples_per_step):
             x_hat, mean_x, ss = langevin_step(x, t, t_idx, classes, self.step_sizes, self.gradient_function)
@@ -138,12 +168,13 @@ class AnnealedLAScoreSampler(MCMCSampler):
             )
             self.accept_ratio[t].append((th.sum(accept) / accept.shape[0]).detach().cpu().item())
             self.all_accepts[t].append(accept.detach().cpu())
+            self.energy_diff[t].append(energy_diff.detach().cpu())
             x = accept * x_hat + (1 - accept) * x
 
         return x
 
 
-class AnnealedLAEnergySampler(MCMCSampler):
+class AnnealedLAEnergySampler(MCMCMHCorrSampler):
     """Annealed Metropolis-Hasting Adjusted Langevin Algorithm using energy parameterization"""
 
     def __init__(self, num_samples_per_step: int, step_sizes, gradient_function, energy_function=None):
@@ -164,6 +195,7 @@ class AnnealedLAEnergySampler(MCMCSampler):
         dims = x.dim()
         self.accept_ratio[t] = list()
         self.all_accepts[t] = list()
+        self.energy_diff[t] = list()
 
         for i in range(self.num_samples_per_step):
             x.requires_grad_(True)
@@ -182,6 +214,7 @@ class AnnealedLAEnergySampler(MCMCSampler):
             )
             self.accept_ratio[t].append((th.sum(accept) / accept.shape[0]).detach().cpu().item())
             self.all_accepts[t].append(accept.detach().cpu())
+            self.energy_diff[t].append(energy_diff.detach().cpu())
             x = accept * x_hat + (1 - accept) * x
             x = x.detach()
         return x
@@ -252,8 +285,6 @@ class AnnealedUHMCScoreSampler(MCMCSampler):
     def sample_step(self, x, t, t_idx, classes=None):
         # Sample Momentum
         v = th.randn_like(x) * self._mass_diag_sqrt[t_idx]
-        self.accept_ratio[t] = list()
-        self.all_accepts[t] = list()
 
         for _ in range(self.num_samples_per_step):
             # Partial Momentum Refreshment
@@ -308,8 +339,6 @@ class AnnealedUHMCEnergySampler(MCMCSampler):
     def sample_step(self, x, t, t_idx, classes=None):
         # Sample Momentum
         v = th.randn_like(x) * self._mass_diag_sqrt[t_idx]
-        self.accept_ratio[t] = list()
-        self.all_accepts[t] = list()
 
         for _ in range(self.num_samples_per_step):
             # Partial Momentum Refreshment
@@ -330,7 +359,7 @@ class AnnealedUHMCEnergySampler(MCMCSampler):
         return x
 
 
-class AnnealedHMCScoreSampler(MCMCSampler):
+class AnnealedHMCScoreSampler(MCMCMHCorrSampler):
     """Annealed Metropolis-Hasting Adjusted Hamiltonian Monte Carlo
 
     Trapezoidal rule is computed with the intermediate steps of HMC (leapfrog steps)
@@ -368,6 +397,7 @@ class AnnealedHMCScoreSampler(MCMCSampler):
         v = th.randn_like(x) * self._mass_diag_sqrt[t_idx]
         self.accept_ratio[t] = list()
         self.all_accepts[t] = list()
+        self.energy_diff[t] = list()
 
         for _ in range(self.num_samples_per_step):
             # Partial Momentum Refreshment
@@ -405,10 +435,11 @@ class AnnealedHMCScoreSampler(MCMCSampler):
             v = accept * v_next + (1 - accept) * v_prime
             self.accept_ratio[t].append((th.sum(accept) / accept.shape[0]).detach().cpu().item())
             self.all_accepts[t].append(accept.detach().cpu().squeeze())
+            self.energy_diff[t].append(energy_diff.detach().cpu())
         return x
 
 
-class AnnealedHMCEnergySampler(MCMCSampler):
+class AnnealedHMCEnergySampler(MCMCMHCorrSampler):
     """Annealed Metropolis-Hasting Adjusted Hamiltonian Monte Carlo using energy-parameterization"""
 
     def __init__(
@@ -447,6 +478,7 @@ class AnnealedHMCEnergySampler(MCMCSampler):
         v = th.randn_like(x) * self._mass_diag_sqrt[t_idx]
         self.accept_ratio[t] = list()
         self.all_accepts[t] = list()
+        self.energy_diff[t] = list()
 
         for i in range(self.num_samples_per_step):
             # Partial Momentum Refreshment
@@ -485,6 +517,7 @@ class AnnealedHMCEnergySampler(MCMCSampler):
             v = accept * v_next + (1 - accept) * v_prime
             self.accept_ratio[t].append((th.sum(accept) / accept.shape[0]).detach().cpu().item())
             self.all_accepts[t].append(accept.detach().cpu().squeeze())
+            self.energy_diff[t].append(energy_diff.detach().cpu())
         return x
 
 
@@ -546,12 +579,13 @@ def estimate_energy_diff(xs_, grads_, dims):
     return energy
 
 
-class AdaptiveStepSizeMCMCSamplerWrapper(MCMCSampler):
-    def __init__(self, sampler: MCMCSampler, accept_rate_bound: list, time_steps, max_iter: int = 10):
+class AdaptiveStepSizeMCMCSamplerWrapper(MCMCMHCorrSampler):
+    def __init__(self, sampler: MCMCMHCorrSampler, accept_rate_bound: list, time_steps, max_iter: int = 10):
         super().__init__(
             num_samples_per_step=sampler.num_samples_per_step,
             step_sizes=sampler.step_sizes,
             gradient_function=sampler.gradient_function,
+            energy_function=sampler.energy_function
         )
         self.sampler = sampler
         self.accept_rate_bound = accept_rate_bound
@@ -572,8 +606,10 @@ class AdaptiveStepSizeMCMCSamplerWrapper(MCMCSampler):
         i = 0
         x_ = None
         while not step_found and i < self.max_iter:
+            current_rng_state = th.get_rng_state()
             torch.manual_seed(t)
             x_ = self.sampler.sample_step(x, t, t_idx, classes)
+            th.set_rng_state(current_rng_state)
             x_ = x_.detach()
             a_rate = np.mean(self.sampler.accept_ratio[t])
             step_s = self.sampler.step_sizes[t].clone()
@@ -593,6 +629,9 @@ class AdaptiveStepSizeMCMCSamplerWrapper(MCMCSampler):
                 # New step size
                 step_s_ = step_s.clone()
                 if upper["stepsize"] is not None and lower["stepsize"] is not None:
+                    w = th.rand(1).item()
+                    new_step_s = torch.exp(w * torch.log(upper["stepsize"]) + (1 - w) * torch.log(lower["stepsize"]))
+                    """
                     suggest_new = torch.exp((torch.log(upper["stepsize"]) + torch.log(lower["stepsize"])) / 2)
                     if suggest_new == step_s_:
                         w = th.rand(1).item()
@@ -601,11 +640,12 @@ class AdaptiveStepSizeMCMCSamplerWrapper(MCMCSampler):
                         )
                     else:
                         new_step_s = suggest_new
+                    """
                 else:
                     if a_rate > self.accept_rate_bound[1]:
-                        new_step_s = step_s_ / 10
-                    else:  # a_rate < self.accept_rate_bound[0]
                         new_step_s = step_s_ * 10
+                    else:  # a_rate < self.accept_rate_bound[0]
+                        new_step_s = step_s_ / 10
 
                 self.sampler.step_sizes[t] = new_step_s
             i += 1
@@ -615,15 +655,20 @@ class AdaptiveStepSizeMCMCSamplerWrapper(MCMCSampler):
     def set_gradient_function(self, gradient_function):
         self.sampler.set_gradient_function(gradient_function)
 
+    def set_energy_function(self, energy_function):
+        self.sampler.set_energy_function(energy_function)
 
-class AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize(MCMCSampler):
+
+class AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize(MCMCMHCorrSampler):
     def __init__(
-        self, sampler: MCMCSampler, accept_rate_bound: list, time_steps, batch_size: int, device, max_iter: int = 10
+        self, sampler: MCMCMHCorrSampler, accept_rate_bound: list, time_steps, batch_size: int, device,
+            max_iter: int = 10
     ):
         super().__init__(
             num_samples_per_step=sampler.num_samples_per_step,
             step_sizes=sampler.step_sizes,
             gradient_function=sampler.gradient_function,
+            energy_function=sampler.energy_function
         )
         self.sampler = sampler
         self.accept_rate_bound = accept_rate_bound
@@ -652,10 +697,10 @@ class AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize(MCMCSampler):
             torch.manual_seed(t)
             accepts = list()
             for j in range(n_batches - 1):
-                x_ = x[idx[j] : idx[j + 1]].to(self.device)
-                y_ = text_embeddings[idx[j] : idx[j + 1]].to(self.device)
+                x_ = x[idx[j]: idx[j + 1]].to(self.device)
+                y_ = text_embeddings[idx[j]: idx[j + 1]].to(self.device)
                 x_ = self.sampler.sample_step(x_, t, t_idx, y_)
-                x_next[idx[j] : idx[j + 1]] = x_.detach().cpu()
+                x_next[idx[j]: idx[j + 1]] = x_.detach().cpu()
                 accepts += list(itertools.chain(*[acc.numpy().tolist() for acc in self.sampler.all_accepts[t]]))
                 del x_
                 del y_
