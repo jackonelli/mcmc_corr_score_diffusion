@@ -41,7 +41,13 @@ def main():
     # Hyper/meta params
     channels, image_size = config.num_channels, config.image_size
     num_classes = 1000
-    beta_schedule, post_var = linear_beta_schedule, "learned"
+    post_var = "learned"
+    if config.mcmc_bounds == "lin":
+        beta_schedule = linear_beta_schedule
+    elif config.mcmc_bounds == "cos":
+        beta_schedule = improved_beta_schedule
+    else:
+        print(f"Unknown beta schedule: '{config.mcmc_bounds}'")
     diff_model = load_pretrained_diff_unet(model_path=diff_model_path, dev=device, class_cond=config.class_cond)
     diff_model.eval()
     classifier = load_guided_classifier(model_path=classifier_path, dev=device, image_size=image_size)
@@ -65,20 +71,14 @@ def main():
         step_size_time_steps = th.arange(0, config.num_diff_steps)
         assert isinstance(config.mcmc_bounds, str)
         print(f"Using {config.mcmc_bounds} beta schedule.")
-        if config.mcmc_bounds == "lin":
-            step_size_betas = linear_beta_schedule(num_timesteps=config.num_diff_steps)
-        elif config.mcmc_bounds == "cos":
-            step_size_betas = improved_beta_schedule(num_timesteps=config.num_diff_steps)
-        else:
-            print(f"Incorrect step length: '{config.mcmc_bounds}'")
 
         if config.mcmc_method == "uhmc":
             print("Using the step size 0.6 * beta_t^1.5")
-            step_sizes = {int(t.item()): 0.6 * beta**1.5 for (t, beta) in zip(step_size_time_steps, step_size_betas)}
+            step_sizes = {int(t.item()): 0.6 * beta**1.5 for (t, beta) in zip(time_steps, betas)}
             mcmc_sampler = AnnealedUHMCScoreSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
         elif config.mcmc_method == "ula":
             print("Using the step size 0.5 * beta_t")
-            step_sizes = {int(t.item()): 0.5 * beta for (t, beta) in zip(step_size_time_steps, step_size_betas)}
+            step_sizes = {int(t.item()): 0.5 * beta for (t, beta) in zip(time_steps, betas)}
             mcmc_sampler = AnnealedULAScoreSampler(config.mcmc_steps, step_sizes, None)
         else:
             print(f"Incorrect MCMC method: '{config.mcmc_method}'")

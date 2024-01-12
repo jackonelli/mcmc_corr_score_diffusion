@@ -41,13 +41,12 @@ class MCMCSampler(ABC):
 
 
 class MCMCMHCorrSampler(MCMCSampler):
-
     def __init__(
-            self,
-            num_samples_per_step: int,
-            step_sizes: Dict[int, float],
-            gradient_function: Callable,
-            energy_function: Optional[Callable] = None,
+        self,
+        num_samples_per_step: int,
+        step_sizes: Dict[int, float],
+        gradient_function: Callable,
+        energy_function: Optional[Callable] = None,
     ):
         """
         @param num_samples_per_step: Number of MCMC steps per timestep t
@@ -55,17 +54,31 @@ class MCMCMHCorrSampler(MCMCSampler):
         @param gradient_function: Function that returns the score for a given x, t, and text_embedding
         @param energy_function: Function that returns the energy for a given x, t, and text_embedding
         """
-        super().__init__(num_samples_per_step=num_samples_per_step,
-                         step_sizes=step_sizes,
-                         gradient_function=gradient_function,
-                         energy_function=energy_function)
+        super().__init__(
+            num_samples_per_step=num_samples_per_step,
+            step_sizes=step_sizes,
+            gradient_function=gradient_function,
+            energy_function=energy_function,
+        )
         self.accept_ratio = dict()
         self.all_accepts = dict()
         self.energy_diff = dict()
+        self.alpha = dict()
 
     @abstractmethod
     def sample_step(self, *args, **kwargs):
         raise NotImplementedError
+
+    def save_stats(self, t, alpha, all_accepts, energy_diff):
+        self.alpha[t].append(alpha.detach().cpu())
+        self.all_accepts[t].append(all_accepts.detach().cpu())
+        self.energy_diff[t].append(energy_diff.detach().cpu())
+
+    def update_save_dicts(self, t):
+        self.alpha[t] = list()
+        self.accept_ratio[t] = list()
+        self.all_accepts[t] = list()
+        self.energy_diff[t] = list()
 
 
 class AnnealedULAEnergySampler(MCMCSampler):
@@ -146,9 +159,7 @@ class AnnealedLAScoreSampler(MCMCMHCorrSampler):
     @th.no_grad()
     def sample_step(self, x, t, t_idx, classes=None):
         dims = x.dim()
-        self.accept_ratio[t] = list()
-        self.all_accepts[t] = list()
-        self.energy_diff[t] = list()
+        self.update_save_dicts(t)
 
         for i in range(self.num_samples_per_step):
             x_hat, mean_x, ss = langevin_step(x, t, t_idx, classes, self.step_sizes, self.gradient_function)
@@ -163,13 +174,10 @@ class AnnealedLAScoreSampler(MCMCMHCorrSampler):
             logp_accept = energy_diff + logp_reverse - logp_forward
 
             u = th.rand(x.shape[0]).to(x.device)
-            accept = (
-                (u < th.exp(logp_accept)).to(th.float32).reshape((x.shape[0],) + tuple(([1 for _ in range(dims - 1)])))
-            )
-            self.accept_ratio[t].append((th.sum(accept) / accept.shape[0]).detach().cpu().item())
-            self.all_accepts[t].append(accept.detach().cpu())
-            self.energy_diff[t].append(energy_diff.detach().cpu())
+            alpha = th.exp(logp_accept)
+            accept = (u < alpha).to(th.float32).reshape((x.shape[0],) + tuple(([1 for _ in range(dims - 1)])))
             x = accept * x_hat + (1 - accept) * x
+            self.save_stats(t, alpha, accept, energy_diff)
 
         return x
 
@@ -395,9 +403,7 @@ class AnnealedHMCScoreSampler(MCMCMHCorrSampler):
 
         # Sample Momentum
         v = th.randn_like(x) * self._mass_diag_sqrt[t_idx]
-        self.accept_ratio[t] = list()
-        self.all_accepts[t] = list()
-        self.energy_diff[t] = list()
+        self.update_save_dicts(t)
 
         for _ in range(self.num_samples_per_step):
             # Partial Momentum Refreshment
@@ -424,18 +430,13 @@ class AnnealedHMCScoreSampler(MCMCMHCorrSampler):
             logp_accept = logp_v - logp_v_p + energy_diff
 
             u = th.rand(x_next.shape[0]).to(x_next.device)
-            accept = (
-                (u < th.exp(logp_accept))
-                .to(th.float32)
-                .reshape((x_next.shape[0],) + tuple(([1 for _ in range(dims - 1)])))
-            )
+            alpha = th.exp(logp_accept)
+            accept = (u < alpha).to(th.float32).reshape((x_next.shape[0],) + tuple(([1 for _ in range(dims - 1)])))
 
             # update samples
             x = accept * x_next + (1 - accept) * x
             v = accept * v_next + (1 - accept) * v_prime
-            self.accept_ratio[t].append((th.sum(accept) / accept.shape[0]).detach().cpu().item())
-            self.all_accepts[t].append(accept.detach().cpu().squeeze())
-            self.energy_diff[t].append(energy_diff.detach().cpu())
+            self.save_stats(t, alpha, accept, energy_diff)
         return x
 
 
@@ -585,7 +586,7 @@ class AdaptiveStepSizeMCMCSamplerWrapper(MCMCMHCorrSampler):
             num_samples_per_step=sampler.num_samples_per_step,
             step_sizes=sampler.step_sizes,
             gradient_function=sampler.gradient_function,
-            energy_function=sampler.energy_function
+            energy_function=sampler.energy_function,
         )
         self.sampler = sampler
         self.accept_rate_bound = accept_rate_bound
@@ -661,14 +662,19 @@ class AdaptiveStepSizeMCMCSamplerWrapper(MCMCMHCorrSampler):
 
 class AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize(MCMCMHCorrSampler):
     def __init__(
-        self, sampler: MCMCMHCorrSampler, accept_rate_bound: list, time_steps, batch_size: int, device,
-            max_iter: int = 10
+        self,
+        sampler: MCMCMHCorrSampler,
+        accept_rate_bound: list,
+        time_steps,
+        batch_size: int,
+        device,
+        max_iter: int = 10,
     ):
         super().__init__(
             num_samples_per_step=sampler.num_samples_per_step,
             step_sizes=sampler.step_sizes,
             gradient_function=sampler.gradient_function,
-            energy_function=sampler.energy_function
+            energy_function=sampler.energy_function,
         )
         self.sampler = sampler
         self.accept_rate_bound = accept_rate_bound
@@ -697,10 +703,10 @@ class AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize(MCMCMHCorrSampler):
             torch.manual_seed(t)
             accepts = list()
             for j in range(n_batches - 1):
-                x_ = x[idx[j]: idx[j + 1]].to(self.device)
-                y_ = text_embeddings[idx[j]: idx[j + 1]].to(self.device)
+                x_ = x[idx[j] : idx[j + 1]].to(self.device)
+                y_ = text_embeddings[idx[j] : idx[j + 1]].to(self.device)
                 x_ = self.sampler.sample_step(x_, t, t_idx, y_)
-                x_next[idx[j]: idx[j + 1]] = x_.detach().cpu()
+                x_next[idx[j] : idx[j + 1]] = x_.detach().cpu()
                 accepts += list(itertools.chain(*[acc.numpy().tolist() for acc in self.sampler.all_accepts[t]]))
                 del x_
                 del y_

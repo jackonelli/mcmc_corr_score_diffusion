@@ -3,6 +3,7 @@ import sys
 
 
 sys.path.append(".")
+import pickle
 from pathlib import Path
 from argparse import ArgumentParser
 import torch as th
@@ -17,6 +18,7 @@ from src.guidance.classifier_full import ClassifierFullGuidance
 from src.guidance.base import GuidanceSampler, MCMCGuidanceSampler
 from src.samplers.mcmc import (
     AnnealedHMCScoreSampler,
+    MCMCMHCorrSampler,
 )
 from src.utils.seeding import set_seed
 
@@ -30,9 +32,9 @@ def main():
 
     # Setup and assign a directory where simulation results are saved.
     if args.low_rank_dim is None:
-        sub_name = f"long_ep_full_rank_mean_sc_{args.mean_scale}"
+        sub_name = f"full_rank_mean_sc_{args.mean_scale}"
     else:
-        sub_name = f"long_ep_rank_{args.low_rank_dim}_{args.mean_scale}"
+        sub_name = f"rank_{args.low_rank_dim}_{args.mean_scale}"
 
     sim_dir = Path.cwd() / f"results/multi_dim_gmm_T_{num_diff_steps}/{sub_name}"
     sim_dir.mkdir(exist_ok=True, parents=True)
@@ -81,6 +83,9 @@ def main():
         print(f"Results written to '{sim_dir}'")
     classes = classes.detach().cpu()
     th.save(classes, sim_dir / f"guid_classes_gmm_{x_dim}.th")
+    if isinstance(guid_sampler.mcmc_sampler, MCMCMHCorrSampler):
+        with open(sim_dir / "alpha.p", "wb") as ff:
+            pickle.dump(guid_sampler.mcmc_sampler.alpha, ff)
 
 
 def load_diff_model(diff_model_path, T, device, x_dim):
