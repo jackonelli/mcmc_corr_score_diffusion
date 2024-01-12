@@ -41,19 +41,17 @@ def main():
     time_steps = th.tensor([i for i in range(num_diff_steps)])
     diff_sampler = DiffusionSampler(betas, time_steps)
 
-    if args.low_rank_dim is None:
-        sub_name = f"long_ep_full_rank_mean_sc_{args.mean_scale}"
-    else:
-        sub_name = f"long_ep_rank_{args.low_rank_dim}_{args.mean_scale}"
+    sub_name = f"minimal"
     save_dir = _setup_results_dir(Path.cwd() / f"models/multi_dim_gmm_T_{num_diff_steps}/{sub_name}", args)
 
-    num_comp = 8
+    num_comp = 2
     # Minimum distance between means is sqrt(2)
     std = float(np.sqrt(2)) / 4
     x_dim = 130
     low_rank_dim = args.low_rank_dim if args.low_rank_dim is not None else x_dim
     print(f"Using low rank dim: {low_rank_dim}")
-    means = args.mean_scale * generate_means(x_dim, num_comp)
+    means = args.mean_scale * th.ones((2, 130))
+    means[1, :] *= -1.0
     covs = [threshold_covs(x_dim, low_rank_dim, std**2) for _ in range(num_comp)]
     save_gmm_params(save_dir / f"gt_gmm_{x_dim}.p", means, covs)
     dataset = Gmm(means, covs)
@@ -66,7 +64,7 @@ def main():
     diff_model.to(device)
     diff_model.train()
     diffm = DiffusionModel(model=diff_model, loss_f=F.mse_loss, noise_scheduler=diff_sampler)
-    trainer = pl.Trainer(max_epochs=10 * args.max_epochs, num_sanity_val_steps=1, accelerator="gpu", devices=1)
+    trainer = pl.Trainer(max_epochs=args.max_epochs, num_sanity_val_steps=1, accelerator="gpu", devices=1)
     trainer.fit(diffm, dataloader_train, dataloader_val)
     th.save(diff_model.state_dict(), save_dir / f"multi_dim_gmm_{x_dim}.pt")
 

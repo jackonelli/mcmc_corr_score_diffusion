@@ -40,16 +40,19 @@ def main():
     device = get_device(Device.GPU)
 
     models_dir = Path.cwd() / "models"
-    diff_model_path = models_dir / f"{config.diff_model}.pt"
+    diff_model_name = f"{config.image_size}x{config.image_size}_{config.diff_model}"
+    diff_model_path = models_dir / f"{diff_model_name}.pt"
     assert diff_model_path.exists(), f"Model '{diff_model_path}' does not exist."
+
     assert not (config.class_cond and "uncond" in config.diff_model)
-    classifier_path = models_dir / f"{config.classifier}.pt"
+    classifier_name = f"{config.image_size}x{config.image_size}_{config.classifier}"
+    classifier_path = models_dir / f"{classifier_name}.pt"
     assert classifier_path.exists(), f"Model '{classifier_path}' does not exist."
 
     # Hyper/meta params
     channels, image_size = config.num_channels, config.image_size
     # Load diff. and classifier models
-    if "mnist" in config.diff_model:
+    if "mnist" in diff_model_name:
         dataset_name = "mnist"
         channels, image_size = 1, 28
         beta_schedule, post_var = improved_beta_schedule, "beta"
@@ -58,11 +61,13 @@ def main():
         diff_model.eval()
         classifier = load_classifier_t(model_path=classifier_path, dev=device)
         classifier.eval()
-    elif "256x256_diffusion" in config.diff_model:
+    elif f"{config.image_size}x{config.image_size}_diffusion" in diff_model_name:
         dataset_name = "imagenet"
         beta_schedule, post_var = linear_beta_schedule, "learned"
         num_classes = 1000
-        diff_model = load_pretrained_diff_unet(model_path=diff_model_path, dev=device, class_cond=config.class_cond)
+        diff_model = load_pretrained_diff_unet(
+            model_path=diff_model_path, dev=device, class_cond=config.class_cond, image_size=image_size
+        )
         diff_model.eval()
         classifier = load_guided_classifier(model_path=classifier_path, dev=device, image_size=image_size)
         classifier.eval()

@@ -44,12 +44,43 @@ def main():
     time_steps = th.tensor([i for i in range(num_diff_steps)])
     diff_proc = DiffusionSampler(betas, time_steps, posterior_variance="beta")
 
-    x_dim = args.dim
+    x_dim = args.x_dim
+    classes = th.randint(low=0, high=num_classes, size=(args.num_samples,)).long().to(device)
     diff_model = load_diff_model(models_dir / f"multi_dim_gmm_{x_dim}.pt", num_diff_steps, device, x_dim=x_dim)
+    classifier = load_classifier(
+        models_dir / f"class_t_gmm_{x_dim}.pt", num_classes, device, num_diff_steps=num_diff_steps, x_dim=x_dim
+    )
+    guidance = ClassifierFullGuidance(classifier, lambda_=guid_scale)
+    guid_sampler = GuidanceSampler(diff_model, diff_proc, guidance, diff_cond=False)
 
-    samples, _ = diff_proc.sample(diff_model, args.num_samples, device, th.Size((x_dim,)), verbose=True)
+    samples, _ = guid_sampler.sample(args.num_samples, classes, device, th.Size((x_dim,)), verbose=True)
     samples = samples.detach().cpu()
-    th.save(samples, sim_dir / f"samples_gmm_{x_dim}.th")
+    th.save(samples, sim_dir / f"guid_samples_gmm_{x_dim}.th")
+
+    if args.mcmc is not None:
+        print("HMC guidance sampling")
+        mcmc_steps = 10
+        step_sizes = {int(t): 0.03 for t in range(0, num_diff_steps)}
+        n_trapets = 5
+        damping_coeff = 0.5
+        leapfrog_steps = 3
+        mcmc_sampler = AnnealedHMCScoreSampler(
+            mcmc_steps, step_sizes, damping_coeff, th.ones_like(betas), leapfrog_steps, guidance.grad
+        )
+        guid_sampler = MCMCGuidanceSampler(
+            diff_model=diff_model,
+            diff_proc=diff_proc,
+            guidance=guidance,
+            mcmc_sampler=mcmc_sampler,
+            reverse=True,
+            diff_cond=False,
+        )
+        samples, _ = guid_sampler.sample(args.num_samples, classes, device, th.Size((x_dim,)), verbose=True)
+        samples = samples.detach().cpu()
+        th.save(samples, sim_dir / f"hmc_guid_samples_gmm_{x_dim}.th")
+        print(f"Results written to '{sim_dir}'")
+    classes = classes.detach().cpu()
+    th.save(classes, sim_dir / f"guid_classes_gmm_{x_dim}.th")
 
 
 def load_diff_model(diff_model_path, T, device, x_dim):
@@ -65,7 +96,7 @@ def parse_args():
     parser = ArgumentParser(prog="Sample from diffusion model")
     parser.add_argument("--num_samples", type=int, required=True, help="Number of samples")
     parser.add_argument("--T", type=int, default=100, help="Number of diff. steps")
-    parser.add_argument("--dim", type=int, default=10, help="x dim")
+    parser.add_argument("--x_dim", type=int, default=10, help="x dim")
     parser.add_argument("--mcmc", type=str, default=None, help="MCMC method: {'la', 'hmc'}")
     parser.add_argument("--seed", type=int, default=None, help="Manual seed")
     parser.add_argument("--low_rank_dim", type=int, default=None, help="Low rank dim of GMMs")

@@ -1,3 +1,5 @@
+import pickle
+from pathlib import Path
 import numpy as np
 import torch as th
 from torch.distributions.multivariate_normal import MultivariateNormal
@@ -113,3 +115,10 @@ def threshold_covs(x_dim: int, low_rank_dim: int, var_high: float, var_low: floa
     vars = th.tensor(low_rank_dim * [var_high] + (x_dim - low_rank_dim) * [var_low])
     rand_order = np.random.permutation(x_dim)
     return th.diag(vars[rand_order])
+
+
+def init_gmm(models_dir: Path, x_dim: int):
+    """Initialise GMM from stored means and covs"""
+    with open(models_dir / f"gt_gmm_{x_dim}.p", "rb") as ff:
+        pp = pickle.load(ff)
+    return Gmm(pp["means"], pp["covs"])
