@@ -28,8 +28,12 @@ def main():
     set_seed(config.seed)
 
     # Setup and assign a directory where simulation results are saved.
-    sim_dir = setup_results_dir(config)
+    # sim_dir = setup_results_dir(config)
+
     device = get_device(Device.GPU)
+    config.results_dir.mkdir(exist_ok=True, parents=True)
+    sim_dir = config.results_dir / f"{config.name}_{config.mcmc_lower_t}"
+    sim_dir.mkdir(exist_ok=True)
 
     models_dir = Path.cwd() / "models"
     diff_model_path = models_dir / f"{config.diff_model}.pt"
@@ -99,18 +103,24 @@ def main():
     for batch in range(config.num_samples // config.batch_size):
         print(f"{(batch+1) * config.batch_size}/{config.num_samples}")
         classes = th.randint(low=0, high=num_classes, size=(config.batch_size,)).long().to(device)
-        samples, _ = guid_sampler.sample(
+        samples, full_trajs = guid_sampler.sample(
             config.batch_size, classes, device, th.Size((channels, image_size, image_size)), verbose=True
         )
         samples = samples.detach().cpu()
         th.save(samples, sim_dir / f"samples_{args.sim_batch}_{batch}.th")
         th.save(classes, sim_dir / f"classes_{args.sim_batch}_{batch}.th")
+        if args.save_traj:
+            print("Saving full traj.")
+            # full_trajs is a list of T tensors of shape (B, D, D)
+            # th.stack turns the list into a single tensor (T, B, D, D).
+            th.save(th.stack(full_trajs), sim_dir / f"trajs_{args.sim_batch}_{batch}.th")
     print(f"Results written to '{sim_dir}'")
 
 
 def parse_args():
     parser = ArgumentParser(prog="Sample from diffusion model")
     parser.add_argument("--config", type=Path, required=True, help="Config file path")
+    parser.add_argument("--save_traj", action="store_true", help="Save full trajectories")
     parser.add_argument(
         "--sim_batch", type=int, default=0, help="Simulation batch index, indexes parallell simulations."
     )

@@ -6,8 +6,16 @@ import torch.cuda
 import torch.nn as nn
 import numpy as np
 from src.diffusion.base import extract, DiffusionSampler
-from src.samplers.mcmc import MCMCSampler, MCMCMHCorrSampler, AnnealedLAScoreSampler, AnnealedLAEnergySampler, \
-    langevin_step, get_mean, transition_factor, estimate_energy_diff_linear
+from src.samplers.mcmc import (
+    MCMCSampler,
+    MCMCMHCorrSampler,
+    AnnealedLAScoreSampler,
+    AnnealedLAEnergySampler,
+    langevin_step,
+    get_mean,
+    transition_factor,
+    estimate_energy_diff_linear,
+)
 from src.model.base import EnergyModel
 from typing import List
 import gc
@@ -60,8 +68,9 @@ class GuidanceSampler:
             all x through the (predicted) reverse diffusion steps
         """
 
-        steps = []
+        full_trajs = []
         x_tm1 = th.randn((num_samples,) + shape).to(device)
+        full_trajs.append(x_tm1.detach().cpu())
         self.verbose_counter = 0
 
         for t, t_idx in zip(self.diff_proc.time_steps.__reversed__(), reversed(self.diff_proc.time_steps_idx)):
@@ -73,9 +82,9 @@ class GuidanceSampler:
             else:
                 x_tm1 = reverse_func(self, t, t_idx, x_tm1, classes, device, self.diff_cond)
             x_tm1 = x_tm1.detach()
-            # steps.append(x_tm1.detach().cpu())
+            full_trajs.append(x_tm1.detach().cpu())
 
-        return x_tm1, steps
+        return x_tm1, full_trajs
 
     def _sample_x_tm1_given_x_t(
         self, x_t: th.Tensor, t_idx: int, pred_noise: th.Tensor, sqrt_post_var_t: th.Tensor, classes: th.Tensor
@@ -185,8 +194,9 @@ class MCMCGuidanceSampler(GuidanceSampler):
             all x through the (predicted) reverse diffusion steps
         """
 
-        steps = []
+        full_trajs = []
         x_tm1 = th.randn((num_samples,) + shape).to(device)
+        full_trajs.append(x_tm1.detach().cpu())
 
         verbose_counter = 0
         for t, t_idx in zip(self.diff_proc.time_steps.__reversed__(), reversed(self.diff_proc.time_steps_idx)):
@@ -204,9 +214,9 @@ class MCMCGuidanceSampler(GuidanceSampler):
                 respaced_t = self.diff_proc.time_steps[t_idx - 1].item()
                 x_tm1 = self.mcmc_sampler.sample_step(x_tm1, respaced_t, t_idx - 1, classes)
             x_tm1 = x_tm1.detach()
-            # steps.append(x_tm1.detach().cpu())
+            full_trajs.append(x_tm1.detach().cpu())
 
-        return x_tm1, steps
+        return x_tm1, full_trajs
 
 
 class MCMCGuidanceSamplerStacking(MCMCGuidanceSampler):
@@ -247,7 +257,7 @@ class MCMCGuidanceSamplerStacking(MCMCGuidanceSampler):
                             self, t, t_idx, x_tm1, classes[idx[i] : idx[i + 1]], device, self.diff_cond
                         )
 
-                    x[idx[i]: idx[i + 1]] = x_tm1.detach().cpu()
+                    x[idx[i] : idx[i + 1]] = x_tm1.detach().cpu()
                     del x_tm1
                     gc.collect()
                     torch.cuda.empty_cache()
@@ -260,13 +270,21 @@ class MCMCGuidanceSamplerStacking(MCMCGuidanceSampler):
 
 
 class GuidanceSamplerAcceptanceComparison:
-
     def __init__(self, guidance_models: List[MCMCGuidanceSampler]):
         self.guidance_models = guidance_models
         self.n_models = len(guidance_models)
 
-    def accept_ratio_trajectory(self, num_samples: int, classes: th.Tensor, device: th.device, shape: tuple,
-                                i_model: int = 0, n_per_t: int = 1, seed: int = 0, verbose=False):
+    def accept_ratio_trajectory(
+        self,
+        num_samples: int,
+        classes: th.Tensor,
+        device: th.device,
+        shape: tuple,
+        i_model: int = 0,
+        n_per_t: int = 1,
+        seed: int = 0,
+        verbose=False,
+    ):
         """Given a model generate reverse trajectories and at each timestep MCMC sample
 
         Args:
@@ -285,10 +303,12 @@ class GuidanceSamplerAcceptanceComparison:
 
         assert all([isinstance(self.guidance_models[i].mcmc_sampler, MCMCMHCorrSampler) for i in range(self.n_models)])
         x_tm1 = th.randn((num_samples,) + shape).to(device)
-        acceptance = {i: {j.item(): list() for j in self.guidance_models[i].diff_proc.time_steps}
-                      for i in range(self.n_models)}
-        energy_diff = {i: {j.item(): list() for j in self.guidance_models[i].diff_proc.time_steps}
-                       for i in range(self.n_models)}
+        acceptance = {
+            i: {j.item(): list() for j in self.guidance_models[i].diff_proc.time_steps} for i in range(self.n_models)
+        }
+        energy_diff = {
+            i: {j.item(): list() for j in self.guidance_models[i].diff_proc.time_steps} for i in range(self.n_models)
+        }
 
         verbose_counter = 0
         self_ = self.guidance_models[i_model]
@@ -310,15 +330,18 @@ class GuidanceSamplerAcceptanceComparison:
                     th.manual_seed(seed + t)
                     for j in range(n_per_t):
                         _ = self.guidance_models[i].mcmc_sampler.sample_step(x_tm1, respaced_t, t_idx - 1, classes)
-                        acceptance[i][t.item()-1].append(self.guidance_models[i].mcmc_sampler.all_accepts[respaced_t])
-                        energy_diff[i][t.item()-1].append(self.guidance_models[i].mcmc_sampler.energy_diff[respaced_t])
+                        acceptance[i][t.item() - 1].append(self.guidance_models[i].mcmc_sampler.all_accepts[respaced_t])
+                        energy_diff[i][t.item() - 1].append(
+                            self.guidance_models[i].mcmc_sampler.energy_diff[respaced_t]
+                        )
                 th.set_rng_state(current_rng_state)
             x_tm1 = x_tm1.detach()
 
         return acceptance, energy_diff
 
-    def accept_ratio_one_guides_LA(self, num_samples: int, classes: th.Tensor, device: th.device, shape: tuple,
-                                   seed: int = 0, verbose=False):
+    def accept_ratio_one_guides_LA(
+        self, num_samples: int, classes: th.Tensor, device: th.device, shape: tuple, seed: int = 0, verbose=False
+    ):
         """Given a model generate reverse trajectories and one model guides and compare same points with other
 
         Args:
@@ -333,14 +356,28 @@ class GuidanceSamplerAcceptanceComparison:
 
         """
 
-        assert all([isinstance(self.guidance_models[i].mcmc_sampler, AnnealedLAEnergySampler) or
-                    isinstance(self.guidance_models[i].mcmc_sampler, AnnealedLAScoreSampler) for i in
-                    range(self.n_models)])
+        assert all(
+            [
+                isinstance(self.guidance_models[i].mcmc_sampler, AnnealedLAEnergySampler)
+                or isinstance(self.guidance_models[i].mcmc_sampler, AnnealedLAScoreSampler)
+                for i in range(self.n_models)
+            ]
+        )
 
-        acceptance = {i_: {i: {j.item(): list() for j in self.guidance_models[i].diff_proc.time_steps}
-                      for i in range(self.n_models)} for i_ in range(self.n_models)}
-        energy_d = {i_: {i: {j.item(): list() for j in self.guidance_models[i].diff_proc.time_steps}
-                       for i in range(self.n_models)} for i_ in range(self.n_models)}
+        acceptance = {
+            i_: {
+                i: {j.item(): list() for j in self.guidance_models[i].diff_proc.time_steps}
+                for i in range(self.n_models)
+            }
+            for i_ in range(self.n_models)
+        }
+        energy_d = {
+            i_: {
+                i: {j.item(): list() for j in self.guidance_models[i].diff_proc.time_steps}
+                for i in range(self.n_models)
+            }
+            for i_ in range(self.n_models)
+        }
 
         for i_model in range(self.n_models):
             verbose_counter = 0
@@ -367,29 +404,43 @@ class GuidanceSamplerAcceptanceComparison:
                         th.manual_seed(seed + t + step)
 
                         x_tm1.requires_grad_(True)
-                        x_hat, mean_x, ss = langevin_step(x_tm1, t, t_idx, classes, self_.mcmc_sampler.step_sizes,
-                                                          self_.mcmc_sampler.gradient_function)
+                        x_hat, mean_x, ss = langevin_step(
+                            x_tm1,
+                            t,
+                            t_idx,
+                            classes,
+                            self_.mcmc_sampler.step_sizes,
+                            self_.mcmc_sampler.gradient_function,
+                        )
                         x_hat.requires_grad_(True)
                         mean_x_hat = get_mean(self_.mcmc_sampler.gradient_function, x_hat, t, t_idx, ss, classes)
                         logp_reverse, logp_forward = transition_factor(x_tm1, mean_x, x_hat, mean_x_hat, ss)
 
                         if isinstance(self_.mcmc_sampler, AnnealedLAEnergySampler):
-                            energy_diff = self_.mcmc_sampler.energy_function(x_hat, t, t_idx, classes) - \
-                                          self_.mcmc_sampler.energy_function(x_tm1, t, t_idx, classes)
+                            energy_diff = self_.mcmc_sampler.energy_function(
+                                x_hat, t, t_idx, classes
+                            ) - self_.mcmc_sampler.energy_function(x_tm1, t, t_idx, classes)
                         else:
                             n_trapets = self_.mcmc_sampler.n_trapets
                             intermediate_steps = th.linspace(0, 1, steps=n_trapets).to(x_tm1.device)
                             energy_diff = estimate_energy_diff_linear(
-                                self_.mcmc_sampler.gradient_function, x_tm1, x_hat, t, t_idx, intermediate_steps,
-                                classes, dims
+                                self_.mcmc_sampler.gradient_function,
+                                x_tm1,
+                                x_hat,
+                                t,
+                                t_idx,
+                                intermediate_steps,
+                                classes,
+                                dims,
                             )
                         logp_accept = energy_diff + logp_reverse - logp_forward
                         acceptance[i_model][i_model][t].append(th.exp(logp_accept).detach().cpu())
                         energy_d[i_model][i_model][t].append(energy_diff.detach().cpu())
                         u = th.rand(x_tm1.shape[0]).to(x_tm1.device)
                         accept = (
-                            (u < th.exp(logp_accept)).to(th.float32).reshape(
-                                (x_tm1.shape[0],) + tuple(([1 for _ in range(dims - 1)])))
+                            (u < th.exp(logp_accept))
+                            .to(th.float32)
+                            .reshape((x_tm1.shape[0],) + tuple(([1 for _ in range(dims - 1)])))
                         )
                         idxs = [j for j, _ in enumerate(self.guidance_models) if j != i_model]
                         models = [j_m for j, j_m in enumerate(self.guidance_models) if j != i_model]
@@ -399,14 +450,21 @@ class GuidanceSamplerAcceptanceComparison:
                             mean_x_hat = get_mean(model_j.mcmc_sampler.gradient_function, x_hat, t, t_idx, ss, classes)
                             logp_reverse, logp_forward = transition_factor(x_tm1, mean_x, x_hat, mean_x_hat, ss)
                             if isinstance(model_j.mcmc_sampler, AnnealedLAEnergySampler):
-                                energy_diff = model_j.mcmc_sampler.energy_function(x_hat, t, t_idx, classes) - \
-                                              model_j.mcmc_sampler.energy_function(x_tm1, t, t_idx, classes)
+                                energy_diff = model_j.mcmc_sampler.energy_function(
+                                    x_hat, t, t_idx, classes
+                                ) - model_j.mcmc_sampler.energy_function(x_tm1, t, t_idx, classes)
                             else:
                                 n_trapets = model_j.mcmc_sampler.n_trapets
                                 intermediate_steps = th.linspace(0, 1, steps=n_trapets).to(x_tm1.device)
                                 energy_diff = estimate_energy_diff_linear(
-                                    model_j.mcmc_sampler.gradient_function, x_tm1, x_hat, t, t_idx, intermediate_steps,
-                                    classes, dims
+                                    model_j.mcmc_sampler.gradient_function,
+                                    x_tm1,
+                                    x_hat,
+                                    t,
+                                    t_idx,
+                                    intermediate_steps,
+                                    classes,
+                                    dims,
                                 )
                             logp_accept = energy_diff + logp_reverse - logp_forward
                             acceptance[i_model][j][t].append(th.exp(logp_accept).detach().cpu())
