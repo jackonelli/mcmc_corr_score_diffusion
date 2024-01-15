@@ -46,12 +46,8 @@ def main():
     channels, image_size = config.num_channels, config.image_size
     num_classes = 1000
     post_var = "learned"
-    if config.mcmc_bounds == "lin":
-        beta_schedule = linear_beta_schedule
-    elif config.mcmc_bounds == "cos":
-        beta_schedule = improved_beta_schedule
-    else:
-        print(f"Unknown beta schedule: '{config.mcmc_bounds}'")
+    beta_schedule = linear_beta_schedule
+    # beta_schedule = improved_beta_schedule
     diff_model = load_pretrained_diff_unet(model_path=diff_model_path, dev=device, class_cond=config.class_cond)
     diff_model.eval()
     classifier = load_guided_classifier(model_path=classifier_path, dev=device, image_size=image_size)
@@ -69,26 +65,39 @@ def main():
     if config.mcmc_method is None:
         guid_sampler = GuidanceSampler(diff_model, diff_sampler, guidance, diff_cond=config.class_cond)
     else:
-        assert config.mcmc_steps is not None
-
-        # Compute step lengths
-        step_size_time_steps = th.arange(0, config.num_diff_steps)
-        assert isinstance(config.mcmc_bounds, str)
-        print(f"Using {config.mcmc_bounds} beta schedule.")
+        assert config.mcmc_steps is not None and config.mcmc_method is not None
+        if config.mcmc_stepsizes["load"]:
+            print("Load step sizes for MCMC.")
+            step_sizes = get_step_size(
+                models_dir / "step_sizes", dataset_name, config.mcmc_method, config.mcmc_stepsizes["bounds"]
+            )
+        else:
+            print("Use parameterized step sizes for MCMC.")
+            if config.mcmc_stepsizes["beta_schedule"] == "lin":
+                beta_schedule_mcmc = linear_beta_schedule
+            elif config.mcmc_stepsizes["beta_schedule"] == "cos":
+                beta_schedule_mcmc = improved_beta_schedule
+            else:
+                print("mcmc_stepsizes.beta_schedule must be 'lin' or 'cos'.")
+                raise ValueError
+            betas_mcmc, _ = respaced_beta_schedule(
+                original_betas=beta_schedule_mcmc(num_timesteps=config.num_diff_steps),
+                T=config.num_diff_steps,
+                respaced_T=config.num_respaced_diff_steps,
+            )
+            a = config.mcmc_stepsizes["params"]["factor"]
+            b = config.mcmc_stepsizes["params"]["exponent"]
+            step_sizes = {int(t.item()): a * beta**b for (t, beta) in zip(time_steps, betas_mcmc)}
+            print(f"Using the step size {a} * beta_t^{b}")
 
         if config.mcmc_method == "uhmc":
-            print("Using the step size 0.6 * beta_t^1.5")
-            step_sizes = {int(t.item()): 0.6 * beta**1.5 for (t, beta) in zip(time_steps, betas)}
             mcmc_sampler = AnnealedUHMCScoreSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
         elif config.mcmc_method == "ula":
-            print("Using the step size 0.5 * beta_t")
-            step_sizes = {int(t.item()): 0.5 * beta for (t, beta) in zip(time_steps, betas)}
             mcmc_sampler = AnnealedULAScoreSampler(config.mcmc_steps, step_sizes, None)
         else:
             print(f"Incorrect MCMC method: '{config.mcmc_method}'")
 
         mcmc_lower_t = config.mcmc_lower_t if config.mcmc_lower_t is not None else 0
-        print(mcmc_lower_t)
         guid_sampler = MCMCGuidanceSampler(
             diff_model=diff_model,
             diff_proc=diff_sampler,
