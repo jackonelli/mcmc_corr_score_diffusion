@@ -40,12 +40,12 @@ def main():
     device = get_device(Device.GPU)
 
     models_dir = Path.cwd() / "models"
-    diff_model_name = f"{config.image_size}x{config.image_size}_{config.diff_model}"
+    diff_model_name = f"{config.diff_model}"
     diff_model_path = models_dir / f"{diff_model_name}.pt"
     assert diff_model_path.exists(), f"Model '{diff_model_path}' does not exist."
 
     assert not (config.class_cond and "uncond" in config.diff_model)
-    classifier_name = f"{config.image_size}x{config.image_size}_{config.classifier}"
+    classifier_name = f"{config.classifier}"
     classifier_path = models_dir / f"{classifier_name}.pt"
     assert classifier_path.exists(), f"Model '{classifier_path}' does not exist."
 
@@ -73,6 +73,7 @@ def main():
         classifier.eval()
     else:
         print(f"Incorrect model '{args.diff_model}'")
+        raise ValueError
 
     betas, time_steps = respaced_beta_schedule(
         original_betas=beta_schedule(num_timesteps=config.num_diff_steps),
@@ -85,12 +86,33 @@ def main():
     if config.mcmc_method is None:
         guid_sampler = GuidanceSampler(diff_model, diff_sampler, guidance, diff_cond=config.class_cond)
     else:
-        assert config.mcmc_steps is not None and config.mcmc_bounds is not None
-        step_sizes = get_step_size(models_dir / "step_sizes", dataset_name, config.mcmc_method)
+        assert config.mcmc_steps is not None and config.mcmc_method is not None
+        if config.mcmc_stepsizes['load']:
+            print('Load step sizes for MCMC.')
+            step_sizes = get_step_size(models_dir / "step_sizes", dataset_name, config.mcmc_method,
+                                       config.mcmc_stepsizes['bounds'])
+        else:
+            print('Use parameterized step sizes for MCMC.')
+            if config.mcmc_stepsizes['beta_schedule'] == 'lin':
+                beta_schedule_mcmc = linear_beta_schedule
+            elif config.mcmc_stepsizes['beta_schedule'] == 'cos':
+                beta_schedule_mcmc = improved_beta_schedule
+            else:
+                print('mcmc_stepsizes.beta_schedule must be \'lin\' or \'cos\'.')
+                raise ValueError
+            betas_mcmc, _ = respaced_beta_schedule(
+                original_betas=beta_schedule_mcmc(num_timesteps=config.num_diff_steps),
+                T=config.num_diff_steps,
+                respaced_T=config.num_respaced_diff_steps,
+            )
+            a = config.mcmc_stepsizes['params']['factor']
+            b = config.mcmc_stepsizes['params']['exponent']
+            step_sizes = {int(t.item()): a * beta ** b for (t, beta) in zip(time_steps, betas_mcmc)}
+
         if config.mcmc_method == "hmc":
             mcmc_sampler = AnnealedHMCScoreSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
         elif config.mcmc_method == "la":
-            mcmc_sampler = AnnealedLAScoreSampler(config.mcmc_steps, step_sizes, None)
+            mcmc_sampler = AnnealedLAScoreSampler(config.mcmc_steps, step_sizes, None, n_trapets=config.n_trapets)
         elif config.mcmc_method == "uhmc":
             mcmc_sampler = AnnealedUHMCScoreSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
         elif config.mcmc_method == "ula":
