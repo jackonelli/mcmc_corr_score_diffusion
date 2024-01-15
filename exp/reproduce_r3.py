@@ -28,12 +28,9 @@ def main():
     set_seed(config.seed)
 
     # Setup and assign a directory where simulation results are saved.
-    # sim_dir = setup_results_dir(config)
+    sim_dir = setup_results_dir(config)
 
     device = get_device(Device.GPU)
-    config.results_dir.mkdir(exist_ok=True, parents=True)
-    sim_dir = config.results_dir / f"{config.name}_{config.mcmc_lower_t}"
-    sim_dir.mkdir(exist_ok=True)
 
     models_dir = Path.cwd() / "models"
     diff_model_path = models_dir / f"{config.diff_model}.pt"
