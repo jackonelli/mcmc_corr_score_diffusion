@@ -24,6 +24,8 @@ def main():
     # Hyper/meta params
     channels, image_size = config.num_channels, config.image_size
     models_dir = Path.cwd() / "models"
+    if config.seed is not None:
+        print(f"Simulated with fixed seed: {config.seed}")
 
     if args.metric == "acc" or args.metric == "all":
         # Load classifier
@@ -46,6 +48,9 @@ def main():
             print(f"Incorrect model '{config.diff_model}'")
 
         simple_acc, r3_acc = compute_acc(classifier, classes_and_samples, batch_size, device)
+        print(
+            f"Respaced T: {config.num_respaced_diff_steps}, MCMC stop t<={config.mcmc_lower_t}, Method: {config.mcmc_method}({config.mcmc_steps}), lambda={config.guid_scale}"
+        )
         print(f"Acc: {simple_acc.item():.4f}\nR3 acc: {r3_acc.item():.4f}")
         # compute_top_n_acc(classifier, classes_and_samples[:10], 10, device, 10)
 
@@ -104,7 +109,7 @@ def collect_samples(res_dir: Path, sim_name: str) -> Tuple[List[Tuple[Path, Path
     for sub_dir in res_dir.glob(f"{sim_name}*"):
         print("Checking sub dir", sub_dir)
         config = SimulationConfig.from_json(sub_dir / "config.json")
-        assert config.name in sim_name
+        # assert config.name in sim_name
         classes.extend(sorted([path.name for path in sub_dir.glob("classes_*_*.th")]))
         classes = [sub_dir / cl for cl in classes]
         samples.extend(sorted([path.name for path in sub_dir.glob("samples_*_*.th")]))

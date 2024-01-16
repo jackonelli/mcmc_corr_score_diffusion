@@ -110,7 +110,12 @@ def main():
         print(f"{(batch+1) * config.batch_size}/{config.num_samples}")
         classes = th.randint(low=0, high=num_classes, size=(config.batch_size,)).long().to(device)
         samples, full_trajs = guid_sampler.sample(
-            config.batch_size, classes, device, th.Size((channels, image_size, image_size)), verbose=True
+            config.batch_size,
+            classes,
+            device,
+            th.Size((channels, image_size, image_size)),
+            verbose=True,
+            save_traj=config.save_traj,
         )
         samples = samples.detach().cpu()
         th.save(samples, sim_dir / f"samples_{args.sim_batch}_{batch}.th")
