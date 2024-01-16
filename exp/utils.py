@@ -45,6 +45,7 @@ class SimulationConfig:
     # Seed
     seed: Optional[int] = None
     # Meta
+    save_traj: bool = False
     results_dir: Path = Path.cwd() / "results"
 
     @staticmethod
@@ -59,16 +60,18 @@ class SimulationConfig:
     def _validate(self):
         if self.mcmc_method is not None:
             assert self.mcmc_stepsizes is not None
-            assert isinstance(self.mcmc_stepsizes['load'], bool)
-            if self.mcmc_stepsizes['load']:
-                assert self.mcmc_stepsizes['bounds'] is not None
+            assert isinstance(self.mcmc_stepsizes["load"], bool)
+            if self.mcmc_stepsizes["load"]:
+                assert self.mcmc_stepsizes["bounds"] is not None
             else:
-                assert isinstance(self.mcmc_stepsizes['params']['factor'], float) or \
-                       isinstance(self.mcmc_stepsizes['params']['factor'], int)
-                assert isinstance(self.mcmc_stepsizes['params']['exponent'], float) or \
-                       isinstance(self.mcmc_stepsizes['params']['exponent'], int)
-                assert self.mcmc_stepsizes['beta_schedule'] is not None
-            if self.mcmc_method == 'la':
+                assert isinstance(self.mcmc_stepsizes["params"]["factor"], float) or isinstance(
+                    self.mcmc_stepsizes["params"]["factor"], int
+                )
+                assert isinstance(self.mcmc_stepsizes["params"]["exponent"], float) or isinstance(
+                    self.mcmc_stepsizes["params"]["exponent"], int
+                )
+                assert self.mcmc_stepsizes["beta_schedule"] is not None
+            if self.mcmc_method == "la":
                 assert isinstance(self.n_trapets, int)
 
     def save(self, sim_dir: Path):

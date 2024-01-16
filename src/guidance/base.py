@@ -55,7 +55,9 @@ class GuidanceSampler:
         self.rng_state = th.get_rng_state()
         th.set_rng_state(current_rng_state)
 
-    def sample(self, num_samples: int, classes: th.Tensor, device: th.device, shape: tuple, verbose=False):
+    def sample(
+        self, num_samples: int, classes: th.Tensor, device: th.device, shape: tuple, verbose=False, save_traj=False
+    ):
         """Sample points from the data distribution by running the reverse process
 
         Args:
@@ -82,7 +84,8 @@ class GuidanceSampler:
             else:
                 x_tm1 = reverse_func(self, t, t_idx, x_tm1, classes, device, self.diff_cond)
             x_tm1 = x_tm1.detach()
-            full_trajs.append(x_tm1.detach().cpu())
+            if save_traj:
+                full_trajs.append(x_tm1.detach().cpu())
 
         return x_tm1, full_trajs
 
@@ -179,7 +182,9 @@ class MCMCGuidanceSampler(GuidanceSampler):
         class_score = self.guidance.grad(x_t, t_tensor, classes, None)
         return class_score - energy_grad / sigma_t
 
-    def sample(self, num_samples: int, classes: th.Tensor, device: th.device, shape: tuple, verbose=False):
+    def sample(
+        self, num_samples: int, classes: th.Tensor, device: th.device, shape: tuple, verbose=False, save_traj=False
+    ):
         """Sampling from the backward process
         Sample points from the data distribution
 
@@ -214,7 +219,8 @@ class MCMCGuidanceSampler(GuidanceSampler):
                 respaced_t = self.diff_proc.time_steps[t_idx - 1].item()
                 x_tm1 = self.mcmc_sampler.sample_step(x_tm1, respaced_t, t_idx - 1, classes)
             x_tm1 = x_tm1.detach()
-            full_trajs.append(x_tm1.detach().cpu())
+            if save_traj:
+                full_trajs.append(x_tm1.detach().cpu())
 
         return x_tm1, full_trajs
 
