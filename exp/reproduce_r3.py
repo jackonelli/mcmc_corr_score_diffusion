@@ -16,7 +16,12 @@ from src.model.guided_diff.unet import load_pretrained_diff_unet
 from src.model.guided_diff.classifier import load_guided_classifier
 from src.guidance.base import GuidanceSampler, MCMCGuidanceSampler
 from src.guidance.classifier_full import ClassifierFullGuidance
-from src.samplers.mcmc import AnnealedULAScoreSampler, AnnealedUHMCScoreSampler
+from src.samplers.mcmc import (
+    AnnealedULAScoreSampler,
+    AnnealedUHMCScoreSampler,
+    AnnealedLAScoreSampler,
+    MCMCMHCorrSampler,
+)
 from exp.utils import SimulationConfig, setup_results_dir
 from src.utils.seeding import set_seed
 
@@ -91,6 +96,8 @@ def main():
             mcmc_sampler = AnnealedUHMCScoreSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
         elif config.mcmc_method == "ula":
             mcmc_sampler = AnnealedULAScoreSampler(config.mcmc_steps, step_sizes, None)
+        elif config.mcmc_method == "la":
+            mcmc_sampler = AnnealedLAScoreSampler(config.mcmc_steps, step_sizes, None, n_trapets=config.n_trapets)
         else:
             print(f"Incorrect MCMC method: '{config.mcmc_method}'")
 
@@ -120,11 +127,15 @@ def main():
         samples = samples.detach().cpu()
         th.save(samples, sim_dir / f"samples_{args.sim_batch}_{batch}.th")
         th.save(classes, sim_dir / f"classes_{args.sim_batch}_{batch}.th")
+
         if args.save_traj:
             print("Saving full traj.")
             # full_trajs is a list of T tensors of shape (B, D, D)
             # th.stack turns the list into a single tensor (T, B, D, D).
             th.save(th.stack(full_trajs), sim_dir / f"trajs_{args.sim_batch}_{batch}.th")
+        if isinstance(mcmc_sampler, MCMCMHCorrSampler):
+            mcmc_sampler.save_stats_to_file(sim_dir, f"{args.sim_batch}_{batch}.p")
+
     print(f"Results written to '{sim_dir}'")
 
 

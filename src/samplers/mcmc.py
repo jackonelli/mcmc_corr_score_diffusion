@@ -1,10 +1,12 @@
-import torch
-import torch as th
-import numpy as np
+import pickle
+from pathlib import Path
 from typing import Callable, Dict, Optional
 import itertools
 from abc import ABC, abstractmethod
 import gc
+import torch
+import torch as th
+import numpy as np
 
 
 class MCMCSampler(ABC):
@@ -79,6 +81,14 @@ class MCMCMHCorrSampler(MCMCSampler):
         self.accept_ratio[t] = list()
         self.all_accepts[t] = list()
         self.energy_diff[t] = list()
+
+    def save_stats_to_file(self, dir_: Path, suffix: str):
+        with open(dir_ / f"alphas_{suffix}", "wb") as ff:
+            pickle.dump(self.alpha, ff)
+        with open(dir_ / f"all_accepts_{suffix}", "wb") as ff:
+            pickle.dump(self.all_accepts, ff)
+        with open(dir_ / f"energy_diff_{suffix}", "wb") as ff:
+            pickle.dump(self.energy_diff, ff)
 
 
 class AnnealedULAEnergySampler(MCMCSampler):
