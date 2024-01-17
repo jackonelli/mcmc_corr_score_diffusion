@@ -9,14 +9,19 @@ import os
 
 def main():
     args = parse_args()
-    images_dir = Path.cwd() / "images"
+    path_generated = Path(args.path_generated)
 
-    if args.name_generated.split('.')[-1] == 'npz':
-        fid_generate = npz_images_to_png(images_dir/args.name_generated, images_dir)
+    if path_generated.parts[-1] == 'npz':
+        generated_dir = path_generated.parent
+        fid_generate = npz_images_to_png(path_generated, generated_dir)
     else:
-        fid_generate = images_dir / args.name_generated
+        fid_generate = path_generated
 
-    fid_real = images_dir / args.name_real
+    fid_real = Path(args.path_real)
+    if fid_real.parts[-1] == 'npz':
+        statistic_file = True
+    else:
+        statistic_file = False
 
     if args.device is None:
         device = torch.device('cuda' if (torch.cuda.is_available()) else 'cpu')
@@ -36,11 +41,14 @@ def main():
     else:
         num_workers = args.num_workers
 
-    if args.save_stats:
-        save_fid_stats(args.path, args.batch_size, device, args.dims, num_workers)
-        return
+    if args.save_stats and not statistic_file:
+        fid_real_save = os.path.join(fid_real.absolute().as_posix(), fid_real.stem + '_statistics.npz')
+        paths = [fid_real.absolute().as_posix(), fid_real_save]
+        save_fid_stats(paths, args.batch_size, device, args.dims, num_workers)
+        fid_real = Path(fid_real_save)
 
-    fid_value = calculate_fid_given_paths([fid_generate.absolute().as_posix(), fid_real.absolute().as_posix()],
+    paths = [fid_real.absolute().as_posix(), fid_generate.absolute().as_posix()]
+    fid_value = calculate_fid_given_paths(paths,
                                           args.batch_size,
                                           device,
                                           args.dims,
@@ -50,13 +58,13 @@ def main():
 
 def parse_args():
     parser = ArgumentParser(prog="Compute FID score")
-    parser.add_argument("--name_generated", type=str,
-                        help="Either name to folder with generated samples or name of npz-file")
-    parser.add_argument("--name_real", type=str,
-                        help="Either name to folder of real samples or name of FID statistics file")
-    parser.add_argument('--batch-size', type=int, default=50,
+    parser.add_argument("--path_generated", type=str,
+                        help="Either path to folder with generated samples or path of npz-file")
+    parser.add_argument("--path_real", type=str,
+                        help="Either path to folder of real samples or path to FID statistics file")
+    parser.add_argument('--batch_size', type=int, default=50,
                         help='Batch size to use')
-    parser.add_argument('--num-workers', type=int,
+    parser.add_argument('--num_workers', type=int,
                         help=('Number of processes to use for data loading. '
                               'Defaults to `min(8, num_cpus)`'))
     parser.add_argument('--device', type=str, default=None,
@@ -65,7 +73,7 @@ def parse_args():
                         choices=list(InceptionV3.BLOCK_INDEX_BY_DIM),
                         help=('Dimensionality of Inception features to use. '
                               'By default, uses pool3 features'))
-    parser.add_argument('--save-stats', action='store_true',
+    parser.add_argument('--save_stats', action='store_true',
                         help=('Generate an npz archive from a directory of samples. '
                               'The first path is used as input and the second as output.'))
     return parser.parse_args()
