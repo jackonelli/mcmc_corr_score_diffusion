@@ -45,7 +45,7 @@ class ProductCompSampler:
         self.rng_state = th.get_rng_state()
         th.set_rng_state(current_rng_state)
 
-    def sample(self, num_samples: int, device: th.device, shape: tuple, verbose=False):
+    def sample(self, num_samples: int, device: th.device, shape: tuple, verbose=False, save_traj=False):
         """Sample points from the data distribution by running the reverse process
 
         Args:
@@ -60,6 +60,7 @@ class ProductCompSampler:
 
         steps = []
         x_tm1 = th.randn((num_samples,) + shape).to(device)
+        steps.append(x_tm1.clone().detach().cpu())
         self.verbose_counter = 0
 
         for t, t_idx in zip(self.diff_proc.time_steps.__reversed__(), reversed(self.diff_proc.time_steps_idx)):
@@ -71,11 +72,14 @@ class ProductCompSampler:
             else:
                 x_tm1 = reverse_func_prod(self, t, t_idx, x_tm1, device)
             x_tm1 = x_tm1.detach()
-            # steps.append(x_tm1.detach().cpu())
+            if save_traj:
+                steps.append(x_tm1.clone().detach().cpu())
 
         return x_tm1, steps
 
-    def mcmc_sample(self, num_samples: int, mcmc_sampler, device: th.device, shape: tuple, verbose=False):
+    def mcmc_sample(
+        self, num_samples: int, mcmc_sampler, device: th.device, shape: tuple, verbose=False, save_traj=False
+    ):
         """Sample points from the data distribution by running the reverse process
 
         Args:
@@ -90,6 +94,7 @@ class ProductCompSampler:
 
         steps = []
         x_tm1 = th.randn((num_samples,) + shape).to(device)
+        steps.append(x_tm1.clone().detach().cpu())
         self.verbose_counter = 0
 
         for t, t_idx in zip(self.diff_proc.time_steps.__reversed__(), reversed(self.diff_proc.time_steps_idx)):
@@ -105,7 +110,8 @@ class ProductCompSampler:
             if t > 0:
                 respaced_t = self.diff_proc.time_steps[t_idx - 1].item()
                 x_tm1 = mcmc_sampler.sample_step(x_tm1, respaced_t, t_idx - 1)
-            # steps.append(x_tm1.detach().cpu())
+            if save_traj:
+                steps.append(x_tm1.clone().detach().cpu())
 
         return x_tm1, steps
 
