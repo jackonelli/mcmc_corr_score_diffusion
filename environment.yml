@@ -138,3 +138,6 @@ dependencies:
       - jupyter
       - ipykernel
       - mpi4py
+      - opencv-python
+      - pytorch-fid
+
