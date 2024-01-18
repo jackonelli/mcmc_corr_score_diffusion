@@ -64,6 +64,7 @@ class ProductCompSampler:
         self.verbose_counter = 0
 
         for t, t_idx in zip(self.diff_proc.time_steps.__reversed__(), reversed(self.diff_proc.time_steps_idx)):
+            print(t, t_idx)
             if verbose and self.diff_proc.verbose_split[self.verbose_counter] == t:
                 print("Diff step", t.item())
                 self.verbose_counter += 1
@@ -135,6 +136,7 @@ class ProductCompSampler:
 
 @th.no_grad()
 def reverse_func_prod(model, t, t_idx, x_tm1, device):
+    # TODO: Input arg should be x_t not x_tm1
     t_tensor = th.full((x_tm1.shape[0],), t.item(), device=device)
     t_idx_tensor = th.full((x_tm1.shape[0],), t_idx, device=device)
     # Use the model to predict noise and use the noise to step back
@@ -147,12 +149,9 @@ def reverse_func_prod(model, t, t_idx, x_tm1, device):
         # Note, common posterior variance for the product components
         sqrt_post_var_t = th.sqrt(extract(model.diff_proc.posterior_variance, t_idx, x_tm1))
         pred_noise = pred_noise_1 + pred_noise_2
+        print(pred_noise.norm())
     else:
         raise NotImplemented("Learned variance for product composition, not implemented.")
-        pred_noise, log_var = model.diff_model(*args).split(x_tm1.size(1), dim=1)
-        assert pred_noise.size() == x_tm1.size()
-        log_var, _ = model.diff_proc._clip_var(x_tm1, t_idx_tensor, log_var)
-        sqrt_post_var_t = th.exp(0.5 * log_var)
     x_tm1 = model.diff_proc._sample_x_tm1_given_x_t(x_tm1, t_idx, pred_noise, sqrt_post_var_t=sqrt_post_var_t)
     return x_tm1
 
