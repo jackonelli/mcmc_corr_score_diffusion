@@ -48,8 +48,15 @@ def main():
             print(f"Incorrect model '{config.diff_model}'")
 
         simple_acc, r3_acc = compute_acc(classifier, classes_and_samples, batch_size, device)
+        # print(
+        #     f"Respaced T: {config.num_respaced_diff_steps}, MCMC stop t<={config.mcmc_lower_t}, Method: {config.mcmc_method}({config.mcmc_steps}), lambda={config.guid_scale}"
+        # )
+        mcmc_spec = config.mcmc_stepsizes
+        factor = mcmc_spec["params"]["factor"]
+        exp = mcmc_spec["params"]["exponent"]
+        bs = mcmc_spec["beta_schedule"]
         print(
-            f"Respaced T: {config.num_respaced_diff_steps}, MCMC stop t<={config.mcmc_lower_t}, Method: {config.mcmc_method}({config.mcmc_steps}), lambda={config.guid_scale}"
+            f"MCMC stop t<={config.mcmc_lower_t}, Method: {config.mcmc_method}({config.mcmc_steps}), lambda={config.guid_scale}, n_trapets: {config.n_trapets}, a={factor}, b={exp}, steps={bs}"
         )
         print(f"Acc: {simple_acc.item():.4f}\nR3 acc: {r3_acc.item():.4f}")
         # compute_top_n_acc(classifier, classes_and_samples[:10], 10, device, 10)

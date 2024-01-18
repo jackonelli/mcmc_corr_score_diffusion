@@ -1,4 +1,5 @@
 """2D simulated composition dataset"""
+from typing import Tuple
 import numpy as np
 import torch as th
 
@@ -19,11 +20,15 @@ class Bar:
         # Return x samples and dummy labels
         return th.tensor(data, dtype=th.float32), th.zeros((n_samples))
 
-    def nll(self, x):
-        in_x = np.abs(x[:, 0]) < self.x_bound
-        in_y = np.abs(x[:, 1]) < self.y_bound
+    def compute_support(self, x: th.Tensor) -> Tuple[th.Tensor, th.Tensor]:
+        in_x = th.abs(x[:, 0]) < self.x_bound
+        in_y = th.abs(x[:, 1]) < self.y_bound
         in_ = th.logical_and(in_x, in_y)
         out = th.logical_not(in_)
+        return in_, out
+
+    def nll(self, x):
+        in_, out = self.compute_support(x)
         nll = th.empty((x.size(0),))
         # Samples in have uniform prob = 1 / area of support
         support_area = 4 * self.x_bound * self.y_bound
