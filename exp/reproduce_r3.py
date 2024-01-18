@@ -133,8 +133,9 @@ def main():
             # full_trajs is a list of T tensors of shape (B, D, D)
             # th.stack turns the list into a single tensor (T, B, D, D).
             th.save(th.stack(full_trajs), sim_dir / f"trajs_{args.sim_batch}_{batch}.th")
-        if isinstance(mcmc_sampler, MCMCMHCorrSampler):
-            mcmc_sampler.save_stats_to_file(sim_dir, f"{args.sim_batch}_{batch}.p")
+        if config.mcmc_method is None:
+            if isinstance(mcmc_sampler, MCMCMHCorrSampler):
+                mcmc_sampler.save_stats_to_file(sim_dir, f"{args.sim_batch}_{batch}.p")
 
     print(f"Results written to '{sim_dir}'")
 
