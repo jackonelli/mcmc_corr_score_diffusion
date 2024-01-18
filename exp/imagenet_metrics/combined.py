@@ -20,17 +20,44 @@ def main():
     args = parse_args()
     # Setup and assign a directory where simulation results are saved.
     sim_dirs = collect_sim_dirs(args.res_dir)
-    compute_metrics(sim_dirs)
+    res = compute_metrics(sim_dirs)
+    format_metrics(res)
+
+
+def format_metrics(res: List[Tuple[float, float, SimulationConfig, int, str]]):
+    for acc, r3_acc, config, num_samples, sim_dir in res:
+        lambda_ = config.guid_scale
+        if config.mcmc_method is None:
+            str_ = f"Rev, lambda={lambda_}"
+        else:
+            mcmc_method = config.mcmc_method if config.mcmc_method is not None else "Rev"
+            mcmc_steps = config.mcmc_steps
+            mcmc_lower_t = config.mcmc_lower_t if config.mcmc_lower_t is not None else 0
+            n_trapets = config.n_trapets
+            step_params = config.mcmc_stepsizes["params"]
+            step_sch = config.mcmc_stepsizes["beta_schedule"]
+            factor, exp = step_params["factor"], step_params["exponent"]
+            str_ = f"{mcmc_method.upper()}-{mcmc_steps}({mcmc_lower_t}), lambda={lambda_}, n_trapets={n_trapets}, {factor} * beta_{step_sch}^{exp}"
+        print(f"\n{sim_dir}")
+        print(str_)
+        print(f"Acc: {acc}, R3 acc: {r3_acc}, with {num_samples} samples")
+        print(50 * "-")
 
 
 def compute_metrics(sim_dirs):
     classifier, classifier_name = load_classifier(CLASSIFIER_PATH, IMAGE_SIZE)
+    res = []
     for sim_dir in sim_dirs:
-        print(sim_dir.name)
-        classes_and_samples, config = collect_samples(sim_dir)
+        num_files = len(list(sim_dir.iterdir()))
+        if num_files == 1:
+            print(f"Skipping dir '{sim_dir.name}', with no samples")
+            continue
+        classes_and_samples, config, num_batches = collect_samples(sim_dir)
+        print(f"Processing '{sim_dir.name}' with {num_batches} num_batches")
         assert config.classifier in classifier_name, "Classifier mismatch"
-        simple_acc, r3_acc = compute_acc(classifier, classes_and_samples, BATCH_SIZE, DEVICE)
-        print(simple_acc, r3_acc)
+        simple_acc, r3_acc, num_samples = compute_acc(classifier, classes_and_samples, BATCH_SIZE, DEVICE)
+        res.append((simple_acc, r3_acc, config, num_samples, sim_dir.name))
+    return res
 
 
 def load_classifier(classifier_path: Path, image_size: int):
@@ -46,7 +73,7 @@ def collect_sim_dirs(res_dir: Path):
     return dirs
 
 
-def collect_samples(sim_dir: Path) -> Tuple[List[Tuple[Path, Path]], SimulationConfig]:
+def collect_samples(sim_dir: Path) -> Tuple[List[Tuple[Path, Path]], SimulationConfig, int]:
     """Collect sampled images and corresponding classes
 
     Results are saved to timestamped dirs to prevent overwriting, we need to collect samples from all dirs with matching sim name.
@@ -60,10 +87,10 @@ def collect_samples(sim_dir: Path) -> Tuple[List[Tuple[Path, Path]], SimulationC
     samples.extend(sorted([path.name for path in sim_dir.glob("samples_*_*.th")]))
     samples = [sim_dir / sm for sm in samples]
     assert len(samples) == len(classes)
-    print(f"Found {len(samples)} samples")
+    num_batches = len(samples)
     coll = list(zip(classes, samples))
     validate(coll)
-    return coll, config
+    return coll, config, num_batches
 
 
 def validate(coll):
