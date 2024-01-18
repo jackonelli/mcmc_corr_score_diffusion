@@ -137,7 +137,6 @@ dependencies:
       - pytorch-fid==0.3.0
       - jupyter
       - ipykernel
-      - mpi4py
       - opencv-python
       - pytorch-fid
 
