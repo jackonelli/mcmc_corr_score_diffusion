@@ -2,11 +2,8 @@ import cv2
 import os
 import argparse
 import torch as th
-<<<<<<< HEAD
-=======
 from pathlib import Path
 import matplotlib.pyplot as plt
->>>>>>> langevin
 
 
 _RESIZE_MIN = 270
@@ -25,13 +22,6 @@ def central_crop(image, crop_height, crop_width):
     startx = width // 2 - (crop_width // 2)
     starty = height // 2 - (crop_height // 2)
     return image[starty : starty + crop_height, startx : startx + crop_width]
-
-
-def convert_to_img(tensor):
-    imgs = ((tensor + 1) * 127.5).clamp(0, 255).to(th.uint8)
-    imgs = imgs.permute(0, 2, 3, 1)
-    imgs = imgs.contiguous()
-    return imgs
 
 
 def preprocessing_images(img_path, output_path):
@@ -88,12 +78,12 @@ def th_images_to_png(file_path: Path, dir_path: Path = None):
         os.makedirs(dir_path)
 
     for i in range(n):
-        plt.imsave(dir_path / '{}.jpeg'.format(str(i)), images[i])
+        plt.imsave(dir_path / "{}.jpeg".format(str(i)), images[i])
 
     return dir_path
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", "-i", required=True, type=str, help="ImageNet image path")
     parser.add_argument("--output", "-o", type=str, default="", help="Output image path")

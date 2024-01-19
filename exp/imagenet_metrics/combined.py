@@ -4,7 +4,7 @@ import sys
 sys.path.append(".")
 from pathlib import Path
 from argparse import ArgumentParser
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 from src.utils.net import get_device, Device
 from src.model.guided_diff.classifier import load_guided_classifier
 from exp.utils import SimulationConfig
@@ -19,7 +19,7 @@ CLASSIFIER_PATH = Path.cwd() / f"models/{IMAGE_SIZE}x{IMAGE_SIZE}_classifier.pt"
 def main():
     args = parse_args()
     # Setup and assign a directory where simulation results are saved.
-    sim_dirs = collect_sim_dirs(args.res_dir)
+    sim_dirs = collect_sim_dirs(args.res_dir, args.filter)
     res = compute_metrics(sim_dirs)
     format_metrics(res)
 
@@ -53,7 +53,7 @@ def compute_metrics(sim_dirs):
             print(f"Skipping dir '{sim_dir.name}', with no samples")
             continue
         classes_and_samples, config, num_batches = collect_samples(sim_dir)
-        print(f"Processing '{sim_dir.name}' with {num_batches} num_batches")
+        print(f"Processing '{sim_dir.name}' with {num_batches} batches")
         assert config.classifier in classifier_name, "Classifier mismatch"
         simple_acc, r3_acc, num_samples = compute_acc(classifier, classes_and_samples, BATCH_SIZE, DEVICE)
         res.append((simple_acc, r3_acc, config, num_samples, sim_dir.name))
@@ -67,9 +67,11 @@ def load_classifier(classifier_path: Path, image_size: int):
     return classifier, classifier_path.name
 
 
-def collect_sim_dirs(res_dir: Path):
+def collect_sim_dirs(res_dir: Path, pattern: Optional[str]):
     dirs = filter(lambda x: x.is_dir(), res_dir.iterdir())
     dirs = filter(lambda x: (x / "config.json").exists(), dirs)
+    if pattern is not None:
+        dirs = filter(lambda x: pattern in x.name, dirs)
     return dirs
 
 
@@ -108,6 +110,7 @@ def parse_args():
     parser = ArgumentParser(prog="Sample from diffusion model")
     parser.add_argument("--res_dir", type=Path, required=True, help="Parent dir for all results")
     parser.add_argument("--metric", default="all", type=str, choices=["all", "acc", "fid"], help="Metric to compute")
+    parser.add_argument("--filter", default=None, type=str, help="Optional filter of sub. dir names")
     return parser.parse_args()
 
 
