@@ -33,7 +33,7 @@ def main():
     set_seed(config.seed)
 
     # Setup and assign a directory where simulation results are saved.
-    sim_dir = setup_results_dir(config)
+    sim_dir = setup_results_dir(config, args.job_id)
 
     device = get_device(Device.GPU)
 
@@ -133,8 +133,9 @@ def main():
             # full_trajs is a list of T tensors of shape (B, D, D)
             # th.stack turns the list into a single tensor (T, B, D, D).
             th.save(th.stack(full_trajs), sim_dir / f"trajs_{args.sim_batch}_{batch}.th")
-        if isinstance(mcmc_sampler, MCMCMHCorrSampler):
-            mcmc_sampler.save_stats_to_file(sim_dir, f"{args.sim_batch}_{batch}.p")
+        if config.mcmc_method is None:
+            if isinstance(mcmc_sampler, MCMCMHCorrSampler):
+                mcmc_sampler.save_stats_to_file(sim_dir, f"{args.sim_batch}_{batch}.p")
 
     print(f"Results written to '{sim_dir}'")
 
@@ -143,6 +144,9 @@ def parse_args():
     parser = ArgumentParser(prog="Sample from diffusion model")
     parser.add_argument("--config", type=Path, required=True, help="Config file path")
     parser.add_argument("--save_traj", action="store_true", help="Save full trajectories")
+    parser.add_argument(
+        "--job_id", type=int, default=None, help="Simulation batch index, indexes parallell simulations."
+    )
     parser.add_argument(
         "--sim_batch", type=int, default=0, help="Simulation batch index, indexes parallell simulations."
     )

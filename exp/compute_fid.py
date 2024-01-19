@@ -1,4 +1,5 @@
 from src.utils.file_mangement import npz_images_to_png
+from src.utils.image_utils import th_images_to_png
 from argparse import ArgumentParser
 from pathlib import Path
 from pytorch_fid.fid_score import save_fid_stats, calculate_fid_given_paths
@@ -11,14 +12,13 @@ def main():
     args = parse_args()
     path_generated = Path(args.path_generated)
 
-    if path_generated.parts[-1] == 'npz':
-        generated_dir = path_generated.parent
-        fid_generate = npz_images_to_png(path_generated, generated_dir)
+    if path_generated.parts[-1][-3:] == '.th':
+        fid_generate = th_images_to_png(path_generated, None)
     else:
         fid_generate = path_generated
 
     fid_real = Path(args.path_real)
-    if fid_real.parts[-1] == 'npz':
+    if fid_real.parts[-1][-3:] == 'npz':
         statistic_file = True
     else:
         statistic_file = False
@@ -59,9 +59,9 @@ def main():
 def parse_args():
     parser = ArgumentParser(prog="Compute FID score")
     parser.add_argument("--path_generated", type=str,
-                        help="Either path to folder with generated samples or path of npz-file")
+                        help="Either path to folder with generated samples or path to th-file of generated samples")
     parser.add_argument("--path_real", type=str,
-                        help="Either path to folder of real samples or path to FID statistics file")
+                        help="Either path to folder of real samples or path to FID statistics file (.npz)")
     parser.add_argument('--batch_size', type=int, default=50,
                         help='Batch size to use')
     parser.add_argument('--num_workers', type=int,

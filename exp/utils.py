@@ -94,9 +94,13 @@ def get_step_size(step_size_dir: Path, dataset_name: str, mcmc_method: str, mcmc
     return dict(extracted)
 
 
-def setup_results_dir(config: SimulationConfig) -> Path:
+def setup_results_dir(config: SimulationConfig, job_id: Optional[int]) -> Path:
     config.results_dir.mkdir(exist_ok=True, parents=True)
-    sim_dir = config.results_dir / f"{config.name}_{config.image_size}_{timestamp()}"
+    if job_id is None:
+        sim_id = f"{config.name}_{timestamp()}"
+    else:
+        sim_id = f"{config.name}_{job_id}"
+    sim_dir = config.results_dir / sim_id
     sim_dir.mkdir(exist_ok=True)
     config.save(sim_dir)
     return sim_dir

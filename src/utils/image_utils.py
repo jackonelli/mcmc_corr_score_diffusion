@@ -2,6 +2,11 @@ import cv2
 import os
 import argparse
 import torch as th
+<<<<<<< HEAD
+=======
+from pathlib import Path
+import matplotlib.pyplot as plt
+>>>>>>> langevin
 
 
 _RESIZE_MIN = 270
@@ -55,7 +60,40 @@ def change_image_extension_lower(img_path):
         os.rename(old, new)
 
 
-if __name__ == "__main__":
+def convert_to_img(tensor):
+    imgs = ((tensor + 1) * 127.5).clamp(0, 255).to(th.uint8)
+    imgs = imgs.permute(0, 2, 3, 1)
+    imgs = imgs.contiguous()
+    return imgs
+
+
+def th_images_to_png(file_path: Path, dir_path: Path = None):
+    """
+    Converts a th-file with data on the format (num_images, x_dim, y_dim, 3) to png images
+    and places them in a folder created at 'dir_path' and if None then folder creates at file_path
+    (with the name as the file)
+
+    @param file_path: Path to file.npz
+    @param dir_path: Path to directory where the folder with the images is placed
+    """
+    images = th.load(file_path)
+    images = convert_to_img(images)
+    images = images.numpy()
+    n = images.shape[0]
+
+    if dir_path is None:
+        dir_path = file_path.parent / file_path.stem
+
+    if not dir_path.is_dir():
+        os.makedirs(dir_path)
+
+    for i in range(n):
+        plt.imsave(dir_path / '{}.jpeg'.format(str(i)), images[i])
+
+    return dir_path
+
+
+if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", "-i", required=True, type=str, help="ImageNet image path")
     parser.add_argument("--output", "-o", type=str, default="", help="Output image path")
