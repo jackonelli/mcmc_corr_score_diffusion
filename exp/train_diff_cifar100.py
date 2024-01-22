@@ -13,7 +13,7 @@ import pytorch_lightning as pl
 from src.data.cifar import get_cifar100_data_loaders
 from src.diffusion.base import DiffusionSampler
 from src.diffusion.beta_schedules import improved_beta_schedule, respaced_beta_schedule
-from src.model.imagenet import UNet, DiffusionModel
+from src.model.imagenet import UNet, DiffusionModel, UNetEnergy
 from src.utils.net import get_device, Device
 
 
@@ -25,13 +25,16 @@ def main():
     batch_size = args.batch_size
     dataloader_train, dataloader_val = get_cifar100_data_loaders(batch_size, data_root=args.dataset_path)
 
-    model_path = Path.cwd() / "models" / "uncond_unet_cifar100.pt"
+    dev = get_device(Device.GPU)
+    if args.type == "score":
+        unet = UNet(image_size, time_emb_dim, channels).to(dev)
+    else:
+        unet = UNetEnergy(image_size, time_emb_dim, channels).to(dev)
+
+    model_path = Path.cwd() / "models" / f"{args.type}_uncond_unet_cifar100.pt"
     if not model_path.parent.exists():
         print(f"Save dir. '{model_path.parent}' does not exist.")
         return
-
-    dev = get_device(Device.GPU)
-    unet = UNet(image_size, time_emb_dim, channels).to(dev)
 
     unet.train()
     num_diff_steps = 1000
@@ -65,6 +68,7 @@ def parse_args():
     parser.add_argument("--dataset_path", type=Path, required=True, help="Path to dataset root")
     parser.add_argument("--max_epochs", type=int, default=int(1e5), help="Max. number of epochs")
     parser.add_argument("--batch_size", type=int, default=50, help="Batch size")
+    parser.add_argument("--type", default="score", type=str, choices=["score", "energy"])
     parser.add_argument(
         "--sim_batch", type=int, default=0, help="Simulation batch index, indexes parallell simulations."
     )
