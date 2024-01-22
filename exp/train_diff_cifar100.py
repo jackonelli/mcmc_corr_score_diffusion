@@ -21,8 +21,8 @@ def main():
     time_emb_dim = 112
     image_size = 32
     channels = 3
-    batch_size = 50
     args = parse_args()
+    batch_size = args.batch_size
     dataloader_train, dataloader_val = get_cifar100_data_loaders(batch_size, data_root=args.dataset_path)
 
     model_path = Path.cwd() / "models" / "uncond_unet_cifar100.pt"
@@ -31,12 +31,7 @@ def main():
         return
 
     dev = get_device(Device.GPU)
-    if model_path.exists():
-        print(f"Load existing model: {model_path.stem}")
-        # unet = load_imagenet_diff_from_checkpoint(model_path, dev, image_size)
-        raise NotImplementedError("Cifar100 chkpt not implemented yet.")
-    else:
-        unet = UNet(image_size, time_emb_dim, channels).to(dev)
+    unet = UNet(image_size, time_emb_dim, channels).to(dev)
 
     unet.train()
     num_diff_steps = 1000
@@ -69,6 +64,7 @@ def parse_args():
     parser = ArgumentParser(prog="Train Cifar100 diffusion model")
     parser.add_argument("--dataset_path", type=Path, required=True, help="Path to dataset root")
     parser.add_argument("--max_epochs", type=int, default=int(1e5), help="Max. number of epochs")
+    parser.add_argument("--batch_size", type=int, default=50, help="Batch size")
     parser.add_argument(
         "--sim_batch", type=int, default=0, help="Simulation batch index, indexes parallell simulations."
     )
