@@ -1,6 +1,8 @@
 """UNet model for Imagenet
 
 Base diffusion model
+
+TODO: This is not used for imagenet, should remane to more generic.
 """
 from collections import OrderedDict
 from collections.abc import Callable
@@ -418,7 +420,7 @@ class DiffusionModel(pl.LightningModule):
         x = batch["pixel_values"].to(self.device)
 
         # Algorithm 1 line 3: sample t uniformally for every example in the batch
-        ts = th.randint(0, self.noise_scheduler.num_timesteps, (batch_size,), device=self.device).long()
+        ts = th.randint(0, self.noise_scheduler.num_diff_steps, (batch_size,), device=self.device).long()
 
         noise = th.randn_like(x)
         x_noisy = self.noise_scheduler.q_sample(x_0=x, ts=ts, noise=noise)
@@ -451,7 +453,7 @@ class DiffusionModel(pl.LightningModule):
         th.manual_seed(self.i_batch_val)
 
         # Algorithm 1 line 3: sample t uniformally for every example in the batch
-        ts = th.randint(0, self.noise_scheduler.num_timesteps, (batch_size,), device=self.device).long()
+        ts = th.randint(0, self.noise_scheduler.num_diff_steps, (batch_size,), device=self.device).long()
 
         noise = th.randn_like(x)
         th.set_rng_state(rng_state)
