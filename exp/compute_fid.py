@@ -1,4 +1,5 @@
-from src.utils.file_mangement import npz_images_to_png
+import sys
+sys.path.append(".")
 from src.utils.image_utils import th_images_to_png
 from argparse import ArgumentParser
 from pathlib import Path
