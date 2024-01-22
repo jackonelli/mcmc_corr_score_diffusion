@@ -53,6 +53,7 @@ def main():
         default_root_dir="logs/cifar10",
         log_every_n_steps=10,
         num_sanity_val_steps=0,
+        limit_val_batches=0,
         accelerator="gpu",
         devices=1,
     )
