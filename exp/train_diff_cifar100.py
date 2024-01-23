@@ -50,7 +50,7 @@ def main():
     diffm.to(dev)
     trainer = pl.Trainer(
         max_epochs=args.max_epochs,
-        default_root_dir="logs/cifar100",
+        default_root_dir="logs/cifar100_diff",
         log_every_n_steps=10,
         num_sanity_val_steps=0,
         limit_val_batches=0,
