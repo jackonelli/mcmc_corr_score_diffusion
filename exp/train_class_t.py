@@ -60,7 +60,7 @@ def main():
         num_sanity_val_steps=0,
         accelerator="gpu",
         devices=1,
-        default_root_dir="logs/cifar100_class_t",
+        default_root_dir="pl_logs/cifar100_class_t",
     )
 
     dataloader_train, dataloader_val = get_cifar100_data_loaders(batch_size, args.dataset_path)
