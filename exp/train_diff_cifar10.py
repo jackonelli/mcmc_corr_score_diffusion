@@ -12,7 +12,7 @@ import pytorch_lightning as pl
 from src.data.cifar import get_cifar10_data_loaders
 from src.diffusion.base import DiffusionSampler
 from src.diffusion.beta_schedules import improved_beta_schedule
-from src.model.imagenet import UNet, DiffusionModel, load_imagenet_diff_from_checkpoint
+from src.model.imagenet import UNet, DiffusionModel, load_unet_from_checkpoint
 from src.utils.net import get_device, Device
 
 
@@ -47,7 +47,7 @@ def main():
     diffm.to(dev)
     trainer = pl.Trainer(
         max_epochs=100,
-        default_root_dir="logs/cifar10",
+        default_root_dir="logs/cifar100",
         log_every_n_steps=10,
         num_sanity_val_steps=0,
         accelerator="gpu",

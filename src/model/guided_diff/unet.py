@@ -144,6 +144,8 @@ def parse_channel_mult(channel_mult: Optional[str], image_size: int):
             parsed_channel_mult = (1, 1, 2, 3, 4)
         elif image_size == 64:
             parsed_channel_mult = (1, 2, 3, 4)
+        elif image_size == 32:
+            parsed_channel_mult = (1, 2, 3, 4)
         else:
             raise ValueError(f"unsupported image size: {image_size}")
     else:

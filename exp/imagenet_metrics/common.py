@@ -7,7 +7,7 @@ from src.utils.metrics import accuracy, hard_label_from_logit, prob_vec_from_log
 PATTERN = re.compile(r".*_(\d+)_(\d+).th")
 
 
-def compute_acc(classifier, classes_and_samples, batch_size, device) -> Tuple[float, float, int]:
+def compute_acc(classifier_fn, classes_and_samples, transform, batch_size, device) -> Tuple[float, float, int]:
     pred_logits = []
     true_classes = []
     for _, (classes_path, samples_path) in enumerate(classes_and_samples):
@@ -16,8 +16,8 @@ def compute_acc(classifier, classes_and_samples, batch_size, device) -> Tuple[fl
         num_samples = samples.size(0)
         for batch in th.chunk(samples, num_samples // batch_size):
             batch = batch.to(device)
-            ts = th.zeros((batch.size(0),)).to(device)
-            pred_logits.append(classifier(batch, ts).detach().cpu())
+            batch = transform(batch)
+            pred_logits.append(classifier_fn(batch).detach().cpu())
 
         classes = th.load(classes_path).detach().cpu()
         true_classes.append(classes)

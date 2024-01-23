@@ -10,7 +10,7 @@ from argparse import ArgumentParser
 import matplotlib.pyplot as plt
 from src.diffusion.base import DiffusionSampler
 from src.diffusion.beta_schedules import improved_beta_schedule
-from src.model.imagenet import load_imagenet_diff, load_imagenet_diff_from_checkpoint
+from src.model.imagenet import load_unet_from_state_dict, load_unet_from_checkpoint
 from src.utils.net import get_device, Device
 from src.data.utils import reverse_transform
 import torch as th
@@ -23,7 +23,7 @@ def main():
     chkpt = next(chkpt_dir.iterdir())
     assert chkpt.exists(), f"Model '{chkpt}' does not exist."
 
-    diff_model = load_imagenet_diff_from_checkpoint(chkpt, device)
+    diff_model = load_unet_from_checkpoint(chkpt, device)
     channels, image_size = 3, 112
     T = args.num_diff_steps
     # beta_schedule = partial(_sparse_betas, og_schedule=improved_beta_schedule, og_num_diff_steps=1000)

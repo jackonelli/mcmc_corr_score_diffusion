@@ -85,16 +85,18 @@ class ResnetDiffusionModelEnergy(ResnetDiffusionModel, EnergyModel):
         h_dim: int = 128,
         emb_dim: int = 32,
         widen: int = 2,
-        emb_type: str = "learned"
+        emb_type: str = "learned",
     ):
-        ResnetDiffusionModel.__init__(self,
-                                      num_diff_steps=num_diff_steps,
-                                      n_layers=n_layers,
-                                      x_dim=x_dim,
-                                      h_dim=h_dim,
-                                      emb_dim=emb_dim,
-                                      widen=widen,
-                                      emb_type=emb_type)
+        ResnetDiffusionModel.__init__(
+            self,
+            num_diff_steps=num_diff_steps,
+            n_layers=n_layers,
+            x_dim=x_dim,
+            h_dim=h_dim,
+            emb_dim=emb_dim,
+            widen=widen,
+            emb_type=emb_type,
+        )
         EnergyModel.__init__(self)
 
     def energy(self, x: th.Tensor, time: th.Tensor):
@@ -116,6 +118,7 @@ def load_diff_model_gmm(diff_model_path, T, device, energy=False):
     diff_model.to(device)
     # diff_model.eval()
     return diff_model
+
 
 # class JaxResnetDiffusionModel(hk.Module):
 #     """Resnet score model.

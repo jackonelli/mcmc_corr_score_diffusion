@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Optional
 import torch as th
 import torch.nn as nn
 
@@ -21,15 +22,17 @@ from src.model.guided_diff.nn import (
 )
 
 IMAGE_RES_TO_DEPTH = {
+    32: 4,
     64: 4,
     256: 2,
 }
 
 
 def load_guided_classifier(
-    model_path: Path,
+    model_path: Optional[Path],
     dev,
     image_size,
+    num_classes=1000,
     use_fp16=True,
     width=128,
     attention_resolutions=(32, 16, 8),
@@ -41,7 +44,7 @@ def load_guided_classifier(
         image_size=image_size,
         in_channels=3,
         model_channels=width,
-        out_channels=1000,
+        out_channels=num_classes,
         num_res_blocks=IMAGE_RES_TO_DEPTH[image_size],
         attention_resolutions=attention_ds(attention_resolutions, image_size),
         channel_mult=parse_channel_mult(None, image_size),
@@ -51,7 +54,8 @@ def load_guided_classifier(
         resblock_updown=resblock_updown,
         pool=pool,
     )
-    classifier.load_state_dict(th.load(model_path, map_location="cpu"))
+    if model_path is not None:
+        classifier.load_state_dict(th.load(model_path, map_location="cpu"))
     classifier.to(dev)
     if use_fp16:
         classifier.convert_to_fp16()

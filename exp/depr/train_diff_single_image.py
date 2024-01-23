@@ -12,7 +12,7 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 from src.data.single_image import get_single_image_dataloader
 from src.diffusion.base import DiffusionSampler
-from src.model.imagenet import load_imagenet_diff
+from src.model.imagenet import load_unet_from_state_dict
 from src.diffusion.beta_schedules import improved_beta_schedule
 from src.model.imagenet import UNet, DiffusionModel
 from src.utils.net import get_device, Device
@@ -33,7 +33,7 @@ def main():
     dev = get_device(Device.GPU)
     if model_path.exists():
         print(f"Load existing model: {model_path.stem}")
-        unet = load_imagenet_diff(model_path, dev, image_size)
+        unet = load_unet_from_state_dict(model_path, dev, image_size)
     else:
         unet = UNet(image_size, time_emb_dim, channels).to(dev)
     unet.train()

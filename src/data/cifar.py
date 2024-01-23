@@ -2,12 +2,18 @@ from pathlib import Path
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, ToTensor, Resize, Lambda
 from datasets import load_dataset
-from torchvision.transforms import Compose, ToTensor, Resize, Lambda
+
+CIFAR_IMAGE_SIZE = 32
+CIFAR_NUM_CHANNELS = 3
+CIFAR_100_NUM_CLASSES = 100
 
 
-def test():
-    root = Path("/home/jakob/data/cifar10/")
-    dataset = load_dataset("cifar100", cache_dir=str(Path.home() / "data/cifar100"))
+def collate_fn(batch):
+    print(f"Type: {type(batch)}")
+    new = {}
+    new["x"] = batch["pixel_values"]
+    new["labels"] = batch["fine_label"]
+    return new
 
 
 def get_cifar100_data_loaders(batch_size: int, data_root: Path):
@@ -47,7 +53,12 @@ def get_cifar100_data_loaders(batch_size: int, data_root: Path):
         pin_memory=True,
         num_workers=8,
     )
-    dataloader_val = DataLoader(transformed_dataset_val["test"], batch_size=batch_size, shuffle=False, num_workers=4)
+    dataloader_val = DataLoader(
+        transformed_dataset_val["test"],
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=4,
+    )
     return dataloader_train, dataloader_val
 
 
@@ -99,7 +110,3 @@ def get_cifar10_data_loaders(batch_size: int):
     #         Lambda(lambda x: (x * 2) - 1),
     #     ],
     # )
-
-
-if __name__ == "__main__":
-    test()

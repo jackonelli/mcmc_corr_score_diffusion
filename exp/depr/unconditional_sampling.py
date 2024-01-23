@@ -14,7 +14,7 @@ from src.diffusion.beta_schedules import (
     respaced_beta_schedule,
 )
 from src.model.unet import load_mnist_diff
-from src.model.imagenet import load_imagenet_diff
+from src.model.imagenet import load_unet_from_state_dict
 from src.utils.net import get_device, Device
 from src.utils.vis import plot_samples_grid
 from src.model.guided_diff.unet import load_pretrained_diff_unet
@@ -30,11 +30,11 @@ def main():
 
     print("Loading models")
     if "imagenet" in args.model:
-        diff_model = load_imagenet_diff(model_path, device)
+        diff_model = load_unet_from_state_dict(model_path, device)
         channels, image_size = 3, 112
         beta_schedule, var_mode = improved_beta_schedule, "beta"
     elif "cifar10" in args.model:
-        diff_model = load_imagenet_diff(model_path, device, image_size=32)
+        diff_model = load_unet_from_state_dict(model_path, device, image_size=32)
         channels, image_size = 3, 32
         beta_schedule, var_mode = improved_beta_schedule, "beta"
     elif "256x256_diffusion" in args.model:

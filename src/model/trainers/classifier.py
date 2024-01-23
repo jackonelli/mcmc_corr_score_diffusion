@@ -22,11 +22,19 @@ def _process_labelled_batch(batch, device) -> Tuple[int, th.Tensor, th.Tensor]:
     return batch_size, x, y
 
 
+def _process_labelled_batch_cifar100(batch, device) -> Tuple[int, th.Tensor, th.Tensor]:
+    """Hack to handle Cifar100 data"""
+    batch_size = batch["pixel_values"].size(0)
+    x = batch["pixel_values"].to(device)
+    y = batch["fine_label"].long().to(device)
+    return batch_size, x, y
+
+
 class DiffusionClassifier(pl.LightningModule):
     """Trainer for learning classification model p(y | x_t),
     where x_t is a noisy sample from a forward diffusion process."""
 
-    def __init__(self, model: nn.Module, loss_f: Callable, noise_scheduler):
+    def __init__(self, model: nn.Module, loss_f: Callable, noise_scheduler, batch_fn=_process_labelled_batch):
         super().__init__()
         self.model = model
         self.loss_f = loss_f
@@ -39,9 +47,10 @@ class DiffusionClassifier(pl.LightningModule):
         self.i_batch_train = 0
         self.i_batch_val = 0
         self.i_epoch = 0
+        self._batch_fn = batch_fn
 
     def training_step(self, batch, batch_idx):
-        batch_size, x, y = _process_labelled_batch(batch, self.device)
+        batch_size, x, y = self._batch_fn(batch, self.device)
         # Algorithm 1 line 3: sample t uniformally for every example in the batch
         T = self.noise_scheduler.time_steps.size(0)
         ts = th.randint(0, T, (batch_size,), device=self.device).long()
@@ -67,23 +76,17 @@ class DiffusionClassifier(pl.LightningModule):
         return [optimizer], [scheduler]
 
     def validation_step(self, batch, batch_idx):
-        batch_size, x, y = _process_labelled_batch(batch, self.device)
+        batch_size, x, y = self._batch_fn(batch, self.device)
 
         rng_state = th.get_rng_state()
         th.manual_seed(self.i_batch_val)
 
-        # Algorithm 1 line 3: sample t uniformally for every example in the batch
-        T = self.noise_scheduler.time_steps.size(0)
-        ts = th.randint(0, T, (batch_size,), device=self.device).long()
-
-        noise = th.randn_like(x)
-        th.set_rng_state(rng_state)
-
-        x_noisy = self.noise_scheduler.q_sample(x_0=x, ts=ts, noise=noise)
-        logits = self.model(x_noisy, ts)
-
+        # Only report val. acc for t=0
+        ts = th.zeros((batch_size,), device=self.device).long()
+        logits = self.model(x, ts)
         loss = self.loss_f(logits, y)
         acc = accuracy(hard_label_from_logit(logits), y)
+
         self.log("val_loss", loss)
         self.log("acc", acc)
         self.val_loss += loss.detach().cpu().item()
@@ -93,7 +96,7 @@ class DiffusionClassifier(pl.LightningModule):
 
     def on_validation_epoch_end(self):
         print(
-            f" {self.i_epoch}. Validation Loss: {self.val_loss / self.i_batch_val}, Validation accuracy: {self.val_acc / self.i_batch_val}"
+            f" {self.i_epoch}. Val. Loss: {self.val_loss / self.i_batch_val}, Val. acc at t=0: {self.val_acc / self.i_batch_val}"
         )
         self.val_loss = 0.0
         self.val_acc = 0.0

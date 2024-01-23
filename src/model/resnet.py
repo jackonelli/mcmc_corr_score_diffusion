@@ -7,6 +7,7 @@ https://github.com/RobustBench/robustbench
 """
 
 from pathlib import Path
+from typing import Optional
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
@@ -33,11 +34,19 @@ def load_classifier(resnet_model_path: Path, time_emb=False):
     return model
 
 
-def load_classifier_t(model_path: Path, dev):
+# TODO: Merge with fn above
+def load_classifier_t(
+    model_path: Optional[Path], dev, num_blocks=[3, 4, 6, 3], emb_dim=112, num_classes=10, num_channels=1
+):
     model = ResNetTimeEmbedding(
-        block=BottleneckTimeEmb, num_blocks=[3, 4, 6, 3], emb_dim=112, num_classes=10, num_channels=1
+        block=BottleneckTimeEmb,
+        num_blocks=num_blocks,
+        emb_dim=emb_dim,
+        num_classes=num_classes,
+        num_channels=num_channels,
     )
-    model.load_state_dict(th.load(model_path))
+    if model_path is not None:
+        model.load_state_dict(th.load(model_path))
     model.to(dev)
     return model
 
@@ -58,7 +67,7 @@ class ResNetBase(nn.Module, ABC):
 class ResNet(ResNetBase):
     def __init__(self, block, num_blocks, num_classes=10, num_channels=3, in_planes=64):
         super(ResNet, self).__init__(block, num_blocks, num_classes, num_channels, in_planes)
-        self.in_planes = 64
+        self.in_planes = in_planes
         dims = [self.in_planes, self.in_planes * 2, self.in_planes * 4, self.in_planes * 8]
 
         self.layer1 = self._make_layer(block, dims[0], num_blocks[0], stride=1)

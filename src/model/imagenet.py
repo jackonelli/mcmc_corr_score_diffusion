@@ -2,7 +2,7 @@
 
 Base diffusion model
 
-TODO: This is not used for imagenet, should remane to more generic.
+TODO: This is not used for imagenet, should rename to more generic.
 """
 from collections import OrderedDict
 from collections.abc import Callable
@@ -21,7 +21,7 @@ def test():
     ImageNet("~/data/small-imagenet", download=False)
 
 
-def load_imagenet_diff(diff_path: Path, device, image_size: int = 112):
+def load_unet_from_state_dict(diff_path: Path, device, image_size: int = 112):
     """Load UNet diffusion model for MNIST"""
     time_emb_dim = 112
     channels = 3
@@ -32,7 +32,7 @@ def load_imagenet_diff(diff_path: Path, device, image_size: int = 112):
     return unet
 
 
-def load_imagenet_diff_from_checkpoint(chkpt_path: Path, device, image_size: int = 112):
+def load_unet_from_checkpoint(chkpt_path: Path, device, image_size: int = 112):
     """Load UNet diffusion model for MNIST"""
     time_emb_dim = 112
     channels = 3

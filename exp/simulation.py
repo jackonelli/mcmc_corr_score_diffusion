@@ -87,27 +87,28 @@ def main():
         guid_sampler = GuidanceSampler(diff_model, diff_sampler, guidance, diff_cond=config.class_cond)
     else:
         assert config.mcmc_steps is not None and config.mcmc_method is not None
-        if config.mcmc_stepsizes['load']:
-            print('Load step sizes for MCMC.')
-            step_sizes = get_step_size(models_dir / "step_sizes", dataset_name, config.mcmc_method,
-                                       config.mcmc_stepsizes['bounds'])
+        if config.mcmc_stepsizes["load"]:
+            print("Load step sizes for MCMC.")
+            step_sizes = get_step_size(
+                models_dir / "step_sizes", dataset_name, config.mcmc_method, config.mcmc_stepsizes["bounds"]
+            )
         else:
-            print('Use parameterized step sizes for MCMC.')
-            if config.mcmc_stepsizes['beta_schedule'] == 'lin':
+            print("Use parameterized step sizes for MCMC.")
+            if config.mcmc_stepsizes["beta_schedule"] == "lin":
                 beta_schedule_mcmc = linear_beta_schedule
-            elif config.mcmc_stepsizes['beta_schedule'] == 'cos':
+            elif config.mcmc_stepsizes["beta_schedule"] == "cos":
                 beta_schedule_mcmc = improved_beta_schedule
             else:
-                print('mcmc_stepsizes.beta_schedule must be \'lin\' or \'cos\'.')
+                print("mcmc_stepsizes.beta_schedule must be 'lin' or 'cos'.")
                 raise ValueError
             betas_mcmc, _ = respaced_beta_schedule(
                 original_betas=beta_schedule_mcmc(num_timesteps=config.num_diff_steps),
                 T=config.num_diff_steps,
                 respaced_T=config.num_respaced_diff_steps,
             )
-            a = config.mcmc_stepsizes['params']['factor']
-            b = config.mcmc_stepsizes['params']['exponent']
-            step_sizes = {int(t.item()): a * beta ** b for (t, beta) in zip(time_steps, betas_mcmc)}
+            a = config.mcmc_stepsizes["params"]["factor"]
+            b = config.mcmc_stepsizes["params"]["exponent"]
+            step_sizes = {int(t.item()): a * beta**b for (t, beta) in zip(time_steps, betas_mcmc)}
 
         if config.mcmc_method == "hmc":
             mcmc_sampler = AnnealedHMCScoreSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
