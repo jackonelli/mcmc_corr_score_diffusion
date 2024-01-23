@@ -6,7 +6,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 
-_RESIZE_MIN = 270
+_RESIZE_MIN = 293
 _CROP_SIZE = 256
 
 
