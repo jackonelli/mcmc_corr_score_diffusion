@@ -1,4 +1,4 @@
-"""Script for training a UNet-based unconditional diffusion model for MNIST"""
+"""Script for training a UNet-based unconditional diffusion model for CIFAR-100"""
 
 
 import sys
@@ -13,7 +13,8 @@ import pytorch_lightning as pl
 from src.data.cifar import get_cifar100_data_loaders
 from src.diffusion.base import DiffusionSampler
 from src.diffusion.beta_schedules import improved_beta_schedule, respaced_beta_schedule
-from src.model.imagenet import UNet, DiffusionModel, UNetEnergy
+from src.model.cifar.unet import UNet, UNetEnergy
+from src.model.trainers.diffusion import DiffusionModel
 from src.utils.net import get_device, Device
 
 

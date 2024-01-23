@@ -22,7 +22,7 @@ def _process_labelled_batch(batch, device) -> Tuple[int, th.Tensor, th.Tensor]:
     return batch_size, x, y
 
 
-def _process_labelled_batch_cifar100(batch, device) -> Tuple[int, th.Tensor, th.Tensor]:
+def process_labelled_batch_cifar100(batch, device) -> Tuple[int, th.Tensor, th.Tensor]:
     """Hack to handle Cifar100 data"""
     batch_size = batch["pixel_values"].size(0)
     x = batch["pixel_values"].to(device)

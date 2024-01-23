@@ -1,8 +1,9 @@
-"""UNet model for Imagenet
+"""UNet model for diffusion
 
 Base diffusion model
 
 TODO: This is not used for imagenet, should rename to more generic.
+TODO: The code has been copied to model/cifar this should be removed
 """
 from collections import OrderedDict
 from collections.abc import Callable
@@ -13,12 +14,7 @@ import torch.nn.functional as F
 from einops.layers.torch import Rearrange
 from einops import rearrange, reduce
 from src.model.base import EnergyModel
-from torchvision.datasets import ImageNet
 import pytorch_lightning as pl
-
-
-def test():
-    ImageNet("~/data/small-imagenet", download=False)
 
 
 def load_unet_from_state_dict(diff_path: Path, device, image_size: int = 112):
@@ -473,7 +469,3 @@ class DiffusionModel(pl.LightningModule):
         print(" {}. Validation Loss: {}".format(self.i_epoch, self.val_loss / self.i_batch_val))
         self.val_loss = 0.0
         self.i_batch_val = 0
-
-
-if __name__ == "__main__":
-    test()

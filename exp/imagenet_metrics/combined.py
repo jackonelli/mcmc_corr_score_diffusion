@@ -91,6 +91,7 @@ def load_classifier(classifier: str, image_size: int):
         # Return dummy unit transform
         return class_, lambda x: x
     elif classifier == "independent":
+        # https://pytorch.org/vision/stable/models/generated/torchvision.models.regnet_x_8gf.html
         class_ = regnet_x_8gf(weights=RegNet_X_8GF_Weights.IMAGENET1K_V2)
         class_.eval()
         class_.to(DEVICE)

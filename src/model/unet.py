@@ -1,6 +1,8 @@
 """UNet
 
 Base diffusion model
+
+This is used for MNIST, but could possibly be parameterised to fit both Cifar and MNIST
 """
 from pathlib import Path
 import torch as th

@@ -1,6 +1,9 @@
 """Simulation script for cluster"""
 import sys
 
+from src.model.cifar.unet import load_model
+from src.model.cifar.class_t import load_classifier_t as load_unet_classifier_t
+
 
 sys.path.append(".")
 from pathlib import Path
@@ -27,6 +30,7 @@ from src.samplers.mcmc import (
 )
 from exp.utils import SimulationConfig, setup_results_dir, get_step_size
 from src.utils.seeding import set_seed
+from src.data.cifar import CIFAR_100_NUM_CLASSES, CIFAR_IMAGE_SIZE, CIFAR_NUM_CHANNELS
 
 
 def main():
@@ -36,17 +40,17 @@ def main():
     set_seed(config.seed)
 
     # Setup and assign a directory where simulation results are saved.
-    sim_dir = setup_results_dir(config)
+    sim_dir = setup_results_dir(config, None)
     device = get_device(Device.GPU)
 
     models_dir = Path.cwd() / "models"
     diff_model_name = f"{config.diff_model}"
-    diff_model_path = models_dir / f"{diff_model_name}.pt"
+    diff_model_path = models_dir / f"{diff_model_name}"
     assert diff_model_path.exists(), f"Model '{diff_model_path}' does not exist."
 
     assert not (config.class_cond and "uncond" in config.diff_model)
     classifier_name = f"{config.classifier}"
-    classifier_path = models_dir / f"{classifier_name}.pt"
+    classifier_path = models_dir / f"{classifier_name}"
     assert classifier_path.exists(), f"Model '{classifier_path}' does not exist."
 
     # Hyper/meta params
@@ -54,12 +58,19 @@ def main():
     # Load diff. and classifier models
     if "mnist" in diff_model_name:
         dataset_name = "mnist"
-        channels, image_size = 1, 28
         beta_schedule, post_var = improved_beta_schedule, "beta"
         num_classes = 10
         diff_model = load_mnist_diff(diff_model_path, device)
         diff_model.eval()
         classifier = load_classifier_t(model_path=classifier_path, dev=device)
+        classifier.eval()
+    elif "cifar100" in diff_model_name:
+        dataset_name = "cifar100"
+        beta_schedule, post_var = improved_beta_schedule, "beta"
+        num_classes = CIFAR_100_NUM_CLASSES
+        diff_model = load_model(diff_model_path, device)
+        diff_model.eval()
+        classifier = load_unet_classifier_t(model_path=classifier_path, device=device)
         classifier.eval()
     elif f"{config.image_size}x{config.image_size}_diffusion" in diff_model_name:
         dataset_name = "imagenet"

@@ -36,22 +36,25 @@ CLASSIFIER_TRANSFORM = Compose(
     ]
 )
 
-# TRAINING_TRANSFORMS = Compose(
-#     [
-#         Resize(size=[img_size, img_size], antialias=True),
-#         # Turn into tensor (scales [0, 255] to (0, 1))
-#         ToTensor(),
-#         # Map data to (-1, 1)
-#     ],
-# )
+
+def guided_diff_transf(img_size):
+    return Compose(
+        [
+            Resize(size=[img_size, img_size], antialias=True),
+            # Turn into tensor (scales [0, 255] to (0, 1))
+            ToTensor(),
+            # Map data to (-1, 1)
+            Lambda(lambda x: 2 * x - 1),
+        ]
+    )
 
 
 class ImageNet100(Dataset):
-    def __init__(self, root: Path, img_size: int, train=True, transforms: Compose = REGNET_TRANSFORM):
+    def __init__(self, root: Path, img_size: int, train=True, transform: Compose = REGNET_TRANSFORM):
         self.root = root
         self.id_to_int_map = _parse_label_maps(root / "Labels.json", Path.cwd() / "models/imagenet.json")
         self.samples = self._parse_samples(train)
-        self.transform = REGNET_TRANSFORM
+        self.transform = transform
 
     def __len__(self):
         return len(self.samples)
@@ -88,9 +91,9 @@ class ImageNet100(Dataset):
         return samples
 
 
-def get_imagenet_data_loaders(root: Path, img_size: int, batch_size: int):
-    dataset_train = ImageNet100(root, img_size, train=True)
-    dataset_val = ImageNet100(root, img_size, train=False)
+def get_imagenet_data_loaders(root: Path, img_size: int, batch_size: int, transform=REGNET_TRANSFORM):
+    dataset_train = ImageNet100(root, img_size, train=True, transform=transform)
+    dataset_val = ImageNet100(root, img_size, train=False, transform=transform)
 
     # create dataloader
     dataloader_train = DataLoader(
