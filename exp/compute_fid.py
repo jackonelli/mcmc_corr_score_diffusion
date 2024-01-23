@@ -1,9 +1,10 @@
 import sys
 sys.path.append(".")
-from src.utils.image_utils import th_images_to_png
+from src.utils.fid_utils import compute_fid_statistics_thfiles
 from argparse import ArgumentParser
 from pathlib import Path
-from pytorch_fid.fid_score import save_fid_stats, calculate_fid_given_paths
+from pytorch_fid.fid_score import (save_fid_stats, calculate_fid_given_paths, compute_statistics_of_path,
+                                   calculate_frechet_distance)
 from pytorch_fid.inception import InceptionV3
 import torch
 import os
@@ -11,12 +12,7 @@ import os
 
 def main():
     args = parse_args()
-    path_generated = Path(args.path_generated)
-
-    if path_generated.parts[-1][-3:] == '.th':
-        fid_generate = th_images_to_png(path_generated, None)
-    else:
-        fid_generate = path_generated
+    fid_generate = Path(args.path_generated)
 
     fid_real = Path(args.path_real)
     if fid_real.parts[-1][-3:] == 'npz':
@@ -48,19 +44,29 @@ def main():
         save_fid_stats(paths, args.batch_size, device, args.dims, num_workers)
         fid_real = Path(fid_real_save)
 
-    paths = [fid_real.absolute().as_posix(), fid_generate.absolute().as_posix()]
-    fid_value = calculate_fid_given_paths(paths,
-                                          args.batch_size,
-                                          device,
-                                          args.dims,
-                                          num_workers)
+    if args.file_type == 'th':
+        m1, s1, model = compute_fid_statistics_thfiles(fid_generate, device, batch_size=args.batch_size, dims=args.dims,
+                                                       num_workers=num_workers)
+        m2, s2 = compute_statistics_of_path(fid_real.absolute().as_posix(), model, args.batch_size, args.dims, device,
+                                            num_workers)
+        fid_value = calculate_frechet_distance(m1, s1, m2, s2)
+    else:
+        paths = [fid_real.absolute().as_posix(), fid_generate.absolute().as_posix()]
+        fid_value = calculate_fid_given_paths(paths,
+                                              args.batch_size,
+                                              device,
+                                              args.dims,
+                                              num_workers)
     print('FID: ', fid_value)
 
 
 def parse_args():
     parser = ArgumentParser(prog="Compute FID score")
     parser.add_argument("--path_generated", type=str,
-                        help="Either path to folder with generated samples or path to th-file of generated samples")
+                        help="Path to folder with generated samples")
+    parser.add_argument("--file_type", choices=['jpeg', 'th'], help="Type of file to look for in folder "
+                                                                   "- assumes that .th-files are include "
+                                                                   "samples in the name")
     parser.add_argument("--path_real", type=str,
                         help="Either path to folder of real samples or path to FID statistics file (.npz)")
     parser.add_argument('--batch_size', type=int, default=50,
@@ -75,8 +81,7 @@ def parse_args():
                         help=('Dimensionality of Inception features to use. '
                               'By default, uses pool3 features'))
     parser.add_argument('--save_stats', action='store_true',
-                        help=('Generate an npz archive from a directory of samples. '
-                              'The first path is used as input and the second as output.'))
+                        help=('Generate an npz archive from a directory of samples given by path_real.'))
     return parser.parse_args()
 
 
