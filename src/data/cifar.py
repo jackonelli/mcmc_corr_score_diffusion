@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, ToTensor, Resize, Lambda
 from datasets import load_dataset
@@ -14,6 +15,13 @@ def collate_fn(batch):
     new["x"] = batch["pixel_values"]
     new["labels"] = batch["fine_label"]
     return new
+
+
+def get_cifar100_class_map(json_path: Path = Path.cwd() / "static/cifar100_class_map.json"):
+    with open(json_path, "r") as ff:
+        class_map = json.load(ff)
+    class_map = {int(k): v for k, v in class_map.items()}
+    return class_map
 
 
 def get_cifar100_data_loaders(batch_size: int, data_root: Path):

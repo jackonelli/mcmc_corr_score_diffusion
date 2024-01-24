@@ -20,9 +20,9 @@ from pytorch_lightning.callbacks import LearningRateMonitor
 from src.diffusion.base import DiffusionSampler
 from src.model.trainers.classifier import DiffusionClassifier, process_labelled_batch_cifar100
 from src.diffusion.beta_schedules import improved_beta_schedule
-from src.model.cifar.class_t import load_classifier_t as load_cifar_classifier_t
-from src.model.resnet import load_classifier_t
-from src.model.guided_diff.classifier import load_guided_classifier
+from src.model.cifar.class_t import load_classifier_t as load_unet_classifier_t
+from src.model.resnet import load_classifier_t as load_resnet_classifier_t
+from src.model.guided_diff.classifier import load_guided_classifier as load_guided_diff_classifier_t
 from src.utils.net import get_device, Device
 from src.data.cifar import CIFAR_100_NUM_CLASSES, CIFAR_IMAGE_SIZE, CIFAR_NUM_CHANNELS, get_cifar100_data_loaders
 
@@ -77,9 +77,9 @@ def main():
 
 def select_classifier(arch, dev):
     if arch == "unet":
-        class_t = load_cifar_classifier_t(None, dev)
+        class_t = load_unet_classifier_t(None, dev)
     elif arch == "resnet":
-        class_t = load_classifier_t(
+        class_t = load_resnet_classifier_t(
             model_path=None,
             dev=dev,
             emb_dim=112,
@@ -87,7 +87,7 @@ def select_classifier(arch, dev):
             num_channels=CIFAR_NUM_CHANNELS,
         ).to(dev)
     elif arch == "guided_diff":
-        class_t = load_guided_classifier(
+        class_t = load_guided_diff_classifier_t(
             model_path=None, dev=dev, image_size=CIFAR_IMAGE_SIZE, num_classes=CIFAR_100_NUM_CLASSES
         ).to(dev)
     else:
