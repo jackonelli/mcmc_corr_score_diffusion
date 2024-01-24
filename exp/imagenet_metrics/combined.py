@@ -1,6 +1,7 @@
 """Compute metrics on sampled images"""
 import sys
 
+
 sys.path.append(".")
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +17,10 @@ from src.model.guided_diff.classifier import load_guided_classifier
 from exp.utils import SimulationConfig
 from exp.imagenet_metrics.common import PATTERN, compute_acc
 
+# Cifar
+from src.model.resnet import load_classifier_t as load_resnet_classifier_t
+from src.data.cifar import CIFAR_100_NUM_CLASSES, CIFAR_NUM_CHANNELS
+
 DEVICE = get_device(Device.GPU)
 CHANNELS, IMAGE_SIZE = 3, 256
 BATCH_SIZE = 5
@@ -27,7 +32,7 @@ def main():
     # Setup and assign a directory where simulation results are saved.
     sim_dirs = collect_sim_dirs(args.res_dir)
     pattern = SimPattern(args.method, args.guid_scale, args.step_factor)
-    res = compute_metrics(sim_dirs, pattern, args.classifier)
+    res = compute_metrics(sim_dirs, pattern, args.classifier, args.dataset)
     format_metrics(res)
     save_metrics(res, args.store_dir, args.classifier)
 
@@ -62,8 +67,8 @@ def format_metrics(res: List[Tuple[float, float, SimulationConfig, int, str]]):
         print(50 * "-")
 
 
-def compute_metrics(sim_dirs, pattern, classifier):
-    classifier, transform = load_classifier(classifier, IMAGE_SIZE)
+def compute_metrics(sim_dirs, pattern, classifier, dataset):
+    classifier, transform = load_classifier(classifier, dataset)
     res = []
     for sim_dir in sim_dirs:
         num_files = len(list(sim_dir.iterdir()))
@@ -80,24 +85,46 @@ def compute_metrics(sim_dirs, pattern, classifier):
     return res
 
 
-def load_classifier(classifier: str, image_size: int):
+def load_classifier(arch: str, dataset: str):
+    if dataset == "imagenet":
+        classifier, transform = load_classifier_imagenet(arch, IMAGE_SIZE)
+    elif dataset == "cifar100":
+        classifier, transform = load_classifier_cifar()
+    else:
+        raise ValueError(f"Incorrect data set {dataset}")
+
+    classifier.eval()
+    ts = th.zeros((BATCH_SIZE,)).to(DEVICE)
+    classifier = partial(classifier, t=ts)
+    return classifier, transform
+
+
+def load_classifier_imagenet(classifier: str, image_size: int):
     if classifier == "guidance":
         classifier_path = GUIDANCE_CLASSIFIER_PATH
         assert classifier_path.exists(), f"Model '{classifier_path}' does not exist."
         class_ = load_guided_classifier(model_path=classifier_path, dev=DEVICE, image_size=image_size)
-        class_.eval()
-        ts = th.zeros((BATCH_SIZE,)).to(DEVICE)
-        class_ = partial(class_, timesteps=ts)
         # Return dummy unit transform
         return class_, lambda x: x
     elif classifier == "independent":
         # https://pytorch.org/vision/stable/models/generated/torchvision.models.regnet_x_8gf.html
         class_ = regnet_x_8gf(weights=RegNet_X_8GF_Weights.IMAGENET1K_V2)
-        class_.eval()
         class_.to(DEVICE)
         return class_, CLASSIFIER_TRANSFORM
     else:
         raise ValueError("Incorrect classifier type")
+
+
+def load_classifier_cifar():
+    print("Using ResNet classifier")
+    classifier = load_resnet_classifier_t(
+        model_path=Path.cwd() / "models/cifar100_resnet_class_t.ckpt",
+        dev=DEVICE,
+        emb_dim=112,
+        num_classes=CIFAR_100_NUM_CLASSES,
+        num_channels=CIFAR_NUM_CHANNELS,
+    ).to(DEVICE)
+    return classifier, lambda x: x
 
 
 def collect_sim_dirs(res_dir: Path):
@@ -169,6 +196,9 @@ def parse_args():
     parser.add_argument("--res_dir", type=Path, required=True, help="Parent dir for all results")
     parser.add_argument("--store_dir", type=Path, default=Path.cwd() / "store/metrics", help="Dir to sort tables to")
     parser.add_argument("--metric", default="all", type=str, choices=["all", "acc", "fid"], help="Metric to compute")
+    parser.add_argument(
+        "--dataset", default="imagenet", type=str, choices=["imagenet", "cifar100"], help="Choose dataset"
+    )
     parser.add_argument(
         "--classifier",
         default="guidance",

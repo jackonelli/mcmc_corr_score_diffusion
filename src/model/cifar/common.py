@@ -1,32 +1,8 @@
-from pathlib import Path
-from collections import OrderedDict
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 from einops.layers.torch import Rearrange
 from einops import rearrange, reduce
-
-
-def load_params_from_file(path: Path):
-    if path.suffix == ".th":
-        return th.load(path)
-    elif path.suffix == ".ckpt":
-        return parse_chkpt_dict(th.load(path)["state_dict"])
-    else:
-        raise ValueError("Wrong model suffix, should be '.th' or '.ckpt'")
-
-
-def parse_chkpt_dict(state_dict):
-    """Parse checkpoint state dict from pl logs
-
-    Lightning appends "model." to all keys in state dict.
-    This helper modifies the keys to remove this prefix.
-    """
-    trimmed = OrderedDict()
-    for key, val in state_dict.items():
-        trimmed_key = key[6:]
-        trimmed[trimmed_key] = val
-    return trimmed
 
 
 def upsample(dim, dim_out):

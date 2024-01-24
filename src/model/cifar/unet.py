@@ -10,7 +10,6 @@ import torch.nn as nn
 from src.model.base import EnergyModel
 from src.data.cifar import CIFAR_IMAGE_SIZE, CIFAR_NUM_CHANNELS
 from src.model.cifar.common import (
-    load_params_from_file,
     SinusoidalPositionEmbeddings,
     ResnetBlock,
     Attention,
@@ -20,6 +19,7 @@ from src.model.cifar.common import (
     upsample,
     downsample,
 )
+from src.utils.net import load_params_from_file
 
 
 def load_model(

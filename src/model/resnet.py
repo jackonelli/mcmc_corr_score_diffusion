@@ -14,8 +14,7 @@ import torch.nn.functional as F
 from src.model.unet import SinusoidalPositionEmbeddings
 from einops import rearrange
 from abc import ABC
-
-ARCH = "resnet50_mnist"
+from src.utils.net import load_params_from_file
 
 
 def load_mnist_classifier(class_path: Path, device):
@@ -38,6 +37,7 @@ def load_classifier(resnet_model_path: Path, time_emb=False):
 def load_classifier_t(
     model_path: Optional[Path], dev, num_blocks=[3, 4, 6, 3], emb_dim=112, num_classes=10, num_channels=1
 ):
+    print("Loading resnet model")
     model = ResNetTimeEmbedding(
         block=BottleneckTimeEmb,
         num_blocks=num_blocks,
@@ -46,7 +46,7 @@ def load_classifier_t(
         num_channels=num_channels,
     )
     if model_path is not None:
-        model.load_state_dict(th.load(model_path))
+        model.load_state_dict(load_params_from_file(model_path))
     model.to(dev)
     return model
 

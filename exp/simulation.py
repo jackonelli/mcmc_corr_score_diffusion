@@ -134,7 +134,7 @@ def select_cifar_classifier(model_path: Path, dev):
         class_t = load_unet_classifier_t(None, dev)
     elif arch == "resnet":
         class_t = load_resnet_classifier_t(
-            model_path=None,
+            model_path=model_path,
             dev=dev,
             emb_dim=112,
             num_classes=CIFAR_100_NUM_CLASSES,
