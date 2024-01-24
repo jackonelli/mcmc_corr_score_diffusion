@@ -40,46 +40,46 @@ def load_standard_class(
 NUM_FEATURES = 8192
 
 
+def conv_block(in_channels, out_channels, pool=False):
+    layers = [
+        nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
+        nn.BatchNorm2d(out_channels),
+        nn.ReLU(inplace=True),
+    ]
+    if pool:
+        layers.append(nn.MaxPool2d(2))
+    return nn.Sequential(*layers)
+
+
 class StandardClassifier(nn.Module):
+    def __init__(self, in_channels=CIFAR_NUM_CHANNELS, num_classes=CIFAR_100_NUM_CLASSES):
+        super().__init__()
+
+        self.conv1 = conv_block(in_channels, 64)
+        self.conv2 = conv_block(64, 128, pool=True)
+        self.res1 = nn.Sequential(conv_block(128, 128), conv_block(128, 128))
+
+        self.conv3 = conv_block(128, 256, pool=True)
+        self.conv4 = conv_block(256, 512, pool=True)
+        self.res2 = nn.Sequential(conv_block(512, 512), conv_block(512, 512))
+
+        self.classifier = nn.Sequential(nn.MaxPool2d(4), nn.Flatten(), nn.Dropout(0.2), nn.Linear(512, num_classes))
+
+    def forward(self, xb, _t):
+        out = self.conv1(xb)
+        out = self.conv2(out)
+        out = self.res1(out) + out
+        out = self.conv3(out)
+        out = self.conv4(out)
+        out = self.res2(out) + out
+        out = self.classifier(out)
+        return out
+
     """UNet based classifier
     @param dim: dimension of input x (assumes square (dim x dim) img for now)
     @param time_emb_dim: dimension of time embedding.
     @param channels: number of channels the data have (e.g. 3 for RGB images).
     """
-
-    def __init__(self, num_classes=CIFAR_100_NUM_CLASSES):
-        super().__init__()
-        # Convolutional layers
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
-        self.conv3 = nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1)
-
-        # Max pooling layers
-        self.pool = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
-
-        # Batch normalization
-        self.batch_norm1 = nn.BatchNorm2d(64)
-        self.batch_norm2 = nn.BatchNorm2d(128)
-        self.batch_norm3 = nn.BatchNorm2d(256)
-
-        # Fully connected layers
-        self.fc1 = nn.Linear(256 * 4 * 4, 512)
-        self.fc2 = nn.Linear(512, num_classes)
-
-    # Take a non-used time step t to conform to the API
-    def forward(self, x, _t):
-        x = F.relu(self.batch_norm1(self.conv1(x)))
-        x = self.pool(x)
-        x = F.relu(self.batch_norm2(self.conv2(x)))
-        x = self.pool(x)
-        x = F.relu(self.batch_norm3(self.conv3(x)))
-        x = self.pool(x)
-
-        # Flatten before fully connected layers
-        x = x.view(-1, 256 * 4 * 4)
-        x = F.relu(self.fc1(x))
-        x = self.fc2(x)
-        return x
 
 
 # class StandardClassifier(nn.Module):

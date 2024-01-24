@@ -10,8 +10,13 @@ import sys
 sys.path.append(".")
 from argparse import ArgumentParser
 from pathlib import Path
+
+#
 import torch as th
 import pytorch_lightning as pl
+from pytorch_lightning.callbacks import LearningRateMonitor
+
+#
 from src.diffusion.base import DiffusionSampler
 from src.model.trainers.classifier import DiffusionClassifier, process_labelled_batch_cifar100
 from src.diffusion.beta_schedules import improved_beta_schedule
@@ -32,9 +37,14 @@ def main():
         return
     dev = get_device(Device.GPU)
 
+    # Classifier
     class_t = select_classifier(args.arch, dev)
     class_t.train()
 
+    # Data
+    dataloader_train, dataloader_val = get_cifar100_data_loaders(batch_size, args.dataset_path)
+
+    # Diffusion process
     betas = improved_beta_schedule(num_timesteps=num_diff_steps)
     time_steps = th.tensor([i for i in range(num_diff_steps)])
     noise_scheduler = DiffusionSampler(betas, time_steps)
@@ -44,18 +54,21 @@ def main():
         loss_f=th.nn.CrossEntropyLoss(),
         noise_scheduler=noise_scheduler,
         batch_fn=process_labelled_batch_cifar100,
+        batches_per_epoch=len(dataloader_train),
     )
     diff_classifier.to(dev)
 
+    lr_monitor = LearningRateMonitor(logging_interval="step")
     trainer = pl.Trainer(
         max_epochs=args.max_epochs,
         num_sanity_val_steps=0,
         accelerator="gpu",
+        gradient_clip_val=0.0,
         devices=1,
         default_root_dir="pl_logs/cifar100_class_t",
+        callbacks=[lr_monitor],
     )
 
-    dataloader_train, dataloader_val = get_cifar100_data_loaders(batch_size, args.dataset_path)
     trainer.fit(diff_classifier, dataloader_train, dataloader_val)
 
     print(f"Saving model to {model_path}")
