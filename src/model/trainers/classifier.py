@@ -191,6 +191,7 @@ class StandardClassifier(pl.LightningModule):
 
         # Only report val. acc for t=0
         ts = th.zeros((batch_size,), device=self.device).long()
+        th.set_rng_state(rng_state)
         logits = self.model(x, ts)
         loss = self.loss_f(logits, y)
         acc = accuracy(hard_label_from_logit(logits), y)
