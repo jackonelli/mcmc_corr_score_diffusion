@@ -102,6 +102,7 @@ class DiffusionClassifier(pl.LightningModule):
 
         # Only report val. acc for t=0
         ts = th.zeros((batch_size,), device=self.device).long()
+        th.set_rng_state(rng_state)
         logits = self.model(x, ts)
         loss = self.loss_f(logits, y)
         acc = accuracy(hard_label_from_logit(logits), y)
@@ -156,32 +157,11 @@ class StandardClassifier(pl.LightningModule):
         self.i_batch_train += 1
         return loss
 
-    def get_lr(optimizer):
-        for param_group in optimizer.param_groups:
-            return param_group["lr"]
-
     def on_train_epoch_end(self):
         print(" {}. Train Loss: {}".format(self.i_epoch, self.train_loss / self.i_batch_train))
         self.train_loss = 0.0
         self.i_batch_train = 0
         self.i_epoch += 1
-
-    def configure_optimizers(self):
-        optimizer = th.optim.Adam(self.parameters(), lr=1e-2)
-        # decay_every_nth = self._batches_per_epoch *
-        # scheduler = th.optim.lr_scheduler.StepLR(optimizer, decay_every_nth, gamma=0.1)
-        scheduler = th.optim.lr_scheduler.OneCycleLR(
-            optimizer,
-            0.01,
-            epochs=self.trainer.max_epochs,
-            steps_per_epoch=self._batches_per_epoch,
-        )
-        scheduler_dict = {
-            "scheduler": scheduler,
-            "interval": "step",
-        }
-        return {"optimizer": optimizer, "lr_scheduler": scheduler_dict}
-        # return [optimizer], [scheduler]
 
     def validation_step(self, batch, batch_idx):
         batch_size, x, y = self._batch_fn(batch, self.device)
@@ -190,6 +170,7 @@ class StandardClassifier(pl.LightningModule):
         th.manual_seed(self.i_batch_val)
 
         # Only report val. acc for t=0
+        ts_0 = th.zeros((batch_size,), device=self.device).long()
         ts = th.zeros((batch_size,), device=self.device).long()
         th.set_rng_state(rng_state)
         logits = self.model(x, ts)
@@ -210,3 +191,20 @@ class StandardClassifier(pl.LightningModule):
         self.val_loss = 0.0
         self.val_acc = 0.0
         self.i_batch_val = 0
+
+    def configure_optimizers(self):
+        optimizer = th.optim.Adam(self.parameters(), lr=1e-2)
+        # decay_every_nth = self._batches_per_epoch *
+        # scheduler = th.optim.lr_scheduler.StepLR(optimizer, decay_every_nth, gamma=0.1)
+        scheduler = th.optim.lr_scheduler.OneCycleLR(
+            optimizer,
+            0.01,
+            epochs=self.trainer.max_epochs,
+            steps_per_epoch=self._batches_per_epoch,
+        )
+        scheduler_dict = {
+            "scheduler": scheduler,
+            "interval": "step",
+        }
+        return {"optimizer": optimizer, "lr_scheduler": scheduler_dict}
+        # return [optimizer], [scheduler]
