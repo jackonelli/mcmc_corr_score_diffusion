@@ -1,24 +1,53 @@
 import sys
 sys.path.append(".")
-from src.utils.fid_utils import compute_fid_statistics_thfiles
+from src.utils.fid_utils import get_model, dataset_thfiles, dataset_jpeg, compute_fid_statistics_dataloader, PILDataset
 from argparse import ArgumentParser
 from pathlib import Path
 from pytorch_fid.fid_score import (save_fid_stats, calculate_fid_given_paths, compute_statistics_of_path,
                                    calculate_frechet_distance)
+import torchvision.transforms as TF
 from pytorch_fid.inception import InceptionV3
+from datasets import load_dataset
+import torch as th
+import numpy as np
 import torch
 import os
 
 
+def get_statistics(model, device, args, path_dataset, type_dataset, num_workers, save_stats):
+    if type_dataset == 'th':
+        dataset = dataset_thfiles(path_dataset)
+        dataloader = th.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=False, drop_last=False,
+                                              num_workers=num_workers)
+        m, s = compute_fid_statistics_dataloader(model, dataloader, device, args.dims)
+    elif type_dataset == 'cifar100_train':
+        dataset = PILDataset(load_dataset("cifar100", cache_dir=path_dataset)['train']['img'], TF.ToTensor())
+        dataloader = th.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=False, drop_last=False,
+                                              num_workers=num_workers)
+        m, s = compute_fid_statistics_dataloader(model, dataloader, device, args.dims)
+    elif type_dataset == 'cifar100_val':
+        dataset = PILDataset(load_dataset("cifar100", cache_dir=path_dataset)['test']['img'], TF.ToTensor())
+        dataloader = th.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=False, drop_last=False,
+                                              num_workers=num_workers)
+        m, s = compute_fid_statistics_dataloader(model, dataloader, device, args.dims)
+    elif type_dataset == 'stats':
+        with np.load(path_dataset) as f:
+            m, s = f['mu'][:], f['sigma'][:]
+    elif type_dataset == 'jpeg':
+        dataset = dataset_jpeg(path_dataset)
+        dataloader = th.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=False, drop_last=False,
+                                              num_workers=num_workers)
+        m, s = compute_fid_statistics_dataloader(model, dataloader, device, args.dims)
+    else:
+        raise ValueError
+
+    if save_stats:
+        np.savez_compressed(path_dataset, mu=m, sigma=s)
+    return m, s
+
+
 def main():
     args = parse_args()
-    fid_generate = Path(args.path_generated)
-
-    fid_real = Path(args.path_real)
-    if fid_real.parts[-1][-3:] == 'npz':
-        statistic_file = True
-    else:
-        statistic_file = False
 
     if args.device is None:
         device = torch.device('cuda' if (torch.cuda.is_available()) else 'cpu')
@@ -38,38 +67,40 @@ def main():
     else:
         num_workers = args.num_workers
 
-    if args.save_stats and not statistic_file:
-        fid_real_save = os.path.join(fid_real.absolute().as_posix(), fid_real.stem + '_statistics.npz')
-        paths = [fid_real.absolute().as_posix(), fid_real_save]
-        save_fid_stats(paths, args.batch_size, device, args.dims, num_workers)
-        fid_real = Path(fid_real_save)
+    # Get Model
+    model = get_model(device, dims=args.dims)
 
-    if args.file_type == 'th':
-        m1, s1, model = compute_fid_statistics_thfiles(fid_generate, device, batch_size=args.batch_size, dims=args.dims,
-                                                       num_workers=num_workers)
-        m2, s2 = compute_statistics_of_path(fid_real.absolute().as_posix(), model, args.batch_size, args.dims, device,
-                                            num_workers)
-        fid_value = calculate_frechet_distance(m1, s1, m2, s2)
-    else:
-        paths = [fid_real.absolute().as_posix(), fid_generate.absolute().as_posix()]
-        fid_value = calculate_fid_given_paths(paths,
-                                              args.batch_size,
-                                              device,
-                                              args.dims,
-                                              num_workers)
+    # Dataset 1
+    m1, s1 = get_statistics(model, device, args, args.path_dataset1, args.type_dataset1, num_workers, args.save_stats_1)
+
+    # Dataset 2
+    m2, s2 = get_statistics(model, device, args, args.path_dataset2, args.type_dataset2, num_workers, args.save_stats_2)
+
+    fid_value = calculate_frechet_distance(m1, s1, m2, s2)
+
     print('FID: ', fid_value)
 
 
 def parse_args():
     parser = ArgumentParser(prog="Compute FID score")
-    parser.add_argument("--path_generated", type=str,
-                        help="Path to folder with generated samples")
-    parser.add_argument("--file_type", choices=['jpeg', 'th'], help="Type of file to look for in folder "
-                                                                   "- assumes that .th-files are include "
-                                                                   "samples in the name")
-    parser.add_argument("--path_real", type=str,
-                        help="Either path to folder of real samples or path to FID statistics file (.npz)")
-    parser.add_argument('--batch_size', type=int, default=50,
+    parser.add_argument("--path_dataset1", type=str, default=None,
+                        help='Path to folder with data. If type is choosen to a dataset (e.g., cifar100), '
+                             'then no path is needed')
+    parser.add_argument("--type_dataset1", type=str, default=None, choices= ['th', 'jpeg', 'stats', 'cifar100_train',
+                                                                             'cifar100_val'],
+                        help=('Type of data. If th is chosen then all files that include samples in the name are '
+                              'used. The choice stats assumes that the path is a npz file with statistics.'))
+    parser.add_argument("--save_stats_1", action='store_true', help='Save statistics of dataset 1')
+    parser.add_argument("--path_dataset2", type=str, default=None,
+                        help=('Path to folder with data. If type is choosen to a dataset (e.g., cifar100), '
+                             'then no path is needed')
+    )
+    parser.add_argument("--type_dataset2", type=str, default=None, choices=['th', 'jpeg', 'stats', 'cifar100_train',
+                                                                            'cifar100_val'],
+                        help=('Type of data. If th is chosen then all files that include samples in the name are '
+                              'used. The choice stats assumes that the path is a npz file with statistics.'))
+    parser.add_argument("--save_stats_2", action='store_true', help='Save statistics of dataset 2')
+    parser.add_argument('--batch_size', type=int, default=500,
                         help='Batch size to use')
     parser.add_argument('--num_workers', type=int,
                         help=('Number of processes to use for data loading. '
@@ -80,8 +111,6 @@ def parse_args():
                         choices=list(InceptionV3.BLOCK_INDEX_BY_DIM),
                         help=('Dimensionality of Inception features to use. '
                               'By default, uses pool3 features'))
-    parser.add_argument('--save_stats', action='store_true',
-                        help=('Generate an npz archive from a directory of samples given by path_real.'))
     return parser.parse_args()
 
 
