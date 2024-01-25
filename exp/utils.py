@@ -81,6 +81,40 @@ class SimulationConfig:
             json.dump(asdict(tmp_config), outfile, indent=4, sort_keys=False)
 
 
+@dataclass
+class UnguidedSimulationConfig:
+    name: str
+    # Domain
+    image_size: int
+    num_channels: int
+    # Diffusion
+    diff_model: str
+    class_cond: bool
+    num_diff_steps: int
+    num_respaced_diff_steps: int
+    num_samples: int
+    batch_size: int
+    # Seed
+    seed: Optional[int] = None
+    # Meta
+    save_traj: bool = False
+    results_dir: Path = Path.cwd() / "results"
+
+    @staticmethod
+    def from_json(cfg_file_path: Path):
+        with open(cfg_file_path) as cfg_file:
+            cfg = json.load(cfg_file)
+        cfg = UnguidedSimulationConfig(**cfg)
+        cfg.results_dir = Path(cfg.results_dir)
+        return cfg
+
+    def save(self, sim_dir: Path):
+        tmp_config = deepcopy(self)
+        tmp_config.results_dir = str(tmp_config.results_dir)
+        with open(sim_dir / "config.json", "w") as outfile:
+            json.dump(asdict(tmp_config), outfile, indent=4, sort_keys=False)
+
+
 def get_step_size(step_size_dir: Path, dataset_name: str, mcmc_method: str, mcmc_accept_bounds: str):
     # print("Warning: using steps from T_resp = 500")
     # steps = 500
@@ -94,7 +128,7 @@ def get_step_size(step_size_dir: Path, dataset_name: str, mcmc_method: str, mcmc
     return dict(extracted)
 
 
-def setup_results_dir(config: SimulationConfig, job_id: Optional[int]) -> Path:
+def setup_results_dir(config: Union[SimulationConfig, UnguidedSimulationConfig], job_id: Optional[int]) -> Path:
     config.results_dir.mkdir(exist_ok=True, parents=True)
     if job_id is None:
         sim_id = f"{config.name}_{timestamp()}"

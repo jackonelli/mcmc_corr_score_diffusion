@@ -34,11 +34,14 @@ def main():
     pattern = SimPattern(args.method, args.param, args.guid_scale, args.step_factor)
     res = compute_metrics(sim_dirs, pattern, args.classifier, args.dataset, args.batch_size)
     format_metrics(res)
-    save_metrics(args.dataset, res, args.store_dir, args.classifier)
+    save_metrics(res, dataset=args.dataset, param=args.param, dir_=args.store_dir)
 
 
 def save_metrics(
-    dataset: str, res: List[Tuple[float, float, float, SimulationConfig, int, str]], dir_: Path, classifier: str
+    res: List[Tuple[float, float, float, SimulationConfig, int, str]],
+    dataset: str,
+    param: str,
+    dir_: Path,
 ):
     compiled_res = []
     for acc, r3_acc, top_5_acc, config, num_samples, sim_dir in res:
@@ -52,7 +55,7 @@ def save_metrics(
         }
         compiled_res.append(metric)
     dir_.mkdir(exist_ok=True, parents=True)
-    with open(dir_ / f"{dataset}_{classifier}.p", "wb") as ff:
+    with open(dir_ / f"{dataset}_{param}.p", "wb") as ff:
         pickle.dump(compiled_res, ff)
 
 
@@ -215,11 +218,12 @@ class SimPattern:
 
         if self.factor is not None:
             if config.mcmc_method is not None:
-                include &= config.mcmc_stepsizes["params"]["factor"] == self.factor
+                cfg_factor = config.mcmc_stepsizes["params"]["factor"]
+                include &= cfg_factor == self.factor
             else:
-                # Do not include "Reverse" if a specific factor is selected
-                include = False
-        include = self.param in config.diff_model
+                # Include "Reverse" if a specific factor is selected
+                include = True
+        include &= self.param in config.diff_model
         return include
 
 
