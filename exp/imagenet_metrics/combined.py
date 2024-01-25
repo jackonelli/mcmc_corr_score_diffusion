@@ -31,7 +31,7 @@ def main():
     args = parse_args()
     # Setup and assign a directory where simulation results are saved.
     sim_dirs = collect_sim_dirs(args.res_dir)
-    pattern = SimPattern(args.method, args.guid_scale, args.step_factor)
+    pattern = SimPattern(args.method, args.param, args.guid_scale, args.step_factor)
     res = compute_metrics(sim_dirs, pattern, args.classifier, args.dataset, args.batch_size)
     format_metrics(res)
     save_metrics(args.dataset, res, args.store_dir, args.classifier)
@@ -196,6 +196,7 @@ def validate(coll):
 @dataclass
 class SimPattern:
     method: str
+    param: str
     lambda_: float
     factor: float
 
@@ -218,6 +219,7 @@ class SimPattern:
             else:
                 # Do not include "Reverse" if a specific factor is selected
                 include = False
+        include = self.param in config.diff_model
         return include
 
 
@@ -226,6 +228,9 @@ def parse_args():
     parser.add_argument("--res_dir", type=Path, required=True, help="Parent dir for all results")
     parser.add_argument("--store_dir", type=Path, default=Path.cwd() / "results/cifar100", help="Dir to sort tables to")
     parser.add_argument("--metric", default="all", type=str, choices=["all", "acc", "fid"], help="Metric to compute")
+    parser.add_argument(
+        "--param", default="score", type=str, choices=["energy", "score"], help="Choose diff model parameterisation"
+    )
     parser.add_argument("--batch_size", type=int, default=5, help="Batch size")
     parser.add_argument(
         "--dataset", default="imagenet", type=str, choices=["imagenet", "cifar100"], help="Choose dataset"

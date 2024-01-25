@@ -17,6 +17,7 @@ from src.diffusion.beta_schedules import (
 from src.guidance.base import GuidanceSampler, MCMCGuidanceSampler
 from src.guidance.classifier_full import ClassifierFullGuidance
 from src.samplers.mcmc import (
+    AnnealedHMCEnergySampler,
     AnnealedHMCScoreSampler,
     AnnealedLAScoreSampler,
     AnnealedUHMCScoreSampler,
@@ -61,7 +62,7 @@ def main():
     )
     diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance=post_var)
     guidance = ClassifierFullGuidance(classifier, lambda_=config.guid_scale)
-    guid_sampler = get_guid_sampler(config, diff_model, diff_sampler, guidance, time_steps, dataset_name)
+    guid_sampler = get_guid_sampler(config, diff_model, diff_sampler, guidance, time_steps, dataset_name, energy_param)
 
     print("Sampling...")
     for batch in range(config.num_samples // config.batch_size):
@@ -163,7 +164,7 @@ def parse_arch(model_path: Path):
     return next(filter(lambda arch: arch in name, available_archs))
 
 
-def get_guid_sampler(config, diff_model, diff_sampler, guidance, time_steps, dataset_name):
+def get_guid_sampler(config, diff_model, diff_sampler, guidance, time_steps, dataset_name, energy_param: bool):
     if config.mcmc_method is None:
         guid_sampler = GuidanceSampler(diff_model, diff_sampler, guidance, diff_cond=config.class_cond)
     else:
@@ -194,7 +195,10 @@ def get_guid_sampler(config, diff_model, diff_sampler, guidance, time_steps, dat
             step_sizes = {int(t.item()): a * beta**b for (t, beta) in zip(time_steps, betas_mcmc)}
 
         if config.mcmc_method == "hmc":
-            mcmc_sampler = AnnealedHMCScoreSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
+            if energy_param:
+                mcmc_sampler = AnnealedHMCEnergySampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
+            else:
+                mcmc_sampler = AnnealedHMCScoreSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
         elif config.mcmc_method == "la":
             assert config.n_trapets is not None
             mcmc_sampler = AnnealedLAScoreSampler(config.mcmc_steps, step_sizes, None, n_trapets=config.n_trapets)
