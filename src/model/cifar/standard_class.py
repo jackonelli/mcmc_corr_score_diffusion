@@ -1,8 +1,6 @@
 """UNet model for time-dep classification"""
 from typing import Optional
 from pathlib import Path
-import torch as th
-import torch.nn.functional as F
 import torch.nn as nn
 from src.data.cifar import CIFAR_100_NUM_CLASSES, CIFAR_IMAGE_SIZE, CIFAR_NUM_CHANNELS
 from src.model.cifar.common import (
@@ -29,7 +27,7 @@ def load_standard_class(
     The model_path can be a standalone '.th' file or part of a pl checkpoint '.ckpt' file.
     If model_path is None, a new model is initialised.
     """
-    class_t = StandardClassifier(dim=image_size, channels=num_channels, num_classes=num_classes)
+    class_t = StandardClassifier(in_channels=num_channels, num_classes=num_classes)
     if model_path is not None:
         class_t.load_state_dict(load_params_from_file(model_path))
     class_t.to(device)
@@ -65,7 +63,7 @@ class StandardClassifier(nn.Module):
 
         self.classifier = nn.Sequential(nn.MaxPool2d(4), nn.Flatten(), nn.Dropout(0.2), nn.Linear(512, num_classes))
 
-    def forward(self, xb, _t):
+    def forward(self, xb, t):
         out = self.conv1(xb)
         out = self.conv2(out)
         out = self.res1(out) + out
@@ -74,12 +72,6 @@ class StandardClassifier(nn.Module):
         out = self.res2(out) + out
         out = self.classifier(out)
         return out
-
-    """UNet based classifier
-    @param dim: dimension of input x (assumes square (dim x dim) img for now)
-    @param time_emb_dim: dimension of time embedding.
-    @param channels: number of channels the data have (e.g. 3 for RGB images).
-    """
 
 
 # class StandardClassifier(nn.Module):

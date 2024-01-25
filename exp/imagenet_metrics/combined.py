@@ -20,10 +20,10 @@ from exp.imagenet_metrics.common import PATTERN, compute_acc
 # Cifar
 from src.model.resnet import load_classifier_t as load_resnet_classifier_t
 from src.data.cifar import CIFAR_100_NUM_CLASSES, CIFAR_NUM_CHANNELS
+from src.model.cifar.standard_class import load_standard_class
 
 DEVICE = get_device(Device.GPU)
 CHANNELS, IMAGE_SIZE = 3, 256
-BATCH_SIZE = 5
 GUIDANCE_CLASSIFIER_PATH = Path.cwd() / f"models/{IMAGE_SIZE}x{IMAGE_SIZE}_classifier.pt"
 
 
@@ -32,23 +32,32 @@ def main():
     # Setup and assign a directory where simulation results are saved.
     sim_dirs = collect_sim_dirs(args.res_dir)
     pattern = SimPattern(args.method, args.guid_scale, args.step_factor)
-    res = compute_metrics(sim_dirs, pattern, args.classifier, args.dataset)
+    res = compute_metrics(sim_dirs, pattern, args.classifier, args.dataset, args.batch_size)
     format_metrics(res)
-    save_metrics(res, args.store_dir, args.classifier)
+    save_metrics(args.dataset, res, args.store_dir, args.classifier)
 
 
-def save_metrics(res: List[Tuple[float, float, SimulationConfig, int, str]], dir_: Path, classifier: str):
+def save_metrics(
+    dataset: str, res: List[Tuple[float, float, float, SimulationConfig, int, str]], dir_: Path, classifier: str
+):
     compiled_res = []
-    for acc, r3_acc, config, num_samples, sim_dir in res:
-        metric = {"config": config, "acc": acc, "r3_acc": r3_acc, "num_samples": num_samples, "sim_dir": sim_dir}
+    for acc, r3_acc, top_5_acc, config, num_samples, sim_dir in res:
+        metric = {
+            "config": config,
+            "acc": acc,
+            "r3_acc": r3_acc,
+            "top_5_acc": top_5_acc,
+            "num_samples": num_samples,
+            "sim_dir": sim_dir,
+        }
         compiled_res.append(metric)
     dir_.mkdir(exist_ok=True, parents=True)
-    with open(dir_ / f"r3_{classifier}.p", "wb") as ff:
+    with open(dir_ / f"{dataset}_{classifier}.p", "wb") as ff:
         pickle.dump(compiled_res, ff)
 
 
-def format_metrics(res: List[Tuple[float, float, SimulationConfig, int, str]]):
-    for acc, r3_acc, config, num_samples, sim_dir in res:
+def format_metrics(res: List[Tuple[float, float, float, SimulationConfig, int, str]]):
+    for acc, r3_acc, top_5_acc, config, num_samples, sim_dir in res:
         lambda_ = config.guid_scale
         if config.mcmc_method is None:
             str_ = f"Rev, lambda={lambda_}"
@@ -63,12 +72,12 @@ def format_metrics(res: List[Tuple[float, float, SimulationConfig, int, str]]):
             str_ = f"{mcmc_method.upper()}-{mcmc_steps}({mcmc_lower_t}), lambda={lambda_}, n_trapets={n_trapets}, {factor} * beta_{step_sch}^{exp}"
         print(f"\n{sim_dir}")
         print(str_)
-        print(f"Acc: {acc}, R3 acc: {r3_acc}, with {num_samples} samples")
+        print(f"Acc: {acc}, R3 acc: {r3_acc}, Top-5 acc: {top_5_acc}, with {num_samples} samples")
         print(50 * "-")
 
 
-def compute_metrics(sim_dirs, pattern, classifier, dataset):
-    classifier, transform = load_classifier(classifier, dataset)
+def compute_metrics(sim_dirs, pattern, classifier, dataset, batch_size):
+    classifier, transform = load_classifier(classifier, dataset, batch_size)
     res = []
     for sim_dir in sim_dirs:
         num_files = len(list(sim_dir.iterdir()))
@@ -80,50 +89,71 @@ def compute_metrics(sim_dirs, pattern, classifier, dataset):
             continue
         classes_and_samples, num_batches = collect_samples(sim_dir)
         print(f"Processing '{sim_dir.name}' with {num_batches} batches")
-        simple_acc, r3_acc, num_samples = compute_acc(classifier, classes_and_samples, transform, BATCH_SIZE, DEVICE)
-        res.append((simple_acc, r3_acc, config, num_samples, sim_dir.name))
+        simple_acc, r3_acc, top_5_acc, num_samples = compute_acc(
+            classifier, classes_and_samples, transform, batch_size, DEVICE
+        )
+        res.append((simple_acc, r3_acc, top_5_acc, config, num_samples, sim_dir.name))
     return res
 
 
-def load_classifier(arch: str, dataset: str):
+def load_classifier(type_: str, dataset: str, batch_size: int):
     if dataset == "imagenet":
-        classifier, transform = load_classifier_imagenet(arch, IMAGE_SIZE)
+        classifier, transform = load_classifier_imagenet(type_, IMAGE_SIZE, batch_size)
     elif dataset == "cifar100":
-        classifier, transform = load_classifier_cifar()
+        classifier, transform = load_classifier_cifar(type_, batch_size)
     else:
         raise ValueError(f"Incorrect data set {dataset}")
 
-    classifier.eval()
-    ts = th.zeros((BATCH_SIZE,)).to(DEVICE)
-    classifier = partial(classifier, t=ts)
     return classifier, transform
 
 
-def load_classifier_imagenet(classifier: str, image_size: int):
-    if classifier == "guidance":
+def load_classifier_imagenet(type_: str, image_size: int, batch_size: int):
+    if type_ == "guidance":
         classifier_path = GUIDANCE_CLASSIFIER_PATH
         assert classifier_path.exists(), f"Model '{classifier_path}' does not exist."
-        class_ = load_guided_classifier(model_path=classifier_path, dev=DEVICE, image_size=image_size)
+        classifier = load_guided_classifier(model_path=classifier_path, dev=DEVICE, image_size=image_size)
+        classifier.eval()
+        # Remove time-dependency
+        ts = th.zeros((batch_size,)).to(DEVICE)
+        classifier = partial(classifier, t=ts)
         # Return dummy unit transform
-        return class_, lambda x: x
-    elif classifier == "independent":
+        transform = lambda x: x
+    elif type_ == "independent":
         # https://pytorch.org/vision/stable/models/generated/torchvision.models.regnet_x_8gf.html
-        class_ = regnet_x_8gf(weights=RegNet_X_8GF_Weights.IMAGENET1K_V2)
-        class_.to(DEVICE)
-        return class_, CLASSIFIER_TRANSFORM
+        classifier = regnet_x_8gf(weights=RegNet_X_8GF_Weights.IMAGENET1K_V2)
+        classifier.eval()
+        classifier.to(DEVICE)
+        transform = CLASSIFIER_TRANSFORM
     else:
         raise ValueError("Incorrect classifier type")
+    return classifier, transform
 
 
-def load_classifier_cifar():
-    print("Using ResNet classifier")
-    classifier = load_resnet_classifier_t(
-        model_path=Path.cwd() / "models/cifar100_resnet_class_t.ckpt",
-        dev=DEVICE,
-        emb_dim=112,
-        num_classes=CIFAR_100_NUM_CLASSES,
-        num_channels=CIFAR_NUM_CHANNELS,
-    ).to(DEVICE)
+def load_classifier_cifar(type_: str, batch_size: int):
+    if type_ == "guidance":
+        classifier = load_resnet_classifier_t(
+            model_path=Path.cwd() / "models/cifar100_resnet_class_t.ckpt",
+            dev=DEVICE,
+            emb_dim=112,
+            num_classes=CIFAR_100_NUM_CLASSES,
+            num_channels=CIFAR_NUM_CHANNELS,
+        ).to(DEVICE)
+        classifier.eval()
+        # Remove time-dependency
+        ts = th.zeros((batch_size,)).to(DEVICE)
+        classifier = partial(classifier, t=ts)
+    elif type_ == "independent":
+        classifier = load_standard_class(
+            model_path=Path.cwd() / "models/cifar100_simple_class.pt",
+            device=DEVICE,
+            num_channels=CIFAR_NUM_CHANNELS,
+            num_classes=CIFAR_100_NUM_CLASSES,
+        )
+        classifier.eval()
+        ts = th.zeros((batch_size,)).to(DEVICE)
+        classifier = partial(classifier, t=ts)
+    else:
+        raise ValueError("Incorrect classifier type")
     return classifier, lambda x: x
 
 
@@ -194,8 +224,9 @@ class SimPattern:
 def parse_args():
     parser = ArgumentParser(prog="Sample from diffusion model")
     parser.add_argument("--res_dir", type=Path, required=True, help="Parent dir for all results")
-    parser.add_argument("--store_dir", type=Path, default=Path.cwd() / "store/metrics", help="Dir to sort tables to")
+    parser.add_argument("--store_dir", type=Path, default=Path.cwd() / "results/cifar100", help="Dir to sort tables to")
     parser.add_argument("--metric", default="all", type=str, choices=["all", "acc", "fid"], help="Metric to compute")
+    parser.add_argument("--batch_size", type=int, default=5, help="Batch size")
     parser.add_argument(
         "--dataset", default="imagenet", type=str, choices=["imagenet", "cifar100"], help="Choose dataset"
     )

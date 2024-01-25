@@ -51,13 +51,7 @@ def main():
     device = get_device(Device.GPU)
 
     # Load diff. and classifier models
-    (
-        diff_model,
-        classifier,
-        dataset,
-        beta_schedule,
-        post_var,
-    ) = load_models(config, device)
+    (diff_model, classifier, dataset, beta_schedule, post_var, energy_param) = load_models(config, device)
     dataset_name, image_size, num_classes, num_channels = dataset
 
     betas, time_steps = respaced_beta_schedule(
@@ -108,7 +102,10 @@ def load_models(config, device):
         dataset_name = "cifar100"
         beta_schedule, post_var = improved_beta_schedule, "beta"
         image_size, num_classes, num_channels = (CIFAR_IMAGE_SIZE, CIFAR_100_NUM_CLASSES, CIFAR_NUM_CHANNELS)
-        diff_model = load_unet_diff_model(diff_model_path, device, image_size=CIFAR_IMAGE_SIZE)
+        energy_param = "energy" in diff_model_name
+        diff_model = load_unet_diff_model(
+            diff_model_path, device, image_size=CIFAR_IMAGE_SIZE, energy_param=energy_param
+        )
         diff_model.eval()
         classifier = select_cifar_classifier(model_path=classifier_path, dev=device)
         classifier.eval()
@@ -125,7 +122,14 @@ def load_models(config, device):
     else:
         print(f"Incorrect model '{diff_model_name}'")
         raise ValueError
-    return diff_model, classifier, (dataset_name, image_size, num_classes, num_channels), beta_schedule, post_var
+    return (
+        diff_model,
+        classifier,
+        (dataset_name, image_size, num_classes, num_channels),
+        beta_schedule,
+        post_var,
+        energy_param,
+    )
 
 
 def select_cifar_classifier(model_path: Path, dev):

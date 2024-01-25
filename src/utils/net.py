@@ -15,12 +15,13 @@ import torch.nn as nn
 
 
 def load_params_from_file(path: Path):
-    if path.suffix == ".th":
+    if path.suffix == ".pt":
         return th.load(path)
     elif path.suffix == ".ckpt":
         return parse_chkpt_dict(th.load(path)["state_dict"])
     else:
-        raise ValueError("Wrong model suffix, should be '.th' or '.ckpt'")
+        err_ = f"Expected suffix: '.pt' or '.ckpt', got {path.name}"
+        raise ValueError(err_)
 
 
 def parse_chkpt_dict(state_dict):
@@ -240,6 +241,7 @@ def get_device(target: Optional[Enum] = None):
                 print("Warning: GPU not available")
                 return th.device("cpu")
         else:
-            raise ValueError("Invalid enum variant")
+            print("Invalid enum variant")
+            return th.device("cpu")
     else:
         return th.device("cpu")

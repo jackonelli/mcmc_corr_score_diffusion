@@ -1,13 +1,13 @@
 import re
 from typing import Tuple
 import torch as th
-from src.utils.metrics import accuracy, hard_label_from_logit, prob_vec_from_logit, r3_accuracy
+from src.utils.metrics import accuracy, hard_label_from_logit, prob_vec_from_logit, r3_accuracy, top_n_accuracy
 
 
 PATTERN = re.compile(r".*_(\d+)_(\d+).th")
 
 
-def compute_acc(classifier_fn, classes_and_samples, transform, batch_size, device) -> Tuple[float, float, int]:
+def compute_acc(classifier_fn, classes_and_samples, transform, batch_size, device) -> Tuple[float, float, float, int]:
     pred_logits = []
     true_classes = []
     for _, (classes_path, samples_path) in enumerate(classes_and_samples):
@@ -26,4 +26,5 @@ def compute_acc(classifier_fn, classes_and_samples, transform, batch_size, devic
     true_classes = th.cat(true_classes, dim=0)
     simple_acc = accuracy(hard_label_from_logit(pred_logits), true_classes)
     r3_acc = r3_accuracy(prob_vec_from_logit(pred_logits), true_classes)
-    return simple_acc.item(), r3_acc.item(), true_classes.size(0)
+    top_5_acc = top_n_accuracy(pred_logits, true_classes, 5)
+    return simple_acc.item(), r3_acc.item(), top_5_acc.item(), true_classes.size(0)
