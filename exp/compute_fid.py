@@ -21,11 +21,15 @@ def get_statistics(model, device, args, path_dataset, type_dataset, num_workers,
                                               num_workers=num_workers)
         m, s = compute_fid_statistics_dataloader(model, dataloader, device, args.dims)
     elif type_dataset == 'cifar100_train':
-        dataset = PILDataset(load_dataset("cifar100", cache_dir=path_dataset)['train']['img'], TF.ToTensor())
+        if path_dataset is not None:
+            path_dataset = str(path_dataset)
+        dataset = PILDataset(load_dataset("cifar100", cache_dir= path_dataset)['train']['img'], TF.ToTensor())
         dataloader = th.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=False, drop_last=False,
                                               num_workers=num_workers)
         m, s = compute_fid_statistics_dataloader(model, dataloader, device, args.dims)
     elif type_dataset == 'cifar100_val':
+        if path_dataset is not None:
+            path_dataset = str(path_dataset)
         dataset = PILDataset(load_dataset("cifar100", cache_dir=path_dataset)['test']['img'], TF.ToTensor())
         dataloader = th.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=False, drop_last=False,
                                               num_workers=num_workers)
