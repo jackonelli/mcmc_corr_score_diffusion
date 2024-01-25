@@ -63,7 +63,6 @@ def main():
         max_epochs=args.max_epochs,
         num_sanity_val_steps=0,
         accelerator="gpu",
-        gradient_clip_val=0.0,
         devices=1,
         default_root_dir="pl_logs/cifar100_class_t",
         callbacks=[lr_monitor],

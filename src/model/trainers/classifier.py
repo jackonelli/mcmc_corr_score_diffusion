@@ -73,27 +73,6 @@ class DiffusionClassifier(pl.LightningModule):
         self.i_batch_train = 0
         self.i_epoch += 1
 
-        # def configure_optimizers(self):
-        #     optimizer = th.optim.Adam(self.parameters(), lr=1e-3)
-        #     scheduler = th.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.99)
-        #     return [optimizer], [scheduler]
-
-    def configure_optimizers(self):
-        optimizer = th.optim.Adam(self.parameters(), lr=1e-2)
-        # decay_every_nth = self._batches_per_epoch *
-        # scheduler = th.optim.lr_scheduler.StepLR(optimizer, decay_every_nth, gamma=0.1)
-        scheduler = th.optim.lr_scheduler.OneCycleLR(
-            optimizer,
-            0.001,
-            epochs=self.trainer.max_epochs,
-            steps_per_epoch=self._batches_per_epoch,
-        )
-        scheduler_dict = {
-            "scheduler": scheduler,
-            "interval": "step",
-        }
-        return {"optimizer": optimizer, "lr_scheduler": scheduler_dict}
-
     def validation_step(self, batch, batch_idx):
         batch_size, x, y = self._batch_fn(batch, self.device)
 
@@ -121,6 +100,23 @@ class DiffusionClassifier(pl.LightningModule):
         self.val_loss = 0.0
         self.val_acc = 0.0
         self.i_batch_val = 0
+
+    def configure_optimizers(self):
+        optimizer = th.optim.Adam(self.parameters(), lr=1e-3)
+        decay_every_nth = self._batches_per_epoch * 5
+        scheduler = th.optim.lr_scheduler.StepLR(optimizer, decay_every_nth, gamma=0.5)
+        # scheduler = th.optim.lr_scheduler.OneCycleLR(
+        #     optimizer,
+        #     0.001,
+        #     epochs=self.trainer.max_epochs,
+        #     steps_per_epoch=self._batches_per_epoch,
+        # )
+        # scheduler = th.optim.lr_scheduler.LinearLR(optimizer, start_factor=0.5, total_iters=4)
+        scheduler_dict = {
+            "scheduler": scheduler,
+            "interval": "step",
+        }
+        return {"optimizer": optimizer, "lr_scheduler": scheduler_dict}
 
 
 class StandardClassifier(pl.LightningModule):
