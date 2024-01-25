@@ -1,4 +1,4 @@
-"""Simulation script for cluster"""
+"""Sampled from guided diffusion models"""
 import sys
 
 
@@ -84,6 +84,7 @@ def load_models(config, device):
     diff_model_name = f"{config.diff_model}"
     diff_model_path = MODELS_DIR / f"{diff_model_name}"
     assert diff_model_path.exists(), f"Model '{diff_model_path}' does not exist."
+    energy_param = "energy" in diff_model_name
 
     assert not (config.class_cond and "uncond" in config.diff_model)
     classifier_name = f"{config.classifier}"
@@ -106,7 +107,6 @@ def load_models(config, device):
         dataset_name = "cifar100"
         beta_schedule, post_var = improved_beta_schedule, "beta"
         image_size, num_classes, num_channels = (CIFAR_IMAGE_SIZE, CIFAR_100_NUM_CLASSES, CIFAR_NUM_CHANNELS)
-        energy_param = "energy" in diff_model_name
         diff_model = load_unet_diff_model(
             diff_model_path, device, image_size=CIFAR_IMAGE_SIZE, energy_param=energy_param
         )
