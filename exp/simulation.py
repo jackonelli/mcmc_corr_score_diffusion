@@ -19,9 +19,12 @@ from src.guidance.classifier_full import ClassifierFullGuidance
 from src.samplers.mcmc import (
     AnnealedHMCEnergySampler,
     AnnealedHMCScoreSampler,
-    AnnealedLAScoreSampler,
+    AnnealedUHMCEnergySampler,
     AnnealedUHMCScoreSampler,
     AnnealedULAScoreSampler,
+    AnnealedULAEnergySampler,
+    AnnealedLAScoreSampler,
+    AnnealedLAEnergySampler,
 )
 
 # Diff models
@@ -201,11 +204,22 @@ def get_guid_sampler(config, diff_model, diff_sampler, guidance, time_steps, dat
                 mcmc_sampler = AnnealedHMCScoreSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
         elif config.mcmc_method == "la":
             assert config.n_trapets is not None
-            mcmc_sampler = AnnealedLAScoreSampler(config.mcmc_steps, step_sizes, None, n_trapets=config.n_trapets)
+            if energy_param:
+                mcmc_sampler = AnnealedLAEnergySampler(config.mcmc_steps, step_sizes, None)
+            else:
+                mcmc_sampler = AnnealedLAScoreSampler(config.mcmc_steps, step_sizes, None, n_trapets=config.n_trapets)
         elif config.mcmc_method == "uhmc":
-            mcmc_sampler = AnnealedUHMCScoreSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
+            if energy_param:
+                mcmc_sampler = AnnealedUHMCEnergySampler(
+                    config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None
+                )
+            else:
+                mcmc_sampler = AnnealedUHMCScoreSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
         elif config.mcmc_method == "ula":
-            mcmc_sampler = AnnealedULAScoreSampler(config.mcmc_steps, step_sizes, None)
+            if energy_param:
+                mcmc_sampler = AnnealedULAEnergySampler(config.mcmc_steps, step_sizes, None)
+            else:
+                mcmc_sampler = AnnealedULAScoreSampler(config.mcmc_steps, step_sizes, None)
         else:
             raise ValueError(f"Incorrect MCMC method: '{config.mcmc_method}'")
 
