@@ -142,7 +142,7 @@ class AnnealedULAScoreSampler(MCMCSampler):
 
     @th.no_grad()
     # NB: t_idx not in use.
-    def sample_step(self, x: th.Tensor, t: int, t_idx: int, classes: th.Tensor):
+    def sample_step(self, x: th.Tensor, t: int, t_idx: int, classes=None):
         for i in range(self.num_samples_per_step):
             x, _, _ = langevin_step(x, t, t_idx, classes, self.step_sizes, self.gradient_function)
         return x
@@ -171,7 +171,7 @@ class AnnealedLAScoreSampler(MCMCMHCorrSampler):
         dims = x.dim()
         self.update_save_dicts(t)
 
-        for i in range(self.num_samples_per_step):
+        for _ in range(self.num_samples_per_step):
             x_hat, mean_x, ss = langevin_step(x, t, t_idx, classes, self.step_sizes, self.gradient_function)
 
             mean_x_hat = get_mean(self.gradient_function, x_hat, t, t_idx, ss, classes)

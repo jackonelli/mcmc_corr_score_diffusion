@@ -27,6 +27,7 @@ class ProductCompSampler:
         diff_model_2: nn.Module,
         diff_proc: DiffusionSampler,
         use_reverse_step=True,
+        param="score",
     ):
         self.diff_model_1 = diff_model_1
         self.diff_model_2 = diff_model_2
@@ -34,9 +35,7 @@ class ProductCompSampler:
         self.grads = {"diff_1": dict(), "diff_2": dict()}
         self.reverse = use_reverse_step
 
-        self.require_g = False
-        if "energy" in dir(self.diff_model_1) or "energy" in dir(self.diff_model_2):
-            self.require_g = True
+        self.require_g = param == "energy"
 
         # Seed only for noise in reverse step
         current_rng_state = th.get_rng_state()
@@ -50,7 +49,6 @@ class ProductCompSampler:
 
         Args:
             num_samples (number of samples)
-            classes (num_samples, ): classes to condition on (on for each sample)
             device (the device the model is on)
             shape (shape of data, e.g., (1, 28, 28))
 
@@ -64,12 +62,11 @@ class ProductCompSampler:
         self.verbose_counter = 0
 
         for t, t_idx in zip(self.diff_proc.time_steps.__reversed__(), reversed(self.diff_proc.time_steps_idx)):
-            print(t, t_idx)
             if verbose and self.diff_proc.verbose_split[self.verbose_counter] == t:
                 print("Diff step", t.item())
                 self.verbose_counter += 1
             if self.require_g:
-                x_tm1 = reverse_func_require_grad(self, t, t_idx, x_tm1, classes, device, self.diff_cond)
+                x_tm1 = reverse_func_require_grad(self, t, t_idx, x_tm1, device, self.diff_cond)
             else:
                 x_tm1 = reverse_func_prod(self, t, t_idx, x_tm1, device)
             x_tm1 = x_tm1.detach()
@@ -149,7 +146,6 @@ def reverse_func_prod(model, t, t_idx, x_tm1, device):
         # Note, common posterior variance for the product components
         sqrt_post_var_t = th.sqrt(extract(model.diff_proc.posterior_variance, t_idx, x_tm1))
         pred_noise = pred_noise_1 + pred_noise_2
-        print(pred_noise.norm())
     else:
         raise NotImplemented("Learned variance for product composition, not implemented.")
     x_tm1 = model.diff_proc._sample_x_tm1_given_x_t(x_tm1, t_idx, pred_noise, sqrt_post_var_t=sqrt_post_var_t)
