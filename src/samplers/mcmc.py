@@ -175,7 +175,7 @@ class AnnealedLAScoreSampler(MCMCMHCorrSampler):
             x_hat, mean_x, ss = langevin_step(x, t, t_idx, classes, self.step_sizes, self.gradient_function)
 
             mean_x_hat = get_mean(self.gradient_function, x_hat, t, t_idx, ss, classes)
-            logp_reverse, logp_forward = transition_factor(x, mean_x, x_hat, mean_x_hat, ss)
+            logp_reverse, logp_forward = transition_factor(x, mean_x, x_hat, mean_x_hat, ss, dims)
 
             intermediate_steps = th.linspace(0, 1, steps=self.n_trapets).to(x.device)
             energy_diff = estimate_energy_diff_linear(
@@ -221,7 +221,7 @@ class AnnealedLAEnergySampler(MCMCMHCorrSampler):
             x_hat.requires_grad_(True)
 
             mean_x_hat = get_mean(self.gradient_function, x_hat, t, t_idx, ss, classes)
-            logp_reverse, logp_forward = transition_factor(x, mean_x, x_hat, mean_x_hat, ss)
+            logp_reverse, logp_forward = transition_factor(x, mean_x, x_hat, mean_x_hat, ss, dims)
 
             energy_diff = self.energy_function(x_hat, t, t_idx, classes) - self.energy_function(x, t, t_idx, classes)
             logp_accept = energy_diff + logp_reverse - logp_forward
@@ -253,10 +253,10 @@ def get_mean(gradient_function, x, t, t_idx, ss, classes):
     return x + grad * ss
 
 
-def transition_factor(x, mean_x, x_hat, mean_x_hat, ss):
+def transition_factor(x, mean_x, x_hat, mean_x_hat, ss, dims):
     std = (2 * ss) ** 0.5
-    logp_reverse = -0.5 * th.sum((x - mean_x_hat) ** 2) / std**2
-    logp_forward = -0.5 * th.sum((x_hat - mean_x) ** 2) / std**2
+    logp_reverse = -0.5 * th.sum((x - mean_x_hat) ** 2 / std**2, dim=tuple(range(1, dims)))
+    logp_forward = -0.5 * th.sum((x_hat - mean_x) ** 2 / std**2, dim=tuple(range(1, dims)))
     return logp_reverse, logp_forward
 
 
