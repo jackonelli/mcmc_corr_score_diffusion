@@ -69,8 +69,10 @@ class DiffusionModel(pl.LightningModule):
         x_noisy = self.noise_scheduler.q_sample(x_0=x, ts=ts, noise=noise)
         if self.require_g:
             x_noisy = x_noisy.requires_grad_(True)
-        predicted_noise = self.model(x_noisy, ts)
-
+            with th.inference_mode(False):
+                predicted_noise = self.model(x_noisy, ts)
+        else:
+            predicted_noise = self.model(x_noisy, ts)
         loss = self.loss_f(noise, predicted_noise)
         self.log("val_loss", loss)
         self.val_loss += loss.detach().cpu().item()
