@@ -70,8 +70,8 @@ def get_cifar100_data_loaders(batch_size: int, data_root: Path):
     return dataloader_train, dataloader_val
 
 
-def get_cifar10_data_loaders(batch_size: int):
-    dataset = load_dataset("cifar10")
+def get_cifar10_data_loaders(batch_size: int, data_root: Path):
+    dataset = load_dataset("cifar10", cache_dir=str(data_root))
 
     # define image transformations
     def transforms_f(train=True):

@@ -25,6 +25,7 @@ from src.model.resnet import load_classifier_t as load_resnet_classifier_t
 from src.model.guided_diff.classifier import load_guided_classifier as load_guided_diff_classifier_t
 from src.utils.net import get_device, Device
 from src.data.cifar import CIFAR_100_NUM_CLASSES, CIFAR_IMAGE_SIZE, CIFAR_NUM_CHANNELS, get_cifar100_data_loaders
+from pytorch_lightning.loggers import CSVLogger
 
 
 def main():
@@ -58,14 +59,15 @@ def main():
     )
     diff_classifier.to(dev)
 
-    lr_monitor = LearningRateMonitor(logging_interval="step")
+    # lr_monitor = LearningRateMonitor(logging_interval="step")
+    logger = CSVLogger("logs", name="cifar100_class_t", flush_logs_every_n_steps=1)
     trainer = pl.Trainer(
+        logger=logger,
         max_epochs=args.max_epochs,
         num_sanity_val_steps=0,
         accelerator="gpu",
         devices=1,
-        default_root_dir="pl_logs/cifar100_class_t",
-        callbacks=[lr_monitor],
+        #callbacks=[lr_monitor],
     )
 
     trainer.fit(diff_classifier, dataloader_train, dataloader_val)
@@ -81,7 +83,7 @@ def select_classifier(arch, dev):
         class_t = load_resnet_classifier_t(
             model_path=None,
             dev=dev,
-            emb_dim=112,
+            emb_dim=256,
             num_classes=CIFAR_100_NUM_CLASSES,
             num_channels=CIFAR_NUM_CHANNELS,
         ).to(dev)

@@ -34,6 +34,20 @@ def get_statistics(model, device, args, path_dataset, type_dataset, num_workers,
         dataloader = th.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=False, drop_last=False,
                                               num_workers=num_workers)
         m, s = compute_fid_statistics_dataloader(model, dataloader, device, args.dims)
+    elif type_dataset == 'cifar10_train':
+        if path_dataset is not None:
+            path_dataset = str(path_dataset)
+        dataset = PILDataset(load_dataset("cifar10", cache_dir= path_dataset)['train']['img'], TF.ToTensor())
+        dataloader = th.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=False, drop_last=False,
+                                              num_workers=num_workers)
+        m, s = compute_fid_statistics_dataloader(model, dataloader, device, args.dims)
+    elif type_dataset == 'cifar10_val':
+        if path_dataset is not None:
+            path_dataset = str(path_dataset)
+        dataset = PILDataset(load_dataset("cifar10", cache_dir=path_dataset)['test']['img'], TF.ToTensor())
+        dataloader = th.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=False, drop_last=False,
+                                              num_workers=num_workers)
+        m, s = compute_fid_statistics_dataloader(model, dataloader, device, args.dims)
     elif type_dataset == 'stats':
         with np.load(path_dataset) as f:
             m, s = f['mu'][:], f['sigma'][:]
@@ -45,8 +59,8 @@ def get_statistics(model, device, args, path_dataset, type_dataset, num_workers,
     else:
         raise ValueError
 
-    if save_stats:
-        np.savez_compressed(path_dataset, mu=m, sigma=s)
+    if save_stats and type_dataset != 'stats':
+        np.savez_compressed(os.path.join(path_dataset, type_dataset), mu=m, sigma=s)
     return m, s
 
 

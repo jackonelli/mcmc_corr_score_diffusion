@@ -81,6 +81,14 @@ def load_models(config, device):
         image_size, num_classes, num_channels = (28, 10, 1)
         diff_model = load_mnist_diff(diff_model_path, device)
         diff_model.eval()
+    if "cifar10" in diff_model_name:
+        dataset_name = "cifar10"
+        beta_schedule, post_var = improved_beta_schedule, "beta"
+        image_size, num_classes, num_channels = (CIFAR_IMAGE_SIZE, 10, CIFAR_NUM_CHANNELS)
+        diff_model = load_unet_diff_model(
+            diff_model_path, device, image_size=CIFAR_IMAGE_SIZE, energy_param=energy_param
+        )
+        diff_model.eval()
     elif "cifar100" in diff_model_name:
         dataset_name = "cifar100"
         beta_schedule, post_var = improved_beta_schedule, "beta"
