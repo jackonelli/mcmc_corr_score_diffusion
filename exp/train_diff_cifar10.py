@@ -55,7 +55,7 @@ def main():
             if args.energy:
                 unet = UNetEnergy_Ho(dim=64, dim_mults=(1, 2, 4, 8), flash_attn=False)
             else:
-                unet = Unet_Ho(dim=64, dim_mults=(1, 2, 4, 8), flash_attn=True)
+                unet = Unet_Ho(dim=64, dim_mults=(1, 2, 4, 8), flash_attn=False)
         else:
             raise NotImplementedError("Not a valid model size.")
 
@@ -76,7 +76,7 @@ def main():
     diff_sampler = DiffusionSampler(betas, time_steps)
 
     diffm = DiffusionModel(model=unet, loss_f=F.mse_loss, noise_scheduler=diff_sampler)
-    filename = args.dataset + "_" + prefix_model + "diff_{epoch:02d}"
+    filename = args.dataset + "_" + prefix_model + "_" + args.beta + "_diff_{epoch:02d}"
     checkpoint_callback = ModelCheckpoint(
         filename=filename,
         every_n_epochs=1,
