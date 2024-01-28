@@ -81,6 +81,7 @@ def main():
         filename=filename,
         every_n_epochs=1,
         save_top_k=5,
+        monitor='val_loss'
     )
 
     diffm.to(dev)
