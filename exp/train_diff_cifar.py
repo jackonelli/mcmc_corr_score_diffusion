@@ -24,9 +24,9 @@ from src.utils.callbacks import EMACallback
 def main():
     args = parse_args()
     if args.energy:
-        prefix_model = "energy"
+        param_model = "energy"
     else:
-        prefix_model = "score"
+        param_model = "score"
     time_emb_dim = 112
     image_size = 32
     channels = 3
@@ -38,7 +38,7 @@ def main():
     else:
         raise ValueError('Invalid dataset')
 
-    model_path = Path.cwd() / "models" / (prefix_model + "_uncond_unet_" + args.dataset + "_" + args.model_size +
+    model_path = Path.cwd() / "models" / (param_model + "_uncond_unet_" + args.dataset + "_" + args.model_size +
                                           "_" + args.beta + ".pt")
     if not model_path.parent.exists():
         print(f"Save dir. '{model_path.parent}' does not exist.")
@@ -78,7 +78,7 @@ def main():
     diff_sampler = DiffusionSampler(betas, time_steps)
 
     diffm = DiffusionModel(model=unet, loss_f=F.mse_loss, noise_scheduler=diff_sampler)
-    filename = args.dataset + "_" + prefix_model + "_" + args.beta + "_diff_{epoch:02d}"
+    filename = args.dataset + "_" + param_model + "_" + args.beta + "_" + args.model_size + "_diff_{epoch:02d}"
     checkpoint_callback = ModelCheckpoint(
         filename=filename,
         every_n_epochs=1,
