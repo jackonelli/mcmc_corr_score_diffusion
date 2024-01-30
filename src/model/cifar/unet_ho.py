@@ -116,7 +116,7 @@ class RMSNorm(nn.Module):
 class Attend(nn.Module):
     def __init__(
         self,
-        dropout = 0.,
+        dropout = 0.1,
         flash = False
     ):
         super().__init__()

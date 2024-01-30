@@ -1,7 +1,7 @@
 from pathlib import Path
 import json
 from torch.utils.data import DataLoader
-from torchvision.transforms import Compose, ToTensor, Resize, Lambda
+from torchvision.transforms import Compose, ToTensor, Resize, Lambda, RandomHorizontalFlip
 from datasets import load_dataset
 
 CIFAR_IMAGE_SIZE = 32
@@ -30,15 +30,16 @@ def get_cifar100_data_loaders(batch_size: int, data_root: Path):
     # define image transformations
     def transforms_f(train=True):
         img_size = 32
-        transform = Compose(
-            [
+        compose = [
                 Resize(size=[img_size, img_size], antialias=True),
                 # Turn into tensor (scales [0, 255] to (0, 1))
                 ToTensor(),
                 # Map data to (-1, 1)
                 Lambda(lambda x: (x * 2) - 1),
-            ],
-        )
+            ]
+        if train:
+            compose = [RandomHorizontalFlip()] + compose
+        transform = Compose(compose)
 
         def f(examples):
             examples["pixel_values"] = [transform(image) for image in examples["img"]]
@@ -76,15 +77,16 @@ def get_cifar10_data_loaders(batch_size: int, data_root: Path):
     # define image transformations
     def transforms_f(train=True):
         img_size = 32
-        transform = Compose(
-            [
-                Resize(size=[img_size, img_size], antialias=True),
-                # Turn into tensor (scales [0, 255] to (0, 1))
-                ToTensor(),
-                # Map data to (-1, 1)
-                Lambda(lambda x: (x * 2) - 1),
-            ],
-        )
+        compose = [
+            Resize(size=[img_size, img_size], antialias=True),
+            # Turn into tensor (scales [0, 255] to (0, 1))
+            ToTensor(),
+            # Map data to (-1, 1)
+            Lambda(lambda x: (x * 2) - 1),
+        ]
+        if train:
+            compose = [RandomHorizontalFlip()] + compose
+        transform = Compose(compose)
 
         def f(examples):
             examples["pixel_values"] = [transform(image) for image in examples["img"]]
@@ -109,12 +111,3 @@ def get_cifar10_data_loaders(batch_size: int, data_root: Path):
     )
     dataloader_val = DataLoader(transformed_dataset_val["test"], batch_size=batch_size, shuffle=False, num_workers=4)
     return dataloader_train, dataloader_val
-    # self.transform = Compose(
-    #     [
-    #         Resize(size=[img_size, img_size], antialias=True),
-    #         # Turn into tensor (scales [0, 255] to (0, 1))
-    #         ToTensor(),
-    #         # Map data to (-1, 1)
-    #         Lambda(lambda x: (x * 2) - 1),
-    #     ],
-    # )

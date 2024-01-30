@@ -18,6 +18,7 @@ from src.model.trainers.diffusion import DiffusionModel
 from src.model.cifar.unet_ho import Unet_Ho, UNetEnergy_Ho
 from src.utils.net import get_device, Device
 from pytorch_lightning.callbacks import ModelCheckpoint
+from src.utils.callbacks import EMACallback
 
 
 def main():
@@ -37,7 +38,8 @@ def main():
     else:
         raise ValueError('Invalid dataset')
 
-    model_path = Path.cwd() / "models" / (prefix_model + "_uncond_unet_" + args.dataset + "_" + args.model_size + ".pt")
+    model_path = Path.cwd() / "models" / (prefix_model + "_uncond_unet_" + args.dataset + "_" + args.model_size +
+                                          "_" + args.beta + ".pt")
     if not model_path.parent.exists():
         print(f"Save dir. '{model_path.parent}' does not exist.")
         return
@@ -83,6 +85,7 @@ def main():
         save_top_k=5,
         monitor='val_loss'
     )
+    ema_callback = EMACallback(decay=0.9999)
 
     diffm.to(dev)
     trainer = pl.Trainer(
@@ -92,7 +95,7 @@ def main():
         num_sanity_val_steps=0,
         accelerator="gpu",
         devices=1,
-        callbacks=[checkpoint_callback]
+        callbacks=[checkpoint_callback, ema_callback]
     )
 
     trainer.fit(diffm, dataloader_train, dataloader_val)

@@ -2,6 +2,7 @@ from typing import Tuple
 from collections.abc import Callable
 import torch as th
 import torch.nn as nn
+import numpy as np
 import pytorch_lightning as pl
 
 from src.utils.metrics import accuracy, hard_label_from_logit
@@ -45,7 +46,8 @@ class DiffusionClassifier(pl.LightningModule):
         # Default Initialization
         self.train_loss = 0.0
         self.val_loss = 0.0
-        self.val_acc = 0.0
+        self.val_loss0 = 0.0
+        self.val_acc0 = 0.0
         self.i_batch_train = 0
         self.i_batch_val = 0
         self.i_epoch = 0
@@ -56,19 +58,24 @@ class DiffusionClassifier(pl.LightningModule):
         batch_size, x, y = self._batch_fn(batch, self.device)
         # Algorithm 1 line 3: sample t uniformally for every example in the batch
         T = self.noise_scheduler.time_steps.size(0)
-        ts = th.randint(0, T, (batch_size,), device=self.device).long()
+        # ts = th.randint(0, T, (batch_size,), device=self.device).long()
+        # ts = th.zeros((batch_size,), device=self.device).long()
+        p = np.linspace(10, 1, T)
+        p = p/p.sum()
+        ts = np.random.choice(T, (batch_size,), p=p)
+        ts = th.from_numpy(ts).long().to(self.device)
 
         noise = th.randn_like(x)
         x_noisy = self.noise_scheduler.q_sample(x_0=x, ts=ts, noise=noise)
         predicted_y = self.model(x_noisy, ts)
         loss = self.loss_f(predicted_y, y)
-        self.log("train_loss", loss)
         self.train_loss += loss.detach().cpu().item()
         self.i_batch_train += 1
         return loss
 
     def on_train_epoch_end(self):
         print(" {}. Train Loss: {}".format(self.i_epoch, self.train_loss / self.i_batch_train))
+        self.log("train_loss", self.train_loss / self.i_batch_train, logger=True, on_epoch=True)
         self.train_loss = 0.0
         self.i_batch_train = 0
         self.i_epoch += 1
@@ -79,31 +86,40 @@ class DiffusionClassifier(pl.LightningModule):
         rng_state = th.get_rng_state()
         th.manual_seed(self.i_batch_val)
 
+        T = self.noise_scheduler.time_steps.size(0)
         # Only report val. acc for t=0
-        ts = th.zeros((batch_size,), device=self.device).long()
+        ts = th.randint(0, T, (batch_size,), device=self.device).long()
+        ts0 = th.zeros((batch_size,), device=self.device).long()
         th.set_rng_state(rng_state)
+        logits0 = self.model(x, ts0)
+        loss0 = self.loss_f(logits0, y)
+        acc0 = accuracy(hard_label_from_logit(logits0), y)
+
         logits = self.model(x, ts)
         loss = self.loss_f(logits, y)
-        acc = accuracy(hard_label_from_logit(logits), y)
 
-        self.log("val_loss", loss)
-        self.log("acc", acc)
         self.val_loss += loss.detach().cpu().item()
-        self.val_acc += acc.detach().cpu().item()
+        self.val_loss0 += loss0.detach().cpu().item()
+        self.val_acc0 += acc0.detach().cpu().item()
         self.i_batch_val += 1
-        return loss
+        return loss0
 
     def on_validation_epoch_end(self):
+        val_loss0 = self.val_loss0 / self.i_batch_val
         val_loss = self.val_loss / self.i_batch_val
-        val_acc_pct = (self.val_acc / self.i_batch_val) * 100
-        print(f" {self.i_epoch}. Val. Loss: {val_loss:.2f}, Val. acc at t=0: {val_acc_pct:.1f}%")
+        val_acc_pct_0 = (self.val_acc0 / self.i_batch_val) * 100
+        print(f" {self.i_epoch}. Val. Loss at t=0: {val_loss0:.2f}, Val. acc at t=0: {val_acc_pct_0:.1f}%, Val loss: {val_loss:.2f}")
+        self.log("val_loss", val_loss, logger=True, on_epoch=True)
+        self.log("val_loss_0", val_loss0, logger=True, on_epoch=True)
+        self.log("acc_0", val_acc_pct_0, logger=True, on_epoch=True)
         self.val_loss = 0.0
-        self.val_acc = 0.0
+        self.val_loss0 = 0.0
+        self.val_acc0 = 0.0
         self.i_batch_val = 0
 
     def configure_optimizers(self):
         optimizer = th.optim.Adam(self.parameters(), lr=1e-3)
-        decay_every_nth = self._batches_per_epoch * 5
+        decay_every_nth = self._batches_per_epoch * 20
         scheduler = th.optim.lr_scheduler.StepLR(optimizer, decay_every_nth, gamma=0.5)
         # scheduler = th.optim.lr_scheduler.OneCycleLR(
         #     optimizer,
