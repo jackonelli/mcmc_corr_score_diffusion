@@ -90,6 +90,7 @@ def main():
     diffm.to(dev)
     trainer = pl.Trainer(
         max_epochs=args.max_epochs,
+        max_steps=args.max_steps,
         default_root_dir="logs/" + args.dataset,
         log_every_n_steps=100,
         num_sanity_val_steps=0,
@@ -110,7 +111,8 @@ def parse_args():
     parser.add_argument("--beta", choices=['lin', 'cos'], help="Type of beta schedule")
     parser.add_argument("--dataset", choices=['cifar10', 'cifar100'], help="Type of beta schedule")
     parser.add_argument("--dataset_path", type=Path, required=True, help="Path to dataset root")
-    parser.add_argument("--max_epochs", type=int, default=int(1e5), help="Max. number of epochs")
+    parser.add_argument("--max_epochs", type=int, default=-1, help="Max. number of epochs")
+    parser.add_argument("--max_steps", type=int, default=int(8e5), help="Max. number of steps")
     parser.add_argument("--batch_size", type=int, default=128, help="Batch size")
     return parser.parse_args()
 
