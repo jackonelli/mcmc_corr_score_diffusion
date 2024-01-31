@@ -120,6 +120,7 @@ def parse_args():
     parser.add_argument("--max_steps", type=int, default=int(8e5), help="Max. number of steps")
     parser.add_argument("--batch_size", type=int, default=128, help="Batch size")
     parser.add_argument("--ema", action='store_true', help='If model is trained with EMA')
+    parser.add_argument("--dropout", default=0., type=float, help="Dropout")
     return parser.parse_args()
 
 
