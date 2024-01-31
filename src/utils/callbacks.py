@@ -33,3 +33,4 @@ class EMACallback(Callback):
         with torch.no_grad():
             for ema_v, model_v in zip(ema_module.state_dict().values(), module.state_dict().values()):
                 ema_v.copy_(update_fn(ema_v, model_v))
+

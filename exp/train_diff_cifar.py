@@ -27,6 +27,10 @@ def main():
         param_model = "energy"
     else:
         param_model = "score"
+
+    ema = ''
+    if args.ema:
+        ema = '_ema'
     time_emb_dim = 112
     image_size = 32
     channels = 3
@@ -39,7 +43,7 @@ def main():
         raise ValueError('Invalid dataset')
 
     model_path = Path.cwd() / "models" / (param_model + "_uncond_unet_" + args.dataset + "_" + args.model_size +
-                                          "_" + args.beta + ".pt")
+                                          "_" + args.beta + "_" + str(int(args.dropout*100)) + ema + ".pt")
     if not model_path.parent.exists():
         print(f"Save dir. '{model_path.parent}' does not exist.")
         return
@@ -55,9 +59,9 @@ def main():
                 unet = UNet(image_size, time_emb_dim, channels).to(dev)
         elif args.model_size == 'large':
             if args.energy:
-                unet = UNetEnergy_Ho(dim=64, dim_mults=(1, 2, 4, 8), flash_attn=False)
+                unet = UNetEnergy_Ho(dim=64, dim_mults=(1, 2, 4, 8), flash_attn=False, dropout=args.dropout)
             else:
-                unet = Unet_Ho(dim=64, dim_mults=(1, 2, 4, 8), flash_attn=False)
+                unet = Unet_Ho(dim=64, dim_mults=(1, 2, 4, 8), flash_attn=False, dropout=args.dropout)
         else:
             raise NotImplementedError("Not a valid model size.")
 
@@ -78,12 +82,13 @@ def main():
     diff_sampler = DiffusionSampler(betas, time_steps)
 
     diffm = DiffusionModel(model=unet, loss_f=F.mse_loss, noise_scheduler=diff_sampler)
-    filename = args.dataset + "_" + param_model + "_" + args.beta + "_" + args.model_size + "_diff_{epoch:02d}"
+    filename = args.dataset + "_" + param_model + "_" + args.beta + "_" + args.model_size + "_" + str(int(args.dropout*100)) + ema + "_diff_{epoch:02d}"
     checkpoint_callback = ModelCheckpoint(
         filename=filename,
+        save_last=True,
         every_n_epochs=1,
         save_top_k=5,
-        monitor='val_loss'
+        monitor='train_loss'
     )
     ema_callback = EMACallback(decay=0.9999)
 
@@ -110,10 +115,11 @@ def parse_args():
     parser.add_argument("--model_size", choices=['small', 'large'], help="Model size of Unet")
     parser.add_argument("--beta", choices=['lin', 'cos'], help="Type of beta schedule")
     parser.add_argument("--dataset", choices=['cifar10', 'cifar100'], help="Type of beta schedule")
-    parser.add_argument("--dataset_path", type=Path, required=True, help="Path to dataset root")
+    parser.add_argument("--dataset_path", default=None, help="Path to dataset root")
     parser.add_argument("--max_epochs", type=int, default=-1, help="Max. number of epochs")
     parser.add_argument("--max_steps", type=int, default=int(8e5), help="Max. number of steps")
     parser.add_argument("--batch_size", type=int, default=128, help="Batch size")
+    parser.add_argument("--ema", action='store_true', help='If model is trained with EMA')
     return parser.parse_args()
 
 

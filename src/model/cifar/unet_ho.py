@@ -2,11 +2,13 @@
 Implementation taken from
 https://github.com/lucidrains/denoising-diffusion-pytorch/blob/main/denoising_diffusion_pytorch/denoising_diffusion_pytorch.py
 """
-
+from typing import Optional
+from pathlib import Path
 import math
 from functools import partial
 from collections import namedtuple
 from src.model.base import EnergyModel
+from collections import OrderedDict
 
 import torch
 import torch.nn.functional as F
@@ -18,6 +20,7 @@ from torch import nn, einsum
 
 from einops import rearrange
 from packaging import version
+from src.utils.net import load_params_from_file
 
 
 # constants
@@ -116,7 +119,7 @@ class RMSNorm(nn.Module):
 class Attend(nn.Module):
     def __init__(
         self,
-        dropout = 0.1,
+        dropout = 0.,
         flash = False
     ):
         super().__init__()
@@ -325,14 +328,15 @@ class Attention(nn.Module):
         heads = 4,
         dim_head = 32,
         num_mem_kv = 4,
-        flash = False
+        flash = False,
+        dropout=0.
     ):
         super().__init__()
         self.heads = heads
         hidden_dim = dim_head * heads
 
         self.norm = RMSNorm(dim)
-        self.attend = Attend(flash = flash)
+        self.attend = Attend(dropout=dropout, flash = flash)
 
         self.mem_kv = nn.Parameter(torch.randn(2, heads, num_mem_kv, dim_head))
         self.to_qkv = nn.Conv2d(dim, hidden_dim * 3, 1, bias = False)
@@ -374,7 +378,8 @@ class Unet_Ho(nn.Module):
         attn_dim_head = 32,
         attn_heads = 4,
         full_attn = None,    # defaults to full attention only for inner most layer
-        flash_attn = False
+        flash_attn = False,
+        dropout=0.
     ):
         super().__init__()
 
@@ -424,7 +429,7 @@ class Unet_Ho(nn.Module):
 
         assert len(full_attn) == len(dim_mults)
 
-        FullAttention = partial(Attention, flash = flash_attn)
+        FullAttention = partial(Attention, flash = flash_attn, dropout = dropout)
 
         # layers
 
@@ -576,7 +581,8 @@ class UNetEnergy_Ho(Unet_Ho, EnergyModel):
         attn_dim_head=32,
         attn_heads=4,
         full_attn=None,  # defaults to full attention only for inner most layer
-        flash_attn=False
+        flash_attn=False,
+        dropout=0.
     ):
         Unet_Ho.__init__(self, dim=dim,
                          init_dim=init_dim,
@@ -593,7 +599,8 @@ class UNetEnergy_Ho(Unet_Ho, EnergyModel):
                          attn_dim_head=attn_dim_head,
                          attn_heads=attn_heads,
                          full_attn=full_attn,
-                         flash_attn=flash_attn)
+                         flash_attn=flash_attn,
+                         dropout=dropout)
         EnergyModel.__init__(self)
 
     def energy(self, x: torch.Tensor, time: torch.Tensor):
@@ -605,10 +612,30 @@ class UNetEnergy_Ho(Unet_Ho, EnergyModel):
         return torch.autograd.grad(energy, x, grad_outputs=torch.ones_like(energy), create_graph=True)[0]
 
 
-if __name__ == '__main__':
-    model = Unet_Ho(
-        dim=64,
-        dim_mults=(1, 2, 4, 8),
-        flash_attn=True
-    )
-    print('hej')
+def load_model(
+    model_path: Optional[Path],
+    device,
+    energy_param: bool = False,
+):
+    """Load UNET Ho diffusion model from state dict
+
+    The model_path can be a standalone '.th' file or part of a pl checkpoint '.ckpt' file.
+    If model_path is None, a new model is initialised.
+    """
+    if energy_param:
+        unet = UNetEnergy_Ho(dim=64, dim_mults=(1, 2, 4, 8), flash_attn=False)
+    else:
+        unet = Unet_Ho(dim=64, dim_mults=(1, 2, 4, 8), flash_attn=False)
+    if model_path is not None:
+        params = load_params_from_file(model_path)
+        if 'ema' in model_path.stem:
+            keys = [k for k in params.keys()]
+            keys = keys[:int(len(keys)/2)]
+            params_ = OrderedDict()
+            for key in keys:
+                params_[key] = params[key]
+            params = params_
+        unet.load_state_dict(params)
+    unet.to(device)
+    unet.eval()
+    return unet

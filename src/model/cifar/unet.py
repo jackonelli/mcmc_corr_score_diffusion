@@ -20,6 +20,7 @@ from src.model.cifar.common import (
     downsample,
 )
 from src.utils.net import load_params_from_file
+from collections import OrderedDict
 
 
 def load_model(
@@ -40,7 +41,15 @@ def load_model(
     else:
         unet = UNet(dim=image_size, time_emb_dim=time_emb_dim, channels=num_channels)
     if model_path is not None:
-        unet.load_state_dict(load_params_from_file(model_path))
+        params = load_params_from_file(model_path)
+        if 'ema' in model_path.stem:
+            keys = [k for k in params.keys()]
+            keys = keys[:int(len(keys) / 2)]
+            params_ = OrderedDict()
+            for key in keys:
+                params_[key] = params[key]
+            params = params_
+        unet.load_state_dict(params)
     unet.to(device)
     unet.eval()
     return unet
