@@ -93,10 +93,15 @@ def main():
     ema_callback = EMACallback(decay=0.9999)
 
     diffm.to(dev)
+    if args.log_dir is None:
+        root_dir = "logs/" + args.dataset,
+    else:
+        root_dir = args.log_dir
+
     trainer = pl.Trainer(
         max_epochs=args.max_epochs,
         max_steps=args.max_steps,
-        default_root_dir="logs/" + args.dataset,
+        default_root_dir=root_dir,
         log_every_n_steps=100,
         num_sanity_val_steps=0,
         accelerator="gpu",
@@ -121,6 +126,7 @@ def parse_args():
     parser.add_argument("--batch_size", type=int, default=128, help="Batch size")
     parser.add_argument("--ema", action='store_true', help='If model is trained with EMA')
     parser.add_argument("--dropout", default=0., type=float, help="Dropout")
+    parser.add_argument("--log_dir", default=None, help="Root directory for logging")
     return parser.parse_args()
 
 

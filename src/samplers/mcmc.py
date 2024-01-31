@@ -187,7 +187,7 @@ class AnnealedLAScoreSampler(MCMCMHCorrSampler):
             alpha = th.exp(logp_accept)
             accept = (u < alpha).to(th.float32).reshape((x.shape[0],) + tuple(([1 for _ in range(dims - 1)])))
             x = accept * x_hat + (1 - accept) * x
-            self.save_stats(t, alpha, accept, energy_diff)
+            self.save_stats(t_idx, alpha, accept, energy_diff)
 
         return x
 
