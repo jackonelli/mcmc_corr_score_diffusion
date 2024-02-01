@@ -71,11 +71,11 @@ class DiffusionClassifier(pl.LightningModule):
         loss = self.loss_f(predicted_y, y)
         self.train_loss += loss.detach().cpu().item()
         self.i_batch_train += 1
+        self.log("train_loss", self.train_loss / self.i_batch_train)
         return loss
 
     def on_train_epoch_end(self):
         print(" {}. Train Loss: {}".format(self.i_epoch, self.train_loss / self.i_batch_train))
-        self.log("train_loss", self.train_loss / self.i_batch_train, logger=True, on_epoch=True)
         self.train_loss = 0.0
         self.i_batch_train = 0
         self.i_epoch += 1
@@ -102,6 +102,13 @@ class DiffusionClassifier(pl.LightningModule):
         self.val_loss0 += loss0.detach().cpu().item()
         self.val_acc0 += acc0.detach().cpu().item()
         self.i_batch_val += 1
+
+        val_loss0 = self.val_loss0 / self.i_batch_val
+        val_loss = self.val_loss / self.i_batch_val
+        val_acc_pct_0 = (self.val_acc0 / self.i_batch_val) * 100
+        self.log("val_loss", val_loss)
+        self.log("val_loss_0", val_loss0)
+        self.log("acc_0", val_acc_pct_0)
         return loss0
 
     def on_validation_epoch_end(self):
@@ -109,9 +116,6 @@ class DiffusionClassifier(pl.LightningModule):
         val_loss = self.val_loss / self.i_batch_val
         val_acc_pct_0 = (self.val_acc0 / self.i_batch_val) * 100
         print(f" {self.i_epoch}. Val. Loss at t=0: {val_loss0:.2f}, Val. acc at t=0: {val_acc_pct_0:.1f}%, Val loss: {val_loss:.2f}")
-        self.log("val_loss", val_loss, logger=True, on_epoch=True)
-        self.log("val_loss_0", val_loss0, logger=True, on_epoch=True)
-        self.log("acc_0", val_acc_pct_0, logger=True, on_epoch=True)
         self.val_loss = 0.0
         self.val_loss0 = 0.0
         self.val_acc0 = 0.0
