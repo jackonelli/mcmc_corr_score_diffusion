@@ -60,7 +60,7 @@ class DiffusionClassifier(pl.LightningModule):
         T = self.noise_scheduler.time_steps.size(0)
         # ts = th.randint(0, T, (batch_size,), device=self.device).long()
         # ts = th.zeros((batch_size,), device=self.device).long()
-        p = np.linspace(10, 1, T)
+        p = np.linspace(5, 1, T)
         p = p/p.sum()
         ts = np.random.choice(T, (batch_size,), p=p)
         ts = th.from_numpy(ts).long().to(self.device)
@@ -117,6 +117,7 @@ class DiffusionClassifier(pl.LightningModule):
         self.val_acc0 = 0.0
         self.i_batch_val = 0
 
+    """
     def configure_optimizers(self):
         optimizer = th.optim.Adam(self.parameters(), lr=1e-3)
         decay_every_nth = self._batches_per_epoch * 20
@@ -133,6 +134,11 @@ class DiffusionClassifier(pl.LightningModule):
             "interval": "step",
         }
         return {"optimizer": optimizer, "lr_scheduler": scheduler_dict}
+    """
+    def configure_optimizers(self):
+        optimizer = th.optim.Adam(self.parameters(), lr=2e-4)
+        scheduler = th.optim.lr_scheduler.StepLR(optimizer, 1, gamma=1.0)
+        return [optimizer], [scheduler]
 
 
 class StandardClassifier(pl.LightningModule):

@@ -35,7 +35,7 @@ def load_classifier(resnet_model_path: Path, time_emb=False):
 
 # TODO: Merge with fn above
 def load_classifier_t(
-    model_path: Optional[Path], dev, num_blocks=[3, 4, 6, 3], emb_dim=112, num_classes=10, num_channels=1
+    model_path: Optional[Path], dev, num_blocks=[3, 4, 6, 3], emb_dim=112, num_classes=10, num_channels=1, dropout=0.
 ):
     print("Loading resnet model")
     model = ResNetTimeEmbedding(
@@ -44,6 +44,7 @@ def load_classifier_t(
         emb_dim=emb_dim,
         num_classes=num_classes,
         num_channels=num_channels,
+        dropout=dropout,
     )
     if model_path is not None:
         model.load_state_dict(load_params_from_file(model_path))
@@ -106,7 +107,7 @@ def logits_to_prob(logits: th.Tensor) -> th.Tensor:
 
 
 class ResNetTimeEmbedding(ResNetBase):
-    def __init__(self, block, num_blocks, emb_dim, num_classes=10, num_channels=3, in_planes=64):
+    def __init__(self, block, num_blocks, emb_dim, num_classes=10, num_channels=3, in_planes=64, dropout=0.):
         super(ResNetTimeEmbedding, self).__init__(block, num_blocks, num_classes, num_channels, in_planes)
         self.emb_dim = emb_dim
         self.time_mlp = nn.Sequential(
@@ -119,7 +120,7 @@ class ResNetTimeEmbedding(ResNetBase):
         strides = [1] + [2] * (len(num_blocks) - 1)
         self.layers = list()
         for i, num_block in enumerate(num_blocks):
-            self.layers.append(self._make_layer(block, dims[i], num_block, stride=strides[i]))
+            self.layers.append(self._make_layer(block, dims[i], num_block, stride=strides[i], dropout=dropout))
         self.layers = nn.ModuleList(self.layers)
 
     def forward(self, x, t):
@@ -133,11 +134,11 @@ class ResNetTimeEmbedding(ResNetBase):
         x_ = self.linear(x_)
         return x_
 
-    def _make_layer(self, block, planes, num_blocks, stride):
+    def _make_layer(self, block, planes, num_blocks, stride, dropout):
         strides = [stride] + [1] * (num_blocks - 1)
         layers = []
         for stride in strides:
-            layers.append(block(self.in_planes, planes, self.emb_dim, stride))
+            layers.append(block(self.in_planes, planes, self.emb_dim, stride, dropout))
             self.in_planes = planes * block.expansion
         return nn.ModuleList(layers)
 
@@ -210,7 +211,7 @@ class Bottleneck(nn.Module):
 class BottleneckTimeEmb(nn.Module):
     expansion = 4
 
-    def __init__(self, in_planes, planes, time_emb_dim, stride=1):
+    def __init__(self, in_planes, planes, time_emb_dim, stride=1, dropout=0.):
         super(BottleneckTimeEmb, self).__init__()
         self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=1, bias=False)
         self.bn1 = nn.BatchNorm2d(planes)
@@ -223,6 +224,7 @@ class BottleneckTimeEmb(nn.Module):
         self.shortcut = nn.Sequential()
         if stride != 1 or in_planes != self.expansion * planes:
             self.shortcut = nn.Sequential(
+                nn.Dropout(dropout),
                 nn.Conv2d(
                     in_planes,
                     self.expansion * planes,

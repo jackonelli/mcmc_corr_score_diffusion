@@ -19,13 +19,15 @@ from pytorch_lightning.callbacks import LearningRateMonitor
 #
 from src.diffusion.base import DiffusionSampler
 from src.model.trainers.classifier import DiffusionClassifier, process_labelled_batch_cifar100
-from src.diffusion.beta_schedules import improved_beta_schedule
+from src.diffusion.beta_schedules import improved_beta_schedule, linear_beta_schedule, respaced_beta_schedule
 from src.model.cifar.class_t import load_classifier_t as load_unet_classifier_t
 from src.model.resnet import load_classifier_t as load_resnet_classifier_t
 from src.model.guided_diff.classifier import load_guided_classifier as load_guided_diff_classifier_t
 from src.utils.net import get_device, Device
 from src.data.cifar import CIFAR_100_NUM_CLASSES, CIFAR_IMAGE_SIZE, CIFAR_NUM_CHANNELS, get_cifar100_data_loaders
 from pytorch_lightning.loggers import CSVLogger
+from src.utils.callbacks import EMACallback
+from pytorch_lightning.callbacks import ModelCheckpoint
 
 
 def main():
@@ -39,15 +41,24 @@ def main():
     dev = get_device(Device.GPU)
 
     # Classifier
-    class_t = select_classifier(args.arch, dev)
+    class_t = select_classifier(args.arch, dev, args.dropout)
     class_t.train()
 
     # Data
     dataloader_train, dataloader_val = get_cifar100_data_loaders(batch_size, args.dataset_path)
 
     # Diffusion process
-    betas = improved_beta_schedule(num_timesteps=num_diff_steps)
-    time_steps = th.tensor([i for i in range(num_diff_steps)])
+    if args.beta == 'lin':
+        beta_schedule = linear_beta_schedule
+    elif args.beta == 'cos':
+        beta_schedule = improved_beta_schedule
+    else:
+        raise NotImplementedError("Not a valid beta schedule choice")
+    betas, time_steps = respaced_beta_schedule(
+        original_betas=beta_schedule(num_timesteps=num_diff_steps),
+        T=num_diff_steps,
+        respaced_T=num_diff_steps,
+    )
     noise_scheduler = DiffusionSampler(betas, time_steps)
 
     diff_classifier = DiffusionClassifier(
@@ -59,15 +70,36 @@ def main():
     )
     diff_classifier.to(dev)
 
+    ema = ''
+    callbacks = []
+    if args.ema:
+        ema = '_ema'
+        ema_callback = EMACallback(decay=0.9999)
+        callbacks += [ema_callback]
+
     # lr_monitor = LearningRateMonitor(logging_interval="step")
-    logger = CSVLogger("logs", name="cifar100_class_t", flush_logs_every_n_steps=1)
+    filename = args.dataset + "_" + args.beta + "_" + args.arch + "_" + str(int(args.dropout*100)) + ema + "_class_{epoch:02d}"
+    checkpoint_callback = ModelCheckpoint(
+        filename=filename,
+        save_last=True,
+        every_n_epochs=1,
+        save_top_k=2,
+        monitor='val_loss'
+    )
+
+    if args.log_dir is None:
+        root_dir = "logs/" + args.dataset,
+    else:
+        root_dir = args.log_dir
+
     trainer = pl.Trainer(
-        logger=logger,
         max_epochs=args.max_epochs,
+        default_root_dir=root_dir,
+        log_every_n_steps=100,
         num_sanity_val_steps=0,
         accelerator="gpu",
         devices=1,
-        #callbacks=[lr_monitor],
+        callbacks=[checkpoint_callback] + callbacks
     )
 
     trainer.fit(diff_classifier, dataloader_train, dataloader_val)
@@ -76,7 +108,7 @@ def main():
     th.save(class_t.state_dict(), model_path)
 
 
-def select_classifier(arch, dev):
+def select_classifier(arch, dev, dropout=0.):
     if arch == "unet":
         class_t = load_unet_classifier_t(None, dev)
     elif arch == "resnet":
@@ -86,10 +118,12 @@ def select_classifier(arch, dev):
             emb_dim=256,
             num_classes=CIFAR_100_NUM_CLASSES,
             num_channels=CIFAR_NUM_CHANNELS,
+            dropout=dropout,
         ).to(dev)
     elif arch == "guided_diff":
         class_t = load_guided_diff_classifier_t(
-            model_path=None, dev=dev, image_size=CIFAR_IMAGE_SIZE, num_classes=CIFAR_100_NUM_CLASSES
+            model_path=None, dev=dev, image_size=CIFAR_IMAGE_SIZE, num_classes=CIFAR_100_NUM_CLASSES,
+            dropout=dropout,
         ).to(dev)
     else:
         raise ValueError(f"Incorrect model arch: {arch}")
@@ -101,13 +135,17 @@ def parse_args():
     parser.add_argument("--dataset", type=str, choices=["cifar100", "mnist"], help="Dataset selection")
     parser.add_argument("--dataset_path", type=Path, required=True, help="Path to dataset root")
     parser.add_argument("--max_epochs", type=int, default=20, help="Max. number of epochs")
-    parser.add_argument("--batch_size", type=int, default=100, help="Batch size")
+    parser.add_argument("--batch_size", type=int, default=128, help="Batch size")
+    parser.add_argument("--beta", type=str, choices=['lin', 'cos'], help='Beta schedule')
+    parser.add_argument("--dropout", type=float, default=0., help="Dropout rate")
+    parser.add_argument("--ema", action='store_true', help='If model is trained with EMA')
     parser.add_argument(
         "--arch", default="unet", type=str, choices=["unet", "resnet", "guided_diff"], help="Model architecture to use"
     )
     parser.add_argument(
         "--sim_batch", type=int, default=0, help="Simulation batch index, indexes parallell simulations."
     )
+    parser.add_argument("--log_dir", default=None, help="Root directory for logging")
     return parser.parse_args()
 
 

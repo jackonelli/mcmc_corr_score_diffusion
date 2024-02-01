@@ -983,7 +983,7 @@ class IFPipeline(DiffusionPipeline, LoraLoaderMixin):
             return noise_pred_text_, predicted_variance_, noise_pred_uncond_, noise_pred_text_
 
         # Compute the gradient function for MCMC sampling
-        def gradient_fn_unnorm(x, t, text_embeddings):
+        def gradient_fn_unnorm(x, t, text_embeddings, classes):
             # Compute normal classifier-free guidance update
             x = extract_latents(x, sizes)
             model_input_ = (torch.cat([x] * 2) if do_classifier_free_guidance else x)

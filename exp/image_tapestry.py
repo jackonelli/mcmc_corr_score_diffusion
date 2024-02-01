@@ -4,11 +4,13 @@ Code is based on https://github.com/yilundu/reduce_reuse_recycle commit 513361e6
 import matplotlib.pyplot as plt
 from src.utils.tapestry_components import visualize_context, IFPipeline
 from diffusers import DiffusionPipeline
-from src.samplers.mcmc import AnnealedHMCScoreSampler
+from src.samplers.mcmc import AnnealedLAScoreSampler
 import torch
 import pickle
 import numpy as np
 from src.utils.seeding import set_seed
+from pathlib import Path
+from datetime import datetime
 
 # Set Seed
 seed = 0
@@ -54,20 +56,22 @@ if __name__ == '__main__':
     mcmc_steps = 0
 
     # Steps sizes as a function of beta
-    step_sizes = stage_1.scheduler.betas * 0.005
-    step_sizes[-400:] = 0.0001
+    a = '1e0'
+    step_sizes = stage_1.scheduler.betas * float(a)
 
     # Number of reverse steps
     steps = 1000
 
     # Save image
-    save_file = 'space_seed0_1000_overlap'
+    time = datetime.now()
+    time = time.strftime("%Y%m-%H%M")
+    save_file = 'space_seed0_1000_overlap_LA' + str(mcmc_steps) + '_' + a + '_' + time
 
     # Stage 2
     stage2 = False
 
     # Construct Sampler
-    sampler = AnnealedHMCScoreSampler(mcmc_steps, step_sizes, 0.9, stage_1.scheduler.betas, 3, None)
+    sampler = AnnealedLAScoreSampler(mcmc_steps, step_sizes, None, 5)
 
     color_lookup = {}
 
@@ -92,6 +96,8 @@ if __name__ == '__main__':
         latents = stage_1(context, sampler, height=128, width=128, generator=generator, num_inference_steps=steps)
 
     pickle.dump(latents, open("{}.p".format(save_file), "wb"))
+    if mcmc_steps > 0:
+        sampler.save_stats_to_file(Path.cwd(), save_file + '.p')
 
     plot_image(latents)
 
