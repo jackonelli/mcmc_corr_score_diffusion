@@ -57,9 +57,9 @@ def main():
     else:
         if args.model_size == 'small':
             if args.energy:
-                unet = UNetEnergy(image_size, time_emb_dim, channels).to(dev)
+                unet = UNetEnergy(image_size, time_emb_dim, channels, dropout=args.dropout).to(dev)
             else:
-                unet = UNet(image_size, time_emb_dim, channels).to(dev)
+                unet = UNet(image_size, time_emb_dim, channels, dropout=args.dropout).to(dev)
         elif args.model_size == 'large':
             if args.energy:
                 unet = UNetEnergy_Ho(dim=64, dim_mults=(1, 2, 4, 8), flash_attn=False, dropout=args.dropout)

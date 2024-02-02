@@ -67,6 +67,7 @@ class UNet(nn.Module):
         dim: int,
         time_emb_dim: int,
         channels: int,
+        dropout: float = 0.
     ):
         super().__init__()
 
@@ -132,7 +133,7 @@ class UNet(nn.Module):
         self.middle = nn.ModuleList(
             [
                 ResnetBlock(4 * dim, 4 * dim, time_emb_dim),
-                Residual(PreNorm(4 * dim, Attention(4 * dim))),
+                Residual(PreNorm(4 * dim, Attention(4 * dim, dropout=dropout))),
                 ResnetBlock(4 * dim, 4 * dim, time_emb_dim),
             ]
         )
@@ -220,8 +221,9 @@ class UNetEnergy(UNet, EnergyModel):
         dim: int,
         time_emb_dim: int,
         channels: int,
+        dropout: float = 0.
     ):
-        UNet.__init__(self, dim=dim, time_emb_dim=time_emb_dim, channels=channels)
+        UNet.__init__(self, dim=dim, time_emb_dim=time_emb_dim, channels=channels, dropout=dropout)
         EnergyModel.__init__(self)
 
     def energy(self, x: th.Tensor, time: th.Tensor):
