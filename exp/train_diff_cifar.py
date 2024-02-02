@@ -29,8 +29,11 @@ def main():
         param_model = "score"
 
     ema = ''
+    callbacks = []
     if args.ema:
         ema = '_ema'
+        ema_callback = EMACallback(decay=0.9999)
+        callbacks += [ema_callback]
     time_emb_dim = 112
     image_size = 32
     channels = 3
@@ -88,9 +91,8 @@ def main():
         save_last=True,
         every_n_epochs=1,
         save_top_k=5,
-        monitor='train_loss'
+        monitor=args.monitor
     )
-    ema_callback = EMACallback(decay=0.9999)
 
     diffm.to(dev)
     if args.log_dir is None:
@@ -106,7 +108,7 @@ def main():
         num_sanity_val_steps=0,
         accelerator="gpu",
         devices=1,
-        callbacks=[checkpoint_callback, ema_callback]
+        callbacks=[checkpoint_callback] + callbacks
     )
 
     trainer.fit(diffm, dataloader_train, dataloader_val)
@@ -127,6 +129,8 @@ def parse_args():
     parser.add_argument("--ema", action='store_true', help='If model is trained with EMA')
     parser.add_argument("--dropout", default=0., type=float, help="Dropout")
     parser.add_argument("--log_dir", default=None, help="Root directory for logging")
+    parser.add_argument("--monitor", choices=['val_loss', 'train_loss'], default='val_loss',
+                        help="Metric to monitor")
     return parser.parse_args()
 
 

@@ -37,9 +37,9 @@ class DiffusionModel(pl.LightningModule):
         predicted_noise = self.model(x_noisy, ts)
 
         loss = self.loss_f(noise, predicted_noise)
-        self.log("train_loss", loss)
         self.train_loss += loss.detach().cpu().item()
         self.i_batch_train += 1
+        self.log("train_loss", self.train_loss / self.i_batch_train)
         return loss
 
     def on_train_epoch_end(self):
@@ -74,9 +74,10 @@ class DiffusionModel(pl.LightningModule):
         else:
             predicted_noise = self.model(x_noisy, ts)
         loss = self.loss_f(noise, predicted_noise)
-        self.log("val_loss", loss)
+        # self.log("val_loss", loss)
         self.val_loss += loss.detach().cpu().item()
         self.i_batch_val += 1
+        self.log("val_loss",self.val_loss / self.i_batch_val)
         return loss
 
     def on_validation_epoch_end(self):
