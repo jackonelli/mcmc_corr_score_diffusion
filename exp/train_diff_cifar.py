@@ -16,6 +16,7 @@ from src.diffusion.beta_schedules import improved_beta_schedule, linear_beta_sch
 from src.model.cifar.unet import UNet, UNetEnergy
 from src.model.trainers.diffusion import DiffusionModel
 from src.model.cifar.unet_ho import Unet_Ho, UNetEnergy_Ho
+from src.model.cifar.unet_drop import Unet_drop, UnetDropEnergy
 from src.utils.net import get_device, Device
 from pytorch_lightning.callbacks import ModelCheckpoint
 from src.utils.callbacks import EMACallback
@@ -65,6 +66,13 @@ def main():
                 unet = UNetEnergy_Ho(dim=64, dim_mults=(1, 2, 4, 8), flash_attn=False, dropout=args.dropout)
             else:
                 unet = Unet_Ho(dim=64, dim_mults=(1, 2, 4, 8), flash_attn=False, dropout=args.dropout)
+        elif args.model_size == 'large2':
+            if args.energy:
+                unet = UnetDropEnergy(T=num_diff_steps, ch=128, ch_mult=[1, 2, 2, 2], attn=[1],
+                                      num_res_blocks=2, dropout=args.dropout)
+            else:
+                unet = Unet_drop(T=num_diff_steps, ch=128, ch_mult=[1, 2, 2, 2], attn=[1],
+                                 num_res_blocks=2, dropout=args.dropout)
         else:
             raise NotImplementedError("Not a valid model size.")
 
@@ -96,7 +104,7 @@ def main():
 
     diffm.to(dev)
     if args.log_dir is None:
-        root_dir = "logs/" + args.dataset,
+        root_dir = "logs/" + args.dataset
     else:
         root_dir = args.log_dir
 
@@ -119,7 +127,7 @@ def main():
 def parse_args():
     parser = ArgumentParser(prog="Train Cifar10 diffusion model")
     parser.add_argument("--energy", action='store_true', help="Use energy-parameterization")
-    parser.add_argument("--model_size", choices=['small', 'large'], help="Model size of Unet")
+    parser.add_argument("--model_size", choices=['small', 'large', 'large2'], help="Model size of Unet")
     parser.add_argument("--beta", choices=['lin', 'cos'], help="Type of beta schedule")
     parser.add_argument("--dataset", choices=['cifar10', 'cifar100'], help="Type of beta schedule")
     parser.add_argument("--dataset_path", default=None, help="Path to dataset root")

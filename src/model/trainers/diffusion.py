@@ -49,8 +49,12 @@ class DiffusionModel(pl.LightningModule):
         self.i_epoch += 1
 
     def configure_optimizers(self):
+        warmup = 5000
+        def warmup_lr(step):
+            return min(step, warmup) / warmup
         optimizer = th.optim.Adam(self.parameters(), lr=2e-4)
-        scheduler = th.optim.lr_scheduler.StepLR(optimizer, 1, gamma=1.0)
+        # scheduler = th.optim.lr_scheduler.StepLR(optimizer, 1, gamma=1.0)
+        scheduler = th.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=warmup_lr)
         return [optimizer], [scheduler]
 
     def validation_step(self, batch, batch_idx):
