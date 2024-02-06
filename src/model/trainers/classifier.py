@@ -30,6 +30,13 @@ def process_labelled_batch_cifar100(batch, device) -> Tuple[int, th.Tensor, th.T
     y = batch["fine_label"].long().to(device)
     return batch_size, x, y
 
+def process_labelled_batch_cifar10(batch, device) -> Tuple[int, th.Tensor, th.Tensor]:
+    """Hack to handle Cifar10 data"""
+    batch_size = batch["pixel_values"].size(0)
+    x = batch["pixel_values"].to(device)
+    y = batch["label"].long().to(device)
+    return batch_size, x, y
+
 
 class DiffusionClassifier(pl.LightningModule):
     """Trainer for learning classification model p(y | x_t),

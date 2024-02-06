@@ -5,7 +5,7 @@ p(y | x_t, t), which we estimate by a classifier which takes the diffusion step 
 """
 
 import sys
-
+import os
 
 sys.path.append(".")
 from argparse import ArgumentParser
@@ -18,7 +18,8 @@ from pytorch_lightning.callbacks import LearningRateMonitor
 
 #
 from src.diffusion.base import DiffusionSampler
-from src.model.trainers.classifier import DiffusionClassifier, process_labelled_batch_cifar100
+from src.model.trainers.classifier import (DiffusionClassifier, process_labelled_batch_cifar100,
+                                           process_labelled_batch_cifar10)
 from src.diffusion.beta_schedules import improved_beta_schedule, linear_beta_schedule, respaced_beta_schedule
 from src.model.cifar.class_t import load_classifier_t as load_unet_classifier_t
 from src.model.resnet import load_classifier_t as load_resnet_classifier_t
@@ -44,9 +45,11 @@ def main():
     if args.dataset == "cifar10":
         dataloader_train, dataloader_val = get_cifar10_data_loaders(args.batch_size, data_root=args.dataset_path)
         num_classes, num_channels, img_size = CIFAR_10_NUM_CLASSES, CIFAR_NUM_CHANNELS, CIFAR_IMAGE_SIZE
+        batch_fn = process_labelled_batch_cifar10
     elif args.dataset == "cifar100":
         dataloader_train, dataloader_val = get_cifar100_data_loaders(args.batch_size, data_root=args.dataset_path)
         num_classes, num_channels, img_size = CIFAR_100_NUM_CLASSES, CIFAR_NUM_CHANNELS, CIFAR_IMAGE_SIZE
+        batch_fn = process_labelled_batch_cifar100
     else:
         raise ValueError('Invalid dataset')
 
@@ -73,7 +76,7 @@ def main():
         model=class_t,
         loss_f=th.nn.CrossEntropyLoss(),
         noise_scheduler=noise_scheduler,
-        batch_fn=process_labelled_batch_cifar100,
+        batch_fn=batch_fn,
         batches_per_epoch=len(dataloader_train),
     )
     diff_classifier.to(dev)
@@ -96,7 +99,7 @@ def main():
     )
 
     if args.log_dir is None:
-        root_dir = "logs/" + args.dataset,
+        root_dir = os.path.join('logs', args.dataset)
     else:
         root_dir = args.log_dir
 
