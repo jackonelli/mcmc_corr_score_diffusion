@@ -273,15 +273,103 @@ def load_model(
 
     if model_path is not None:
         params = load_params_from_file(model_path)
+        # params = params['ema_model']
         if 'ema' in model_path.stem:
-            keys = [k for k in params.keys()]
-            keys = keys[:int(len(keys)/2)]
+            all_keys = [k for k in params.keys()]
+            ema_keys = all_keys[int(len(all_keys) / 2):]
+            keys = all_keys[:int(len(all_keys)/2)]
             params_ = OrderedDict()
-            for key in keys:
-                params_[key] = params[key]
+            for key, ema_key in zip(keys, ema_keys):
+                params_[key] = params[ema_key]
             params = params_
         unet.load_state_dict(params)
     unet.to(device)
     unet.eval()
     return unet
 
+
+class ClassifierDrop(nn.Module):
+    """UNet based classifier
+    @param dim: dimension of input x (assumes square (dim x dim) img for now)
+    @param time_emb_dim: dimension of time embedding.
+    @param channels: number of channels the data have (e.g. 3 for RGB images).
+    """
+
+    def __init__(self, T, ch, ch_mult, attn, num_res_blocks, dropout, num_classes, x_size):
+        super().__init__()
+        assert all([i < len(ch_mult) for i in attn]), 'attn index out of bound'
+        tdim = ch * 4
+        self.time_embedding = TimeEmbedding(T, ch, tdim)
+        self.num_classes = num_classes
+
+        self.head = nn.Conv2d(3, ch, kernel_size=3, stride=1, padding=1)
+        self.downblocks = nn.ModuleList()
+        chs = [ch]  # record output channel when dowmsample for upsample
+        now_ch = ch
+        for i, mult in enumerate(ch_mult):
+            out_ch = ch * mult
+            for _ in range(num_res_blocks):
+                self.downblocks.append(ResBlock(
+                    in_ch=now_ch, out_ch=out_ch, tdim=tdim,
+                    dropout=dropout, attn=(i in attn)))
+                now_ch = out_ch
+                chs.append(now_ch)
+            if i != len(ch_mult) - 1:
+                self.downblocks.append(DownSample(now_ch))
+                chs.append(now_ch)
+
+        self.middleblocks = nn.ModuleList([
+            ResBlock(now_ch, now_ch, tdim, dropout, attn=True),
+            ResBlock(now_ch, now_ch, tdim, dropout, attn=False),
+        ])
+
+        x = torch.ones((1,) + x_size)
+        t = torch.ones((1,)).long()
+        x_out = torch.flatten(self._forward(x, t), start_dim=1)
+
+        self.log_reg = nn.Linear(x_out.shape[1], self.num_classes)
+        self.initialize()
+
+    def initialize(self):
+        init.xavier_uniform_(self.head.weight)
+        init.zeros_(self.head.bias)
+
+    def _forward(self, x, t):
+        # Timestep embedding
+        temb = self.time_embedding(t)
+        # Downsampling
+        h = self.head(x)
+        hs = [h]
+        for layer in self.downblocks:
+            h = layer(h, temb)
+            hs.append(h)
+        # Middle
+        for layer in self.middleblocks:
+            h = layer(h, temb)
+        return h
+
+    def forward(self, x, t):
+        # UNet part
+        h = self._forward(x, t)
+        # MLP
+        h = torch.flatten(h, start_dim=1)
+        h = self.log_reg(h)
+        return h
+
+def load_classifier_t(
+    model_path: Optional[Path], dev, num_diff_steps, num_classes, x_size, ch=128, ch_mult=None,
+        attn=None, num_res_blocks=2, dropout=0.1
+):
+    if ch_mult is None:
+        ch_mult = [1, 2, 2, 2]
+
+    if attn is None:
+        attn = [1]
+    print("Loading unet dropout model")
+    model = ClassifierDrop(T=num_diff_steps, ch=ch, ch_mult=ch_mult, attn=attn,
+                           num_res_blocks=num_res_blocks, dropout=dropout, num_classes=num_classes,
+                           x_size=x_size)
+    if model_path is not None:
+        model.load_state_dict(load_params_from_file(model_path))
+    model.to(dev)
+    return model

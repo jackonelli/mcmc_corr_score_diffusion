@@ -22,9 +22,11 @@ from src.model.trainers.classifier import DiffusionClassifier, process_labelled_
 from src.diffusion.beta_schedules import improved_beta_schedule, linear_beta_schedule, respaced_beta_schedule
 from src.model.cifar.class_t import load_classifier_t as load_unet_classifier_t
 from src.model.resnet import load_classifier_t as load_resnet_classifier_t
+from src.model.cifar.unet_drop import load_classifier_t as load_unet_drop_classifier_t
 from src.model.guided_diff.classifier import load_guided_classifier as load_guided_diff_classifier_t
 from src.utils.net import get_device, Device
-from src.data.cifar import CIFAR_100_NUM_CLASSES, CIFAR_IMAGE_SIZE, CIFAR_NUM_CHANNELS, get_cifar100_data_loaders
+from src.data.cifar import (CIFAR_100_NUM_CLASSES, CIFAR_10_NUM_CLASSES, CIFAR_IMAGE_SIZE, CIFAR_NUM_CHANNELS,
+                            get_cifar100_data_loaders, get_cifar10_data_loaders)
 from pytorch_lightning.loggers import CSVLogger
 from src.utils.callbacks import EMACallback
 from pytorch_lightning.callbacks import ModelCheckpoint
@@ -32,20 +34,27 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 def main():
     args = parse_args()
-    num_diff_steps = 1000
-    batch_size = args.batch_size
+    num_diff_steps = args.num_diff_steps
     model_path = Path.cwd() / "models" / f"{args.dataset}_{args.arch}_class_t.pt"
     if not model_path.parent.exists():
         print(f"Save dir. '{model_path.parent}' does not exist.")
         return
     dev = get_device(Device.GPU)
 
-    # Classifier
-    class_t = select_classifier(args.arch, dev, args.dropout)
-    class_t.train()
-
     # Data
-    dataloader_train, dataloader_val = get_cifar100_data_loaders(batch_size, args.dataset_path)
+    if args.dataset == "cifar10":
+        dataloader_train, dataloader_val = get_cifar10_data_loaders(args.batch_size, data_root=args.dataset_path)
+        num_classes, num_channels, img_size = CIFAR_10_NUM_CLASSES, CIFAR_NUM_CHANNELS, CIFAR_IMAGE_SIZE
+    elif args.dataset == "cifar100":
+        dataloader_train, dataloader_val = get_cifar100_data_loaders(args.batch_size, data_root=args.dataset_path)
+        num_classes, num_channels, img_size = CIFAR_100_NUM_CLASSES, CIFAR_NUM_CHANNELS, CIFAR_IMAGE_SIZE
+    else:
+        raise ValueError('Invalid dataset')
+
+    # Classifier
+    class_t = select_classifier(args.arch, dev, num_channels=num_channels, img_size=img_size,
+                                num_classes=num_classes, dropout=args.dropout, num_diff_steps=num_diff_steps)
+    class_t.train()
 
     # Diffusion process
     if args.beta == 'lin':
@@ -83,7 +92,7 @@ def main():
         filename=filename,
         save_last=True,
         every_n_epochs=1,
-        save_top_k=2,
+        save_top_k=5,
         monitor='val_loss'
     )
 
@@ -93,6 +102,7 @@ def main():
         root_dir = args.log_dir
 
     trainer = pl.Trainer(
+        gradient_clip_val=1.,
         max_epochs=args.max_epochs,
         default_root_dir=root_dir,
         log_every_n_steps=100,
@@ -108,7 +118,7 @@ def main():
     th.save(class_t.state_dict(), model_path)
 
 
-def select_classifier(arch, dev, dropout=0.):
+def select_classifier(arch, dev, num_classes, num_channels, img_size, dropout=0., num_diff_steps=1000):
     if arch == "unet":
         class_t = load_unet_classifier_t(None, dev)
     elif arch == "resnet":
@@ -116,15 +126,19 @@ def select_classifier(arch, dev, dropout=0.):
             model_path=None,
             dev=dev,
             emb_dim=256,
-            num_classes=CIFAR_100_NUM_CLASSES,
-            num_channels=CIFAR_NUM_CHANNELS,
+            num_classes=num_classes,
+            num_channels=num_channels,
             dropout=dropout,
         ).to(dev)
     elif arch == "guided_diff":
         class_t = load_guided_diff_classifier_t(
-            model_path=None, dev=dev, image_size=CIFAR_IMAGE_SIZE, num_classes=CIFAR_100_NUM_CLASSES,
+            model_path=None, dev=dev, image_size=img_size, num_classes=num_classes,
             dropout=dropout,
         ).to(dev)
+    elif arch == "unet_drop":
+        x_size = (num_channels, img_size, img_size)
+        class_t = load_unet_drop_classifier_t(model_path=None, dev=dev, dropout=dropout,
+                                              num_diff_steps=num_diff_steps, num_classes=num_classes, x_size=x_size).to(dev)
     else:
         raise ValueError(f"Incorrect model arch: {arch}")
     return class_t
@@ -132,15 +146,17 @@ def select_classifier(arch, dev, dropout=0.):
 
 def parse_args():
     parser = ArgumentParser(prog="Train Cifar100 classification model")
-    parser.add_argument("--dataset", type=str, choices=["cifar100", "mnist"], help="Dataset selection")
+    parser.add_argument("--dataset", type=str, choices=["cifar100", "cifar10"], help="Dataset selection")
     parser.add_argument("--dataset_path", type=Path, required=True, help="Path to dataset root")
     parser.add_argument("--max_epochs", type=int, default=20, help="Max. number of epochs")
     parser.add_argument("--batch_size", type=int, default=128, help="Batch size")
+    parser.add_argument("--num_diff_steps", type=int, default=1000, help="Number of time steps")
     parser.add_argument("--beta", type=str, choices=['lin', 'cos'], help='Beta schedule')
     parser.add_argument("--dropout", type=float, default=0., help="Dropout rate")
     parser.add_argument("--ema", action='store_true', help='If model is trained with EMA')
     parser.add_argument(
-        "--arch", default="unet", type=str, choices=["unet", "resnet", "guided_diff"], help="Model architecture to use"
+        "--arch", default="unet", type=str, choices=["unet", "resnet", "guided_diff", "unet_drop"],
+        help="Model architecture to use"
     )
     parser.add_argument(
         "--sim_batch", type=int, default=0, help="Simulation batch index, indexes parallell simulations."

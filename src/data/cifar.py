@@ -7,6 +7,7 @@ from datasets import load_dataset
 CIFAR_IMAGE_SIZE = 32
 CIFAR_NUM_CHANNELS = 3
 CIFAR_100_NUM_CLASSES = 100
+CIFAR_10_NUM_CLASSES = 100
 
 
 def collate_fn(batch):

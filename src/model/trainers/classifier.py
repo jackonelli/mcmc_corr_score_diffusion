@@ -58,12 +58,12 @@ class DiffusionClassifier(pl.LightningModule):
         batch_size, x, y = self._batch_fn(batch, self.device)
         # Algorithm 1 line 3: sample t uniformally for every example in the batch
         T = self.noise_scheduler.time_steps.size(0)
-        # ts = th.randint(0, T, (batch_size,), device=self.device).long()
+        ts = th.randint(0, T, (batch_size,), device=self.device).long()
         # ts = th.zeros((batch_size,), device=self.device).long()
-        p = np.linspace(5, 1, T)
-        p = p/p.sum()
-        ts = np.random.choice(T, (batch_size,), p=p)
-        ts = th.from_numpy(ts).long().to(self.device)
+        # p = np.linspace(5, 1, T)
+        # p = p/p.sum()
+        # ts = np.random.choice(T, (batch_size,), p=p)
+        # ts = th.from_numpy(ts).long().to(self.device)
 
         noise = th.randn_like(x)
         x_noisy = self.noise_scheduler.q_sample(x_0=x, ts=ts, noise=noise)
@@ -83,14 +83,14 @@ class DiffusionClassifier(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         batch_size, x, y = self._batch_fn(batch, self.device)
 
-        rng_state = th.get_rng_state()
-        th.manual_seed(self.i_batch_val)
+        # rng_state = th.get_rng_state()
+        # th.manual_seed(self.i_batch_val)
 
         T = self.noise_scheduler.time_steps.size(0)
         # Only report val. acc for t=0
         ts = th.randint(0, T, (batch_size,), device=self.device).long()
         ts0 = th.zeros((batch_size,), device=self.device).long()
-        th.set_rng_state(rng_state)
+        # th.set_rng_state(rng_state)
         logits0 = self.model(x, ts0)
         loss0 = self.loss_f(logits0, y)
         acc0 = accuracy(hard_label_from_logit(logits0), y)
@@ -140,8 +140,12 @@ class DiffusionClassifier(pl.LightningModule):
         return {"optimizer": optimizer, "lr_scheduler": scheduler_dict}
     """
     def configure_optimizers(self):
+        warmup = 5000
+        def warmup_lr(step):
+            return min(step, warmup) / warmup
         optimizer = th.optim.Adam(self.parameters(), lr=2e-4)
-        scheduler = th.optim.lr_scheduler.StepLR(optimizer, 1, gamma=1.0)
+        # scheduler = th.optim.lr_scheduler.StepLR(optimizer, 1, gamma=1.0)
+        scheduler = th.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=warmup_lr)
         return [optimizer], [scheduler]
 
 

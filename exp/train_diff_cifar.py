@@ -98,7 +98,7 @@ def main():
         filename=filename,
         save_last=True,
         every_n_epochs=1,
-        save_top_k=5,
+        save_top_k=3,
         monitor=args.monitor
     )
 
@@ -109,6 +109,7 @@ def main():
         root_dir = args.log_dir
 
     trainer = pl.Trainer(
+        gradient_clip_val=1.,
         max_epochs=args.max_epochs,
         max_steps=args.max_steps,
         default_root_dir=root_dir,
