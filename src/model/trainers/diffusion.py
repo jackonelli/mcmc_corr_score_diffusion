@@ -61,14 +61,14 @@ class DiffusionModel(pl.LightningModule):
         batch_size = batch["pixel_values"].shape[0]
         x = batch["pixel_values"].to(self.device)
 
-        # rng_state = th.get_rng_state()
-        # th.manual_seed(self.i_batch_val)
+        rng_state = th.get_rng_state()
+        th.manual_seed(self.i_batch_val)
 
         # Algorithm 1 line 3: sample t uniformally for every example in the batch
         ts = th.randint(0, self.noise_scheduler.num_diff_steps, (batch_size,), device=self.device).long()
 
         noise = th.randn_like(x)
-        # th.set_rng_state(rng_state)
+        th.set_rng_state(rng_state)
 
         x_noisy = self.noise_scheduler.q_sample(x_0=x, ts=ts, noise=noise)
         if self.require_g:

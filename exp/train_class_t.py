@@ -27,7 +27,6 @@ from src.model.guided_diff.classifier import load_guided_classifier as load_guid
 from src.utils.net import get_device, Device
 from src.data.cifar import (CIFAR_100_NUM_CLASSES, CIFAR_10_NUM_CLASSES, CIFAR_IMAGE_SIZE, CIFAR_NUM_CHANNELS,
                             get_cifar100_data_loaders, get_cifar10_data_loaders)
-from pytorch_lightning.loggers import CSVLogger
 from src.utils.callbacks import EMACallback
 from pytorch_lightning.callbacks import ModelCheckpoint
 
@@ -93,7 +92,7 @@ def main():
         save_last=True,
         every_n_epochs=1,
         save_top_k=5,
-        monitor='val_loss'
+        monitor=args.monitor
     )
 
     if args.log_dir is None:
@@ -104,6 +103,7 @@ def main():
     trainer = pl.Trainer(
         gradient_clip_val=1.,
         max_epochs=args.max_epochs,
+        max_steps=args.max_steps,
         default_root_dir=root_dir,
         log_every_n_steps=100,
         num_sanity_val_steps=0,
@@ -138,7 +138,8 @@ def select_classifier(arch, dev, num_classes, num_channels, img_size, dropout=0.
     elif arch == "unet_drop":
         x_size = (num_channels, img_size, img_size)
         class_t = load_unet_drop_classifier_t(model_path=None, dev=dev, dropout=dropout,
-                                              num_diff_steps=num_diff_steps, num_classes=num_classes, x_size=x_size).to(dev)
+                                              num_diff_steps=num_diff_steps, num_classes=num_classes,
+                                              x_size=x_size).to(dev)
     else:
         raise ValueError(f"Incorrect model arch: {arch}")
     return class_t
@@ -148,7 +149,8 @@ def parse_args():
     parser = ArgumentParser(prog="Train Cifar100 classification model")
     parser.add_argument("--dataset", type=str, choices=["cifar100", "cifar10"], help="Dataset selection")
     parser.add_argument("--dataset_path", type=Path, required=True, help="Path to dataset root")
-    parser.add_argument("--max_epochs", type=int, default=20, help="Max. number of epochs")
+    parser.add_argument("--max_epochs", type=int, default=-1, help="Max. number of epochs")
+    parser.add_argument("--max_steps", type=int, default=int(8e5), help="Max. number of steps")
     parser.add_argument("--batch_size", type=int, default=128, help="Batch size")
     parser.add_argument("--num_diff_steps", type=int, default=1000, help="Number of time steps")
     parser.add_argument("--beta", type=str, choices=['lin', 'cos'], help='Beta schedule')
@@ -162,6 +164,8 @@ def parse_args():
         "--sim_batch", type=int, default=0, help="Simulation batch index, indexes parallell simulations."
     )
     parser.add_argument("--log_dir", default=None, help="Root directory for logging")
+    parser.add_argument("--monitor", choices=['val_loss', 'train_loss'], default='val_loss',
+                        help="Metric to monitor")
     return parser.parse_args()
 
 
