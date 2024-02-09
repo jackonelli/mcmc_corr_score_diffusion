@@ -3,13 +3,10 @@
 Base diffusion model
 
 """
-from typing import Optional
-from pathlib import Path
 import torch as th
 import torch.nn as nn
 from src.model.base import EnergyModel
-from src.data.cifar import CIFAR_IMAGE_SIZE, CIFAR_NUM_CHANNELS
-from src.model.cifar.common import (
+from src.model.cifar.modules import (
     SinusoidalPositionEmbeddings,
     ResnetBlock,
     Attention,
@@ -19,41 +16,6 @@ from src.model.cifar.common import (
     upsample,
     downsample,
 )
-from src.utils.net import load_params_from_file
-from collections import OrderedDict
-
-
-def load_model(
-    model_path: Optional[Path],
-    device,
-    time_emb_dim: int = 112,
-    image_size: int = CIFAR_IMAGE_SIZE,
-    num_channels: int = CIFAR_NUM_CHANNELS,
-    energy_param: bool = False,
-):
-    """Load UNET diffusion model from state dict
-
-    The model_path can be a standalone '.th' file or part of a pl checkpoint '.ckpt' file.
-    If model_path is None, a new model is initialised.
-    """
-    if energy_param:
-        unet = UNetEnergy(dim=image_size, time_emb_dim=time_emb_dim, channels=num_channels).to(device)
-    else:
-        unet = UNet(dim=image_size, time_emb_dim=time_emb_dim, channels=num_channels)
-    if model_path is not None:
-        params = load_params_from_file(model_path)
-        if 'ema' in model_path.stem:
-            keys = [k for k in params.keys()]
-            keys = keys[:int(len(keys) / 2)]
-            params_ = OrderedDict()
-            for key in keys:
-                params_[key] = params[key]
-            params = params_
-        unet.load_state_dict(params)
-    unet.to(device)
-    unet.eval()
-    return unet
-
 
 class UNet(nn.Module):
     """UNet

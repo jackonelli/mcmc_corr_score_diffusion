@@ -7,6 +7,8 @@ p(y | x_t, t), which we estimate by a classifier which takes the diffusion step 
 import sys
 import os
 
+from src.model.cifar.utils import select_classifier
+
 sys.path.append(".")
 from argparse import ArgumentParser
 from pathlib import Path
@@ -14,17 +16,12 @@ from pathlib import Path
 #
 import torch as th
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import LearningRateMonitor
 
 #
 from src.diffusion.base import DiffusionSampler
 from src.model.trainers.classifier import (DiffusionClassifier, process_labelled_batch_cifar100,
                                            process_labelled_batch_cifar10)
 from src.diffusion.beta_schedules import improved_beta_schedule, linear_beta_schedule, respaced_beta_schedule
-from src.model.cifar.class_t import load_classifier_t as load_unet_classifier_t
-from src.model.resnet import load_classifier_t as load_resnet_classifier_t
-from src.model.cifar.unet_drop import load_classifier_t as load_unet_drop_classifier_t
-from src.model.guided_diff.classifier import load_guided_classifier as load_guided_diff_classifier_t
 from src.utils.net import get_device, Device
 from src.data.cifar import (CIFAR_100_NUM_CLASSES, CIFAR_10_NUM_CLASSES, CIFAR_IMAGE_SIZE, CIFAR_NUM_CHANNELS,
                             get_cifar100_data_loaders, get_cifar10_data_loaders)
@@ -54,7 +51,7 @@ def main():
         raise ValueError('Invalid dataset')
 
     # Classifier
-    class_t = select_classifier(args.arch, dev, num_channels=num_channels, img_size=img_size,
+    class_t = select_classifier(arch=args.arch, dev=dev, num_channels=num_channels, img_size=img_size,
                                 num_classes=num_classes, dropout=args.dropout, num_diff_steps=num_diff_steps)
     class_t.train()
 
@@ -78,6 +75,8 @@ def main():
         noise_scheduler=noise_scheduler,
         batch_fn=batch_fn,
         batches_per_epoch=len(dataloader_train),
+        lr=args.learning_rate,
+        weight_decay=args.weight_decay
     )
     diff_classifier.to(dev)
 
@@ -121,46 +120,19 @@ def main():
     th.save(class_t.state_dict(), model_path)
 
 
-def select_classifier(arch, dev, num_classes, num_channels, img_size, dropout=0., num_diff_steps=1000):
-    if arch == "unet":
-        class_t = load_unet_classifier_t(None, dev)
-    elif arch == "resnet":
-        class_t = load_resnet_classifier_t(
-            model_path=None,
-            dev=dev,
-            emb_dim=256,
-            num_classes=num_classes,
-            num_channels=num_channels,
-            dropout=dropout,
-        ).to(dev)
-    elif arch == "guided_diff":
-        class_t = load_guided_diff_classifier_t(
-            model_path=None, dev=dev, image_size=img_size, num_classes=num_classes,
-            dropout=dropout,
-        ).to(dev)
-    elif arch == "unet_drop":
-        x_size = (num_channels, img_size, img_size)
-        class_t = load_unet_drop_classifier_t(model_path=None, dev=dev, dropout=dropout,
-                                              num_diff_steps=num_diff_steps, num_classes=num_classes,
-                                              x_size=x_size).to(dev)
-    else:
-        raise ValueError(f"Incorrect model arch: {arch}")
-    return class_t
-
-
 def parse_args():
     parser = ArgumentParser(prog="Train Cifar100 classification model")
     parser.add_argument("--dataset", type=str, choices=["cifar100", "cifar10"], help="Dataset selection")
     parser.add_argument("--dataset_path", type=Path, required=True, help="Path to dataset root")
     parser.add_argument("--max_epochs", type=int, default=-1, help="Max. number of epochs")
-    parser.add_argument("--max_steps", type=int, default=int(8e5), help="Max. number of steps")
+    parser.add_argument("--max_steps", type=int, default=int(3e5), help="Max. number of steps")
     parser.add_argument("--batch_size", type=int, default=128, help="Batch size")
     parser.add_argument("--num_diff_steps", type=int, default=1000, help="Number of time steps")
     parser.add_argument("--beta", type=str, choices=['lin', 'cos'], help='Beta schedule')
     parser.add_argument("--dropout", type=float, default=0., help="Dropout rate")
     parser.add_argument("--ema", action='store_true', help='If model is trained with EMA')
     parser.add_argument(
-        "--arch", default="unet", type=str, choices=["unet", "resnet", "guided_diff", "unet_drop"],
+        "--arch", default="unet", type=str, choices=["unet", "resnet", "guided_diff", "unet_ho_drop"],
         help="Model architecture to use"
     )
     parser.add_argument(
@@ -169,6 +141,8 @@ def parse_args():
     parser.add_argument("--log_dir", default=None, help="Root directory for logging")
     parser.add_argument("--monitor", choices=['val_loss', 'train_loss'], default='val_loss',
                         help="Metric to monitor")
+    parser.add_argument("--weight_decay", default=0, type=float, help="Weight decay")
+    parser.add_argument("--learning_rate", default=2e-4, type=float, help="Learning rate")
     return parser.parse_args()
 
 

@@ -28,12 +28,11 @@ from src.samplers.mcmc import (
 )
 
 # Diff models
-from src.model.cifar.unet import load_model as load_unet_diff_model
+from src.model.cifar.utils import get_diff_model, select_cifar_classifier
 from src.model.guided_diff.unet import load_pretrained_diff_unet
 from src.model.unet import load_mnist_diff
 
 # Classifiers
-from src.model.cifar.class_t import load_classifier_t as load_unet_classifier_t
 from src.model.resnet import load_classifier_t as load_resnet_classifier_t
 from src.model.guided_diff.classifier import load_guided_classifier as load_guided_diff_classifier_t
 
@@ -105,13 +104,19 @@ def load_models(config, device):
         classifier.eval()
     elif "cifar100" in diff_model_name:
         dataset_name = "cifar100"
-        beta_schedule, post_var = improved_beta_schedule, "beta"
+        if "cos" in diff_model_name:
+            beta_schedule, post_var = improved_beta_schedule, "beta"
+        else:
+            beta_schedule, post_var = linear_beta_schedule, "beta"
         image_size, num_classes, num_channels = (CIFAR_IMAGE_SIZE, CIFAR_100_NUM_CLASSES, CIFAR_NUM_CHANNELS)
-        diff_model = load_unet_diff_model(
-            diff_model_path, device, image_size=CIFAR_IMAGE_SIZE, energy_param=energy_param
-        )
+        diff_model = get_diff_model(name=diff_model_name,
+                                    diff_model_path=diff_model_path,
+                                    device=device,
+                                    energy_param=energy_param,
+                                    image_size=CIFAR_IMAGE_SIZE,
+                                    num_steps=config.num_steps)
         diff_model.eval()
-        classifier = select_cifar_classifier(model_path=classifier_path, dev=device)
+        classifier = select_cifar_classifier(model_path=classifier_path, dev=device, num_steps=config.num_steps)
         classifier.eval()
     elif f"{config.image_size}x{config.image_size}_diffusion" in diff_model_name:
         dataset_name = "imagenet"
@@ -134,37 +139,6 @@ def load_models(config, device):
         post_var,
         energy_param,
     )
-
-
-def select_cifar_classifier(model_path: Path, dev):
-    arch = parse_arch(model_path)
-    if arch == "unet":
-        class_t = load_unet_classifier_t(None, dev)
-    elif arch == "resnet":
-        class_t = load_resnet_classifier_t(
-            model_path=model_path,
-            dev=dev,
-            emb_dim=112,
-            num_classes=CIFAR_100_NUM_CLASSES,
-            num_channels=CIFAR_NUM_CHANNELS,
-        ).to(dev)
-    elif arch == "guided_diff":
-        class_t = load_guided_diff_classifier_t(
-            model_path=None, dev=dev, image_size=CIFAR_IMAGE_SIZE, num_classes=CIFAR_100_NUM_CLASSES
-        ).to(dev)
-    else:
-        raise ValueError(f"Incorrect model arch: {arch}")
-    return class_t
-
-
-def parse_arch(model_path: Path):
-    """Get model architecture from model name
-
-    Models are (supposed) to be stored as <dataset>_<arch>_class_t.{ckpt,th}
-    """
-    name = model_path.name
-    available_archs = ["unet", "resnet", "guided_diff"]
-    return next(filter(lambda arch: arch in name, available_archs))
 
 
 def get_guid_sampler(config, diff_model, diff_sampler, guidance, time_steps, dataset_name, energy_param: bool):

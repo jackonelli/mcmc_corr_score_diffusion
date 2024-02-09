@@ -16,7 +16,7 @@ from src.diffusion.beta_schedules import improved_beta_schedule, linear_beta_sch
 from src.model.cifar.unet import UNet, UNetEnergy
 from src.model.trainers.diffusion import DiffusionModel
 from src.model.cifar.unet_ho import Unet_Ho, UNetEnergy_Ho
-from src.model.cifar.unet_drop import Unet_drop, UnetDropEnergy
+from src.model.cifar.unet_ho_drop import Unet_drop, UnetDropEnergy
 from src.utils.net import get_device, Device
 from pytorch_lightning.callbacks import ModelCheckpoint
 from src.utils.callbacks import EMACallback

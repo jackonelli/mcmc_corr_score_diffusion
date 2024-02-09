@@ -4,6 +4,7 @@ Unguided diffusion sampling for baselines
 """
 import sys
 
+from src.model.cifar.utils import get_diff_model
 
 sys.path.append(".")
 from pathlib import Path
@@ -19,9 +20,6 @@ from src.diffusion.beta_schedules import (
 )
 
 # Diff models
-from src.model.cifar.unet import load_model as load_unet_diff_model
-from src.model.cifar.unet_ho import load_model as load_unet_ho_diff_model
-from src.model.cifar.unet_drop import load_model as load_unet_drop_diff_model
 from src.model.guided_diff.unet import load_pretrained_diff_unet
 from src.model.unet import load_mnist_diff
 
@@ -29,7 +27,7 @@ from src.model.unet import load_mnist_diff
 from src.utils.seeding import set_seed
 from src.data.cifar import CIFAR_100_NUM_CLASSES, CIFAR_IMAGE_SIZE, CIFAR_NUM_CHANNELS
 from src.utils.net import get_device, Device
-from exp.utils import UnguidedSimulationConfig, setup_results_dir, get_step_size
+from exp.utils import UnguidedSimulationConfig, setup_results_dir
 
 
 def main():
@@ -80,27 +78,6 @@ def _get_beta_schedule(name):
     return beta_schedule, "beta"
 
 
-def _get_model(name, diff_model_path, device, energy_param, image_size, num_steps):
-    if "small" in name:
-        diff_model = load_unet_diff_model(
-            diff_model_path, device, image_size=image_size, energy_param=energy_param
-        )
-    elif "large2" in name:
-        diff_model = load_unet_drop_diff_model(
-            diff_model_path,
-            device,
-            energy_param=energy_param,
-            T = num_steps
-        )
-    elif "large" in name:
-        diff_model = load_unet_ho_diff_model(
-            diff_model_path, device, energy_param=energy_param
-        )
-    else:
-        raise ValueError("Not specified model size")
-    return diff_model
-
-
 def load_models(config, device, num_steps):
     diff_model_name = f"{config.diff_model}"
     diff_model_path = MODELS_DIR / f"{diff_model_name}"
@@ -118,13 +95,13 @@ def load_models(config, device, num_steps):
         dataset_name = "cifar100"
         beta_schedule, post_var = _get_beta_schedule(diff_model_name)
         image_size, num_classes, num_channels = (CIFAR_IMAGE_SIZE, CIFAR_100_NUM_CLASSES, CIFAR_NUM_CHANNELS)
-        diff_model = _get_model(diff_model_name, diff_model_path, device, energy_param, CIFAR_IMAGE_SIZE)
+        diff_model = get_diff_model(diff_model_name, diff_model_path, device, energy_param, CIFAR_IMAGE_SIZE)
         diff_model.eval()
     elif "cifar10" in diff_model_name:
         dataset_name = "cifar10"
         beta_schedule, post_var = _get_beta_schedule(diff_model_name)
         image_size, num_classes, num_channels = (CIFAR_IMAGE_SIZE, 10, CIFAR_NUM_CHANNELS)
-        diff_model = _get_model(diff_model_name, diff_model_path, device, energy_param, CIFAR_IMAGE_SIZE, num_steps)
+        diff_model = get_diff_model(diff_model_name, diff_model_path, device, energy_param, CIFAR_IMAGE_SIZE, num_steps)
         diff_model.eval()
     elif f"{config.image_size}x{config.image_size}_diffusion" in diff_model_name:
         dataset_name = "imagenet"

@@ -43,12 +43,17 @@ class DiffusionClassifier(pl.LightningModule):
     where x_t is a noisy sample from a forward diffusion process."""
 
     def __init__(
-        self, model: nn.Module, loss_f: Callable, noise_scheduler, batches_per_epoch, batch_fn=_process_labelled_batch
+        self, model: nn.Module, loss_f: Callable, noise_scheduler, batches_per_epoch, batch_fn=_process_labelled_batch,
+            lr=2e-4, weight_decay=0.
     ):
         super().__init__()
         self.model = model
         self.loss_f = loss_f
         self.noise_scheduler = noise_scheduler
+
+        # Optimizer
+        self.lr = lr
+        self.weight_decay = weight_decay
 
         # Default Initialization
         self.train_loss = 0.0
@@ -150,7 +155,7 @@ class DiffusionClassifier(pl.LightningModule):
         warmup = 5000
         def warmup_lr(step):
             return min(step, warmup) / warmup
-        optimizer = th.optim.Adam(self.parameters(), lr=2e-4)
+        optimizer = th.optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         # scheduler = th.optim.lr_scheduler.StepLR(optimizer, 1, gamma=1.0)
         scheduler = th.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=warmup_lr)
         return [optimizer], [scheduler]
