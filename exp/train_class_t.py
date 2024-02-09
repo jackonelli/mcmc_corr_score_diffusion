@@ -7,8 +7,6 @@ p(y | x_t, t), which we estimate by a classifier which takes the diffusion step 
 import sys
 import os
 
-from src.model.cifar.utils import select_classifier
-
 sys.path.append(".")
 from argparse import ArgumentParser
 from pathlib import Path
@@ -18,6 +16,7 @@ import torch as th
 import pytorch_lightning as pl
 
 #
+from src.model.cifar.utils import select_classifier
 from src.diffusion.base import DiffusionSampler
 from src.model.trainers.classifier import (DiffusionClassifier, process_labelled_batch_cifar100,
                                            process_labelled_batch_cifar10)
