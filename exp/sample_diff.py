@@ -4,8 +4,6 @@ Unguided diffusion sampling for baselines
 """
 import sys
 
-from src.model.cifar.utils import get_diff_model
-
 sys.path.append(".")
 from pathlib import Path
 from argparse import ArgumentParser
@@ -22,6 +20,8 @@ from src.diffusion.beta_schedules import (
 # Diff models
 from src.model.guided_diff.unet import load_pretrained_diff_unet
 from src.model.unet import load_mnist_diff
+from src.model.cifar.utils import get_diff_model
+
 
 # Exp setup
 from src.utils.seeding import set_seed
