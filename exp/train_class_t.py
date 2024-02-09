@@ -87,7 +87,8 @@ def main():
         callbacks += [ema_callback]
 
     # lr_monitor = LearningRateMonitor(logging_interval="step")
-    filename = args.dataset + "_" + args.beta + "_" + args.arch + "_" + str(int(args.dropout*100)) + ema + "_class_{epoch:02d}"
+    filename = (args.dataset + "_" + args.beta + "_" + args.arch + "_dropout" + str(int(args.dropout*100)) + ema +
+                "weight_decay" + str(int(args.weight_decay*100)) + "_class_{epoch:02d}")
     checkpoint_callback = ModelCheckpoint(
         filename=filename,
         save_last=True,
