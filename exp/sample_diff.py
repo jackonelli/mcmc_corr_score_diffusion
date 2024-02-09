@@ -95,7 +95,7 @@ def load_models(config, device, num_steps):
         dataset_name = "cifar100"
         beta_schedule, post_var = _get_beta_schedule(diff_model_name)
         image_size, num_classes, num_channels = (CIFAR_IMAGE_SIZE, CIFAR_100_NUM_CLASSES, CIFAR_NUM_CHANNELS)
-        diff_model = get_diff_model(diff_model_name, diff_model_path, device, energy_param, CIFAR_IMAGE_SIZE)
+        diff_model = get_diff_model(diff_model_name, diff_model_path, device, energy_param, CIFAR_IMAGE_SIZE, num_steps)
         diff_model.eval()
     elif "cifar10" in diff_model_name:
         dataset_name = "cifar10"
