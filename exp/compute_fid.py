@@ -14,7 +14,7 @@ import torch
 import os
 
 
-def get_statistics(model, device, args, path_dataset, type_dataset, num_workers, save_stats):
+def get_statistics(model, device, args, path_dataset, type_dataset, num_workers, path_save_stats):
     if type_dataset == 'th':
         dataset = dataset_thfiles(path_dataset)
         dataloader = th.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=False, drop_last=False,
@@ -59,8 +59,8 @@ def get_statistics(model, device, args, path_dataset, type_dataset, num_workers,
     else:
         raise ValueError
 
-    if save_stats and type_dataset != 'stats':
-        np.savez_compressed(os.path.join(path_dataset, type_dataset), mu=m, sigma=s)
+    if path_save_stats is not None and type_dataset != 'stats':
+        np.savez_compressed(os.path.join(path_save_stats, type_dataset), mu=m, sigma=s)
     return m, s
 
 
@@ -89,10 +89,10 @@ def main():
     model = get_model(device, dims=args.dims)
 
     # Dataset 1
-    m1, s1 = get_statistics(model, device, args, args.path_dataset1, args.type_dataset1, num_workers, args.save_stats_1)
+    m1, s1 = get_statistics(model, device, args, args.path_dataset1, args.type_dataset1, num_workers, args.path_save_stats_1)
 
     # Dataset 2
-    m2, s2 = get_statistics(model, device, args, args.path_dataset2, args.type_dataset2, num_workers, args.save_stats_2)
+    m2, s2 = get_statistics(model, device, args, args.path_dataset2, args.type_dataset2, num_workers, args.path_save_stats_2)
 
     fid_value = calculate_frechet_distance(m1, s1, m2, s2)
 
@@ -105,19 +105,21 @@ def parse_args():
                         help='Path to folder with data. If type is choosen to a dataset (e.g., cifar100), '
                              'then no path is needed')
     parser.add_argument("--type_dataset1", type=str, default=None, choices= ['th', 'jpeg', 'stats', 'cifar100_train',
-                                                                             'cifar100_val'],
+                                                                             'cifar100_val', 'cifar10_train', 'cifar10_val'],
                         help=('Type of data. If th is chosen then all files that include samples in the name are '
                               'used. The choice stats assumes that the path is a npz file with statistics.'))
-    parser.add_argument("--save_stats_1", action='store_true', help='Save statistics of dataset 1')
+    parser.add_argument("--path_save_stats_1", default=None, type=str,
+                        help='Path to save statistics of dataset 1. If no one is given then no save.')
     parser.add_argument("--path_dataset2", type=str, default=None,
                         help=('Path to folder with data. If type is choosen to a dataset (e.g., cifar100), '
                              'then no path is needed')
     )
     parser.add_argument("--type_dataset2", type=str, default=None, choices=['th', 'jpeg', 'stats', 'cifar100_train',
-                                                                            'cifar100_val'],
+                                                                            'cifar100_val', 'cifar10_train', 'cifar10_val'],
                         help=('Type of data. If th is chosen then all files that include samples in the name are '
                               'used. The choice stats assumes that the path is a npz file with statistics.'))
-    parser.add_argument("--save_stats_2", action='store_true', help='Save statistics of dataset 2')
+    parser.add_argument("--path_save_stats_2", default=None, type=str,
+                        help='Path to save statistics of dataset 2. If no one is given then no save.')
     parser.add_argument('--batch_size', type=int, default=500,
                         help='Batch size to use')
     parser.add_argument('--num_workers', type=int,
