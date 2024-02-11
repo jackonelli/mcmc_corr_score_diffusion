@@ -117,15 +117,18 @@ def load_unet_ho_drop_diff_model(
 
     if model_path is not None:
         params = load_params_from_file(model_path)
-        # params = params['ema_model']
+
         if 'ema' in model_path.stem:
-            all_keys = [k for k in params.keys()]
-            ema_keys = all_keys[int(len(all_keys) / 2):]
-            keys = all_keys[:int(len(all_keys)/2)]
-            params_ = OrderedDict()
-            for key, ema_key in zip(keys, ema_keys):
-                params_[key] = params[ema_key]
-            params = params_
+            if isinstance(params, dict):
+                params = params['ema_model']
+            else:
+                all_keys = [k for k in params.keys()]
+                ema_keys = all_keys[int(len(all_keys) / 2):]
+                keys = all_keys[:int(len(all_keys)/2)]
+                params_ = OrderedDict()
+                for key, ema_key in zip(keys, ema_keys):
+                    params_[key] = params[ema_key]
+                params = params_
         unet.load_state_dict(params)
     unet.to(device)
     unet.eval()
