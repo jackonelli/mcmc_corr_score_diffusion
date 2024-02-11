@@ -119,11 +119,11 @@ def load_unet_ho_drop_diff_model(
         params = load_params_from_file(model_path)
 
         if 'ema' in model_path.stem:
-            if isinstance(params, dict):
+            if 'ema_model' in params.keys():
                 params = params['ema_model']
             else:
                 all_keys = [k for k in params.keys()]
-                ema_keys = all_keys[int(len(all_keys) / 2):]
+                ema_keys = all_keys[:int(len(all_keys) / 2)]
                 keys = all_keys[:int(len(all_keys)/2)]
                 params_ = OrderedDict()
                 for key, ema_key in zip(keys, ema_keys):

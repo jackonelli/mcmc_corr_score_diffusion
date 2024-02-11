@@ -57,6 +57,11 @@ def convert_to_img(tensor):
     return imgs
 
 
+def convert_to_transformed_data(tensor):
+    t = th.clip((tensor + 1) * 0.5, 0., 1.)
+    return t
+
+
 def th_images_to_png(file_path: Path, dir_path: Path = None):
     """
     Converts a th-file with data on the format (num_images, x_dim, y_dim, 3) to png images

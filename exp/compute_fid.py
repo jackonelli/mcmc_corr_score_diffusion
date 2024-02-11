@@ -2,7 +2,6 @@ import sys
 sys.path.append(".")
 from src.utils.fid_utils import get_model, dataset_thfiles, dataset_jpeg, compute_fid_statistics_dataloader, PILDataset
 from argparse import ArgumentParser
-from pathlib import Path
 from pytorch_fid.fid_score import (save_fid_stats, calculate_fid_given_paths, compute_statistics_of_path,
                                    calculate_frechet_distance)
 import torchvision.transforms as TF

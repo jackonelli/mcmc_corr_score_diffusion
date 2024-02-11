@@ -1,7 +1,10 @@
 from PIL import Image
+import pathlib
 import torch as th
 import numpy as np
 from pytorch_fid.inception import InceptionV3
+from src.utils.image_utils import convert_to_transformed_data
+from torch.nn.functional import adaptive_avg_pool2d
 import torchvision.transforms as TF
 import os
 try:
@@ -12,7 +15,7 @@ except ImportError:
         return x
 
 
-class PILDataset(th.utils.data.Dataset):
+class ImagePathDataset(th.utils.data.Dataset):
     def __init__(self, data, transforms=None):
         self.data = data
         self.transforms = transforms
@@ -72,7 +75,7 @@ def dataset_thfiles(path_folder, data_name='samples'):
     for im in images_:
         images[i:i+im.shape[0], ...] = im
         i += im.shape[0]
-    images = (images + 1).clamp(0., 1.)
+    images = convert_to_transformed_data(images)
     return images
 
 
