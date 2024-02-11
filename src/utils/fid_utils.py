@@ -15,7 +15,7 @@ except ImportError:
         return x
 
 
-class ImagePathDataset(th.utils.data.Dataset):
+class PILDataset(th.utils.data.Dataset):
     def __init__(self, data, transforms=None):
         self.data = data
         self.transforms = transforms
@@ -85,7 +85,7 @@ def dataset_jpeg(path_folder):
     path = pathlib.Path(path_folder)
     files = sorted([file for ext in IMAGE_EXTENSIONS
                     for file in path.glob('*.{}'.format(ext))])
-    dataset = ImagePathDataset(files, transforms=TF.ToTensor())
+    dataset = PILDataset(files, transforms=TF.ToTensor())
     return dataset
 
 
