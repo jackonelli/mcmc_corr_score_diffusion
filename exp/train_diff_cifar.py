@@ -45,7 +45,7 @@ def main():
         dataloader_train, dataloader_val = get_cifar100_data_loaders(args.batch_size, data_root=args.dataset_path)
     else:
         raise ValueError('Invalid dataset')
-
+    dataloader_train = dataloader_val
     model_path = Path.cwd() / "models" / (param_model + "_uncond_unet_" + args.dataset + "_" + args.model_size +
                                           "_" + args.beta + "_" + str(int(args.dropout*100)) + ema + ".pt")
     if not model_path.parent.exists():
@@ -92,7 +92,7 @@ def main():
     unet.train()
     diff_sampler = DiffusionSampler(betas, time_steps)
 
-    diffm = DiffusionModel(model=unet, loss_f=F.mse_loss, noise_scheduler=diff_sampler)
+    diffm = DiffusionModel(model=unet, loss_f=F.mse_loss, noise_scheduler=diff_sampler, fixed=True)
     filename = args.dataset + "_" + param_model + "_" + args.beta + "_" + args.model_size + "_" + str(int(args.dropout*100)) + ema + "_diff_{epoch:02d}"
     checkpoint_callback = ModelCheckpoint(
         filename=filename,
@@ -136,7 +136,7 @@ def parse_args():
     parser.add_argument("--max_steps", type=int, default=int(8e5), help="Max. number of steps")
     parser.add_argument("--batch_size", type=int, default=128, help="Batch size")
     parser.add_argument("--ema", action='store_true', help='If model is trained with EMA')
-    parser.add_argument("--dropout", default=0., type=float, help="Dropout")
+    parser.add_argument("--dropout", default=0.1, type=float, help="Dropout")
     parser.add_argument("--log_dir", default=None, help="Root directory for logging")
     parser.add_argument("--monitor", choices=['val_loss', 'train_loss'], default='val_loss',
                         help="Metric to monitor")

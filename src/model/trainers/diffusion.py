@@ -6,7 +6,7 @@ import pytorch_lightning as pl
 
 
 class DiffusionModel(pl.LightningModule):
-    def __init__(self, model: nn.Module, loss_f: Callable, noise_scheduler):
+    def __init__(self, model: nn.Module, loss_f: Callable, noise_scheduler, fixed=False):
         super().__init__()
         self.model = model
         self.loss_f = loss_f
@@ -22,6 +22,9 @@ class DiffusionModel(pl.LightningModule):
         self.require_g = False
         if isinstance(self.model, EnergyModel):
             self.require_g = True
+
+        self.fixed_noise_t = {'noise': {}, 'ts': {}}
+        self.fixed = fixed
 
     def training_step(self, batch, batch_idx):
         batch_size = batch["pixel_values"].shape[0]
@@ -61,14 +64,19 @@ class DiffusionModel(pl.LightningModule):
         batch_size = batch["pixel_values"].shape[0]
         x = batch["pixel_values"].to(self.device)
 
-        # rng_state = th.get_rng_state()
-        # th.manual_seed(self.i_batch_val)
-
-        # Algorithm 1 line 3: sample t uniformally for every example in the batch
-        ts = th.randint(0, self.noise_scheduler.num_diff_steps, (batch_size,), device=self.device).long()
-
-        noise = th.randn_like(x)
-        # th.set_rng_state(rng_state)
+        if self.fixed:
+            if batch_idx in self.fixed_noise_t['noise']:
+                noise = self.fixed_noise_t['noise'][batch_idx].to(self.device)
+                ts = self.fixed_noise_t['ts'][batch_idx].to(self.device)
+            else:
+                ts = th.randint(0, self.noise_scheduler.num_diff_steps, (batch_size,), device=self.device).long()
+                noise = th.randn_like(x)
+                self.fixed_noise_t['noise'][batch_idx] = noise.cpu()
+                self.fixed_noise_t['ts'][batch_idx] = ts.cpu()
+        else:
+            # Algorithm 1 line 3: sample t uniformally for every example in the batch
+            ts = th.randint(0, self.noise_scheduler.num_diff_steps, (batch_size,), device=self.device).long()
+            noise = th.randn_like(x)
 
         x_noisy = self.noise_scheduler.q_sample(x_0=x, ts=ts, noise=noise)
         if self.require_g:

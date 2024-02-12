@@ -51,11 +51,11 @@ class DiffusionSampler(ABC):
         else:
             self.require_grad = False
 
-        current_rng_state = th.get_rng_state()
-        initial_seed = th.initial_seed()
-        th.manual_seed(initial_seed)
-        self.rng_state = th.get_rng_state()
-        th.set_rng_state(current_rng_state)
+        # current_rng_state = th.get_rng_state()
+        # initial_seed = th.initial_seed()
+        # th.manual_seed(initial_seed)
+        # self.rng_state = th.get_rng_state()
+        # th.set_rng_state(current_rng_state)
 
     def sigma_t(self, t_idx, x_t):
         a_bar_t = extract(self.alphas_bar, t_idx, x_t)
