@@ -53,7 +53,7 @@ def main():
         return
 
     dev = get_device(Device.GPU)
-    if model_path.exists():
+    if args.save and model_path.exists():
         raise NotImplementedError("This model already exists")
     else:
         if args.model_size == 'small':
@@ -122,8 +122,9 @@ def main():
 
     trainer.fit(diffm, dataloader_train, dataloader_val)
 
-    print("Saving model")
-    th.save(unet.state_dict(), model_path)
+    if args.save:
+        print("Saving model")
+        th.save(unet.state_dict(), model_path)
 
 def parse_args():
     parser = ArgumentParser(prog="Train Cifar10 diffusion model")
@@ -140,6 +141,7 @@ def parse_args():
     parser.add_argument("--log_dir", default=None, help="Root directory for logging")
     parser.add_argument("--monitor", choices=['val_loss', 'train_loss'], default='val_loss',
                         help="Metric to monitor")
+    parser.add_argument("--save", action='store_true')
     return parser.parse_args()
 
 
