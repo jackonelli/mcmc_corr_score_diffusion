@@ -6,7 +6,8 @@ import pytorch_lightning as pl
 
 
 class DiffusionModel(pl.LightningModule):
-    def __init__(self, model: nn.Module, loss_f: Callable, noise_scheduler, fixed=False):
+    def __init__(self, model: nn.Module, loss_f: Callable, noise_scheduler, fixed=False,
+                 path_load_state=None):
         super().__init__()
         self.model = model
         self.loss_f = loss_f
@@ -25,6 +26,7 @@ class DiffusionModel(pl.LightningModule):
 
         self.fixed_noise_t = {'noise': {}, 'ts': {}}
         self.fixed = fixed
+        self.path_load_state = path_load_state
 
     def training_step(self, batch, batch_idx):
         batch_size = batch["pixel_values"].shape[0]
@@ -57,8 +59,23 @@ class DiffusionModel(pl.LightningModule):
             return min(step, warmup) / warmup
         optimizer = th.optim.Adam(self.parameters(), lr=2e-4)
         # scheduler = th.optim.lr_scheduler.StepLR(optimizer, 1, gamma=1.0)
+
+        checkpoint = None
+        if self.path_load_state is not None:
+            checkpoint = th.load(self.path_load_state)
+            optimizer.load_state_dict(checkpoint['optimizer_states'][0])
+
         scheduler = th.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=warmup_lr)
-        return [optimizer], [scheduler]
+        if self.path_load_state is not None:
+            scheduler.load_state_dict(checkpoint['lr_schedulers'][0])
+        # return [optimizer], [scheduler]
+        return {
+        "optimizer": optimizer,
+        "lr_scheduler": {
+            "scheduler": scheduler,
+            "interval": "step",
+        },
+    }
 
     def validation_step(self, batch, batch_idx):
         batch_size = batch["pixel_values"].shape[0]

@@ -20,6 +20,7 @@ from src.model.cifar.unet_ho_drop import Unet_drop, UnetDropEnergy
 from src.utils.net import get_device, Device
 from pytorch_lightning.callbacks import ModelCheckpoint
 from src.utils.callbacks import EMACallback
+from src.model.cifar.utils import get_diff_model
 
 
 def main():
@@ -56,25 +57,34 @@ def main():
     if args.save and model_path.exists():
         raise NotImplementedError("This model already exists")
     else:
-        if args.model_size == 'small':
-            if args.energy:
-                unet = UNetEnergy(image_size, time_emb_dim, channels, dropout=args.dropout).to(dev)
-            else:
-                unet = UNet(image_size, time_emb_dim, channels, dropout=args.dropout).to(dev)
-        elif args.model_size == 'large':
-            if args.energy:
-                unet = UNetEnergy_Ho(dim=64, dim_mults=(1, 2, 4, 8), flash_attn=False, dropout=args.dropout)
-            else:
-                unet = Unet_Ho(dim=64, dim_mults=(1, 2, 4, 8), flash_attn=False, dropout=args.dropout)
-        elif args.model_size == 'large2':
-            if args.energy:
-                unet = UnetDropEnergy(T=num_diff_steps, ch=128, ch_mult=[1, 2, 2, 2], attn=[1],
-                                      num_res_blocks=2, dropout=args.dropout)
-            else:
-                unet = Unet_drop(T=num_diff_steps, ch=128, ch_mult=[1, 2, 2, 2], attn=[1],
-                                 num_res_blocks=2, dropout=args.dropout)
+        if args.path_checkpoint is not None:
+            path_model = Path(args.path_checkpoint)
+            unet = get_diff_model(name=path_model.name,
+                                  diff_model_path=path_model,
+                                  device=dev,
+                                  energy_param='energy' in path_model.name,
+                                  image_size=image_size,
+                                  num_steps=num_diff_steps)
         else:
-            raise NotImplementedError("Not a valid model size.")
+            if args.model_size == 'small':
+                if args.energy:
+                    unet = UNetEnergy(image_size, time_emb_dim, channels, dropout=args.dropout).to(dev)
+                else:
+                    unet = UNet(image_size, time_emb_dim, channels, dropout=args.dropout).to(dev)
+            elif args.model_size == 'large':
+                if args.energy:
+                    unet = UNetEnergy_Ho(dim=64, dim_mults=(1, 2, 4, 8), flash_attn=False, dropout=args.dropout)
+                else:
+                    unet = Unet_Ho(dim=64, dim_mults=(1, 2, 4, 8), flash_attn=False, dropout=args.dropout)
+            elif args.model_size == 'large2':
+                if args.energy:
+                    unet = UnetDropEnergy(T=num_diff_steps, ch=128, ch_mult=[1, 2, 2, 2], attn=[1],
+                                          num_res_blocks=2, dropout=args.dropout)
+                else:
+                    unet = Unet_drop(T=num_diff_steps, ch=128, ch_mult=[1, 2, 2, 2], attn=[1],
+                                     num_res_blocks=2, dropout=args.dropout)
+            else:
+                raise NotImplementedError("Not a valid model size.")
 
     if args.beta == 'lin':
         beta_schedule, post_var = linear_beta_schedule, "beta"
@@ -92,7 +102,8 @@ def main():
     unet.train()
     diff_sampler = DiffusionSampler(betas, time_steps)
 
-    diffm = DiffusionModel(model=unet, loss_f=F.mse_loss, noise_scheduler=diff_sampler, fixed=True)
+    diffm = DiffusionModel(model=unet, loss_f=F.mse_loss, noise_scheduler=diff_sampler, fixed=True,
+                           path_load_state=args.path_checkpoint)
     filename = args.dataset + "_" + param_model + "_" + args.beta + "_" + args.model_size + "_" + str(int(args.dropout*100)) + ema + "_diff_{epoch:02d}"
     checkpoint_callback = ModelCheckpoint(
         filename=filename,
@@ -142,6 +153,8 @@ def parse_args():
     parser.add_argument("--monitor", choices=['val_loss', 'train_loss'], default='val_loss',
                         help="Metric to monitor")
     parser.add_argument("--save", action='store_true')
+    parser.add_argument("--path_checkpoint", default=None, help="If path is provided then resume training "
+                                                                "from checkpoint.")
     return parser.parse_args()
 
 
