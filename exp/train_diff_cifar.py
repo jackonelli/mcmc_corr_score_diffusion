@@ -65,7 +65,8 @@ def main():
                                   device=dev,
                                   energy_param='energy' in path_model.name,
                                   image_size=image_size,
-                                  num_steps=num_diff_steps)
+                                  num_steps=num_diff_steps,
+                                  dropout=args.dropout)
         else:
             if args.model_size == 'small':
                 if args.energy:
