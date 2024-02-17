@@ -159,11 +159,11 @@ class DiffusionSampler(ABC):
         a_bar_t = extract(self.alphas_bar, t, x_t)
 
         if t > 0:
-            current_rng_state = th.get_rng_state()
-            th.set_rng_state(self.rng_state)
+            # current_rng_state = th.get_rng_state()
+            # th.set_rng_state(self.rng_state)
             z = th.randn_like(x_t)
-            self.rng_state = th.get_rng_state()
-            th.set_rng_state(current_rng_state)
+            # self.rng_state = th.get_rng_state()
+            # th.set_rng_state(current_rng_state)
         else:
             z = 0
 
