@@ -35,7 +35,10 @@ def main():
     callbacks = []
     if args.ema:
         ema = '_ema'
-        ema_callback = EMACallback(decay=0.9999)
+        path_model = None
+        if args.path_checkpoint is not None:
+            path_model = Path(args.path_checkpoint)
+        ema_callback = EMACallback(decay=0.9999, path_ckpt=path_model)
         callbacks += [ema_callback]
     time_emb_dim = 112
     image_size = 32
@@ -47,7 +50,7 @@ def main():
         dataloader_train, dataloader_val = get_cifar100_data_loaders(args.batch_size, data_root=args.dataset_path)
     else:
         raise ValueError('Invalid dataset')
-    dataloader_train = dataloader_val
+
     model_path = Path.cwd() / "models" / (param_model + "_uncond_unet_" + args.dataset + "_" + args.model_size +
                                           "_" + args.beta + "_" + str(int(args.dropout*100)) + ema + ".pt")
     if not model_path.parent.exists():
@@ -66,7 +69,8 @@ def main():
                                   energy_param='energy' in path_model.name,
                                   image_size=image_size,
                                   num_steps=num_diff_steps,
-                                  dropout=args.dropout)
+                                  dropout=args.dropout,
+                                  org_model=True)
         else:
             if args.model_size == 'small':
                 if args.energy:
