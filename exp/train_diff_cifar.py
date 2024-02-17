@@ -21,6 +21,7 @@ from src.utils.net import get_device, Device
 from pytorch_lightning.callbacks import ModelCheckpoint
 from src.utils.callbacks import EMACallback
 from src.model.cifar.utils import get_diff_model
+from src.utils.file_mangement import find_num_trained_steps
 
 
 def main():
@@ -119,10 +120,15 @@ def main():
     else:
         root_dir = args.log_dir
 
+    max_steps = args.max_steps
+    if args.path_checkpoint is not None:
+        path_model = Path(args.path_checkpoint)
+        max_steps = max_steps - find_num_trained_steps(path_model.name)
+
     trainer = pl.Trainer(
         gradient_clip_val=1.,
         max_epochs=args.max_epochs,
-        max_steps=args.max_steps,
+        max_steps=max_steps,
         default_root_dir=root_dir,
         log_every_n_steps=100,
         num_sanity_val_steps=0,

@@ -31,3 +31,9 @@ def npz_images_to_png(file_path: Path, dir_path: Path, key: str = 'arr_0'):
         plt.imsave(new_dir_path / '{}.png'.format(str(i)), images[i])
 
     return new_dir_path
+
+
+def find_num_trained_steps(name):
+    parts = name.split('.')[0].split('_')
+    n_trained = [int(part[5:]) for part in parts if 'step=' in part][0]
+    return n_trained
