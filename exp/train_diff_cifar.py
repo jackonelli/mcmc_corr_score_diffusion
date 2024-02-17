@@ -115,7 +115,7 @@ def main():
         filename=filename,
         save_last=True,
         every_n_epochs=1,
-        save_top_k=3,
+        save_top_k=10,
         monitor=args.monitor
     )
 
