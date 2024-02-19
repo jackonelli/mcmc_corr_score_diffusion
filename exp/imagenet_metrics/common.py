@@ -11,12 +11,15 @@ def compute_acc(classifier_fn, classes_and_samples, transform, batch_size, devic
     pred_logits = []
     true_classes = []
     for _, (classes_path, samples_path) in enumerate(classes_and_samples):
-        # print(f"File {i+1}/{len(classes_and_samples)}")
         samples = th.load(samples_path)
         num_samples = samples.size(0)
-        for batch in th.chunk(samples, num_samples // batch_size):
-            batch = batch.to(device)
-            batch = transform(batch)
+        if num_samples > batch_size:
+            for batch in th.chunk(samples, num_samples // batch_size):
+                batch = batch.to(device)
+                batch = transform(batch)
+                pred_logits.append(classifier_fn(batch).detach().cpu())
+        else:
+            batch = transform(samples.to(device))
             pred_logits.append(classifier_fn(batch).detach().cpu())
 
         classes = th.load(classes_path).detach().cpu()

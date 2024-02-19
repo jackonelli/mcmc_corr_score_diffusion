@@ -25,6 +25,7 @@ from src.samplers.mcmc import (
     AnnealedULAEnergySampler,
     AnnealedLAScoreSampler,
     AnnealedLAEnergySampler,
+    MCMCMHCorrSampler,
 )
 
 # Diff models
@@ -65,18 +66,28 @@ def main():
     )
     diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance=post_var)
     guidance = ClassifierFullGuidance(classifier, lambda_=config.guid_scale)
-    guid_sampler = get_guid_sampler(config, diff_model, diff_sampler, guidance, time_steps, dataset_name, energy_param)
+    guid_sampler, mcmc_sampler = get_guid_sampler(
+        config, diff_model, diff_sampler, guidance, time_steps, dataset_name, energy_param
+    )
 
     print("Sampling...")
     for batch in range(config.num_samples // config.batch_size):
         print(f"{(batch+1) * config.batch_size}/{config.num_samples}")
         classes = th.randint(low=0, high=num_classes, size=(config.batch_size,)).long().to(device)
-        samples, _ = guid_sampler.sample(
+        samples, full_trajs = guid_sampler.sample(
             config.batch_size, classes, device, th.Size((num_channels, image_size, image_size)), verbose=True
         )
         samples = samples.detach().cpu()
         th.save(samples, sim_dir / f"samples_{args.sim_batch}_{batch}.th")
         th.save(classes, sim_dir / f"classes_{args.sim_batch}_{batch}.th")
+        if args.save_traj:
+            print("Saving full traj.")
+            # full_trajs is a list of T tensors of shape (B, D, D)
+            # th.stack turns the list into a single tensor (T, B, D, D).
+            th.save(th.stack(full_trajs), sim_dir / f"trajs_{args.sim_batch}_{batch}.th")
+        if config.mcmc_method is not None:
+            if isinstance(mcmc_sampler, MCMCMHCorrSampler):
+                mcmc_sampler.save_stats_to_file(sim_dir, f"{args.sim_batch}_{batch}.p")
     print(f"Results written to '{sim_dir}'")
 
 
@@ -170,6 +181,7 @@ def parse_arch(model_path: Path):
 def get_guid_sampler(config, diff_model, diff_sampler, guidance, time_steps, dataset_name, energy_param: bool):
     if config.mcmc_method is None:
         guid_sampler = GuidanceSampler(diff_model, diff_sampler, guidance, diff_cond=config.class_cond)
+        mcmc_sampler = None
     else:
         assert config.mcmc_steps is not None
         assert config.mcmc_method is not None
@@ -231,7 +243,7 @@ def get_guid_sampler(config, diff_model, diff_sampler, guidance, time_steps, dat
             reverse=True,
             diff_cond=config.class_cond,
         )
-    return guid_sampler
+    return guid_sampler, mcmc_sampler
 
 
 MODELS_DIR = Path.cwd() / "models"

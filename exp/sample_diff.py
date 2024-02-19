@@ -54,7 +54,6 @@ def main():
     print(f"Sampling with {'energy' if energy_param else 'score'} parameterisation")
     for batch in range(config.num_samples // config.batch_size):
         print(f"{(batch+1) * config.batch_size}/{config.num_samples}")
-        classes = th.randint(low=0, high=num_classes, size=(config.batch_size,)).long().to(device)
         samples, _ = diff_sampler.sample(
             diff_model,
             config.batch_size,
@@ -64,7 +63,6 @@ def main():
         )
         samples = samples.detach().cpu()
         th.save(samples, sim_dir / f"samples_{args.sim_batch}_{batch}.th")
-        th.save(classes, sim_dir / f"classes_{args.sim_batch}_{batch}.th")
     print(f"Results written to '{sim_dir}'")
 
 

@@ -7,7 +7,7 @@ import pickle
 from pathlib import Path
 import numpy as np
 
-from src.metrics import (
+from metrics import (
     gmm_metric,
     wasserstein_metric,
     ll_prod_metric,
@@ -57,7 +57,7 @@ def save_metrics(ll, gmm, w2, save_dir: Path):
     save_dict["ll"] = ll
     save_dict["gmm"] = gmm
     save_dict["w2"] = w2
-    pickle.dump(save_dict, open(save_dir / "metrics.p", "wb"))
+    pickle.dump(save_dict, open(save_dir / "new_metrics.p", "wb"))
 
 
 def load_metrics(save_dir):
@@ -131,9 +131,7 @@ def parse_args():
         type=Path,
         help="Dir. to load samples files from. The script looks for files with the pattern 'samples*.p'",
     )
-    parser.add_argument(
-        "--tex", action="store_true", help="If set, prints tex formatted output."
-    )
+    parser.add_argument("--tex", action="store_true", help="If set, prints tex formatted output.")
     return parser.parse_args()
 
 

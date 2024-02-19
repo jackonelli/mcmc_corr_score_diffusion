@@ -41,6 +41,9 @@ class SimulationConfig:
         cfg._validate()
         return cfg
 
+    def get_method(self) -> str:
+        return self.mcmc_method if self.mcmc_method is not None else "rev"
+
     def _validate(self):
         assert self.param in self.diff_model_1
         assert self.param in self.diff_model_2

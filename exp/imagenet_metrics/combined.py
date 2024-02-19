@@ -1,4 +1,27 @@
-"""Compute metrics on sampled images"""
+"""Compute metrics on sampled images
+
+From the simulation cluster we get many separate files for a simulation,
+i.e., one per batch (these are name `samples_<sim_id>_<batch_id>.th).
+
+This script iterates over a collection of such experiments and computes metrics.
+
+Example dir. structure:
+    res_dir
+        |- score_rev
+            |- config.json
+            |- samples_0_0.th
+            |- classes_0_0.th
+            |- ...
+        |- score_hmc
+            |- config.json
+            |- samples_0_0.th
+            |- classes_0_0.th
+            |- ...
+The script will iterate over subdirs in `args.res_dir` and compute separate metrics for `score_rev` and `score_hmc` in this example.
+
+
+You can also filter the subdirs on params such as method, guidance scale, step length factor.
+"""
 import sys
 
 
@@ -29,12 +52,27 @@ GUIDANCE_CLASSIFIER_PATH = Path.cwd() / f"models/{IMAGE_SIZE}x{IMAGE_SIZE}_class
 
 def main():
     args = parse_args()
-    # Setup and assign a directory where simulation results are saved.
     sim_dirs = collect_sim_dirs(args.res_dir)
     pattern = SimPattern(args.method, args.param, args.guid_scale, args.step_factor)
     res = compute_metrics(sim_dirs, pattern, args.classifier, args.dataset, args.batch_size)
     format_metrics(res)
     save_metrics(res, dataset=args.dataset, param=args.param, dir_=args.store_dir)
+
+
+def compute_metrics(sim_dirs, pattern, classifier, dataset, batch_size):
+    classifier, transform = load_classifier(classifier, dataset, batch_size)
+    res = []
+    for sim_dir in sim_dirs:
+        config = SimulationConfig.from_json(sim_dir / "config.json")
+        if not pattern.include_sim(config):
+            continue
+        classes_and_samples, num_batches = collect_samples(sim_dir)
+        print(f"Processing '{sim_dir.name}' with {num_batches} batches")
+        simple_acc, r3_acc, top_5_acc, num_samples = compute_acc(
+            classifier, classes_and_samples, transform, batch_size, DEVICE
+        )
+        res.append((simple_acc, r3_acc, top_5_acc, config, num_samples, sim_dir.name))
+    return res
 
 
 def save_metrics(
@@ -55,8 +93,10 @@ def save_metrics(
         }
         compiled_res.append(metric)
     dir_.mkdir(exist_ok=True, parents=True)
-    with open(dir_ / f"{dataset}_{param}.p", "wb") as ff:
+    filename = dir_ / f"{dataset}_{param}.p"
+    with open(filename, "wb") as ff:
         pickle.dump(compiled_res, ff)
+    print(f"Metrics written to {filename.relative_to(filename.parent.parent.parent)}")
 
 
 def format_metrics(res: List[Tuple[float, float, float, SimulationConfig, int, str]]):
@@ -77,26 +117,6 @@ def format_metrics(res: List[Tuple[float, float, float, SimulationConfig, int, s
         print(str_)
         print(f"Acc: {acc}, R3 acc: {r3_acc}, Top-5 acc: {top_5_acc}, with {num_samples} samples")
         print(50 * "-")
-
-
-def compute_metrics(sim_dirs, pattern, classifier, dataset, batch_size):
-    classifier, transform = load_classifier(classifier, dataset, batch_size)
-    res = []
-    for sim_dir in sim_dirs:
-        num_files = len(list(sim_dir.iterdir()))
-        if num_files == 1:
-            print(f"Skipping dir '{sim_dir.name}', with no samples")
-            continue
-        config = SimulationConfig.from_json(sim_dir / "config.json")
-        if not pattern.include_sim(config):
-            continue
-        classes_and_samples, num_batches = collect_samples(sim_dir)
-        print(f"Processing '{sim_dir.name}' with {num_batches} batches")
-        simple_acc, r3_acc, top_5_acc, num_samples = compute_acc(
-            classifier, classes_and_samples, transform, batch_size, DEVICE
-        )
-        res.append((simple_acc, r3_acc, top_5_acc, config, num_samples, sim_dir.name))
-    return res
 
 
 def load_classifier(type_: str, dataset: str, batch_size: int):
@@ -161,8 +181,13 @@ def load_classifier_cifar(type_: str, batch_size: int):
 
 
 def collect_sim_dirs(res_dir: Path):
+    """Create an iterator over valid sub dirs (those with config and samples)"""
     dirs = filter(lambda x: x.is_dir(), res_dir.iterdir())
     dirs = filter(lambda x: (x / "config.json").exists(), dirs)
+    dirs = filter(lambda x: len(list(x.glob("classes*"))) > 0, dirs)
+    dirs = filter(lambda x: len(list(x.glob("samples*"))) > 0, dirs)
+    # Filter dirs with only the config file will be present (i.e, no samples)
+    dirs = filter(lambda x: len(list(x.glob("*"))) > 1, dirs)
     return dirs
 
 
@@ -171,17 +196,14 @@ def collect_samples(sim_dir: Path) -> Tuple[List[Tuple[Path, Path]], int]:
 
     Results are saved to timestamped dirs to prevent overwriting, we need to collect samples from all dirs with matching sim name.
     """
-    classes = []
-    samples = []
-    # assert config.name in sim_name
-    classes.extend(sorted([path.name for path in sim_dir.glob("classes_*_*.th")]))
+    classes = sorted([path.name for path in sim_dir.glob("classes_*_*.th")])
     classes = [sim_dir / cl for cl in classes]
-    samples.extend(sorted([path.name for path in sim_dir.glob("samples_*_*.th")]))
+    samples = sorted([path.name for path in sim_dir.glob("samples_*_*.th")])
     samples = [sim_dir / sm for sm in samples]
     assert len(samples) == len(classes)
-    num_batches = len(samples)
     coll = list(zip(classes, samples))
     validate(coll)
+    num_batches = len(samples)
     return coll, num_batches
 
 
@@ -189,11 +211,13 @@ def validate(coll):
     """Double check that the sorting shenanigans above actually pair the correct samples to the correct classes"""
     for cl, sm in coll:
         tmp = PATTERN.match(cl.name)
-        cl_1, cl_2 = tmp[1], tmp[2]
+        assert tmp is not None, f"No match for sim or batch id in '{cl.name}'"
+        cl_sim, cl_batch = tmp[1], tmp[2]
         tmp = PATTERN.match(sm.name)
-        sm_1, sm_2 = tmp[1], tmp[2]
-        assert cl_1 == sm_1, "Mismatched slurm ID"
-        assert cl_2 == sm_2, "Mismatched batch index"
+        assert tmp is not None, f"No match for sim or batch id in '{sm.name}'"
+        sm_sim, sm_batch = tmp[1], tmp[2]
+        assert cl_sim == sm_sim, "Mismatched slurm ID"
+        assert cl_batch == sm_batch, "Mismatched batch index"
 
 
 @dataclass
@@ -221,16 +245,15 @@ class SimPattern:
                 cfg_factor = config.mcmc_stepsizes["params"]["factor"]
                 include &= cfg_factor == self.factor
             else:
-                # Include "Reverse" if a specific factor is selected
-                include = True
-        include &= self.param in config.diff_model
+                include = self.method == "all" or self.method == "rev"
+        include &= self.param in config.diff_model if not "256" in config.diff_model else True
         return include
 
 
 def parse_args():
     parser = ArgumentParser(prog="Sample from diffusion model")
     parser.add_argument("--res_dir", type=Path, required=True, help="Parent dir for all results")
-    parser.add_argument("--store_dir", type=Path, default=Path.cwd() / "results/cifar100", help="Dir to sort tables to")
+    parser.add_argument("--store_dir", type=Path, default=Path.cwd() / "results/metrics", help="Dir to save tables to")
     parser.add_argument("--metric", default="all", type=str, choices=["all", "acc", "fid"], help="Metric to compute")
     parser.add_argument(
         "--param", default="score", type=str, choices=["energy", "score"], help="Choose diff model parameterisation"
@@ -247,7 +270,11 @@ def parse_args():
         help="Which model to compute acc. with.",
     )
     parser.add_argument(
-        "--method", default="all", type=str, choices=["all", "ula", "la"], help="MCMC methods to compute metrics for"
+        "--method",
+        default="all",
+        type=str,
+        choices=["all", "rev", "ula", "la", "uhmc", "hmc"],
+        help="MCMC methods to compute metrics for",
     )
     parser.add_argument(
         "--guid_scale",

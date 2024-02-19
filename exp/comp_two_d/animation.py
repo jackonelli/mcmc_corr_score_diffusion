@@ -1,3 +1,4 @@
+"""Generate animation of 2D comp sampling trajectories"""
 import torch as th
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
@@ -45,4 +46,4 @@ ani = animation.FuncAnimation(fig=fig, func=update, frames=slow)
 
 writergif = animation.PillowWriter(fps=2)
 ani.save("anim_t_9_to_0.gif", writer=writergif)
-# plt.show()
+plt.show()

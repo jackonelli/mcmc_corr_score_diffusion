@@ -1,20 +1,15 @@
+from argparse import ArgumentParser
 from dataclasses import dataclass, asdict
-from typing import Optional, Tuple
 from pathlib import Path
 import json
 from datetime import datetime
 from copy import deepcopy
-from typing import Tuple, Union
+import re
+import shutil
+from itertools import tee
+from typing import Union, Iterator, Tuple, Optional
 import pickle
-import random
-import numpy as np
 import torch as th
-
-
-def test():
-    cfg = SimulationConfig.from_json(Path.cwd() / "exp/configs/hmc.json")
-    cfg.save(Path.cwd() / "results")
-    print(cfg.mcmc_bounds, type(cfg.mcmc_bounds))
 
 
 @dataclass
@@ -80,6 +75,25 @@ class SimulationConfig:
         with open(sim_dir / "config.json", "w") as outfile:
             json.dump(asdict(tmp_config), outfile, indent=4, sort_keys=False)
 
+    def same_exp(self, cfg) -> bool:
+        same = True
+        # Basics
+        same &= self.image_size == cfg.image_size
+        same &= self.num_channels == cfg.num_channels
+        same &= self.num_diff_steps == cfg.num_diff_steps
+        same &= self.num_respaced_diff_steps == cfg.num_respaced_diff_steps
+        same &= self.num_diff_steps == cfg.num_diff_steps
+        # Models
+        same &= self.diff_model == cfg.diff_model
+        same &= self.classifier == cfg.classifier
+        # Guidance
+        same &= self.guid_scale == cfg.guid_scale
+        same &= self.mcmc_method == cfg.mcmc_method
+        same &= self.mcmc_steps == cfg.mcmc_steps
+        same &= self.mcmc_stepsizes == cfg.mcmc_stepsizes
+        same &= self.n_trapets == cfg.n_trapets
+        return same
+
 
 @dataclass
 class UnguidedSimulationConfig:
@@ -114,6 +128,16 @@ class UnguidedSimulationConfig:
         with open(sim_dir / "config.json", "w") as outfile:
             json.dump(asdict(tmp_config), outfile, indent=4, sort_keys=False)
 
+    def same_exp(self, cfg) -> bool:
+        same = True
+        same &= self.image_size == cfg.image_size
+        same &= self.num_channels == cfg.num_channels
+        same &= self.diff_model == cfg.diff_model
+        same &= self.num_diff_steps == cfg.num_diff_steps
+        same &= self.num_respaced_diff_steps == cfg.num_respaced_diff_steps
+        same &= self.num_diff_steps == cfg.num_diff_steps
+        return same
+
 
 def get_step_size(step_size_dir: Path, dataset_name: str, mcmc_method: str, mcmc_accept_bounds: str):
     # print("Warning: using steps from T_resp = 500")
@@ -144,5 +168,82 @@ def timestamp() -> str:
     return datetime.now().strftime("%y%m%d_%H%M")
 
 
+SIM_BATCH_PAT = re.compile(r"samples_(\d+)_(\d+).th")
+
+
+def compare_configs(srces: Iterator[Path]) -> bool:
+    cfgs = map(lambda x: SimulationConfig.from_json(x / "config.json"), srces)
+    ref_cfg = next(cfgs)
+    same_cfgs = map(lambda x: ref_cfg.same_exp(x), cfgs)
+    return all(same_cfgs)
+
+
+def find_sim_numbers(path: Path) -> Tuple[int, int]:
+    m = SIM_BATCH_PAT.match(path.name)
+    assert m is not None, f"Unable to parse sim and batch id from '{path.name}'"
+    sim, batch = int(m[1]), int(m[2])
+    return sim, batch
+
+
+def copy_files(src_dir: Path, target: Path, max_sim_num: int):
+    for ss in src_dir.glob("samples_*_*.th"):
+        sim, batch = find_sim_numbers(ss)
+        new_sim = max_sim_num + sim
+        src = src_dir / f"samples_{sim}_{batch}.th"
+        dest = target / f"samples_{new_sim}_{batch}.th"
+        shutil.copy(src, dest)
+        src = src_dir / f"classes_{sim}_{batch}.th"
+        dest = target / f"classes_{new_sim}_{batch}.th"
+        shutil.copy(src, dest)
+
+
+def count_samples(target_dir: Path):
+    existing_samples = target_dir.glob("samples_*_*.th")
+    return sum(map(lambda x: th.load(x).size(0), existing_samples))
+
+
+def combine_exps(srces: Iterator[Path], target_dir: Path):
+    dir_check, srces = tee(srces)
+    any_lacks_config = next(filter(lambda x: not (x / "config.json").exists(), dir_check), None)
+    assert any_lacks_config is None, f"'{any_lacks_config.name}' does not have a config.json file"
+    cfg_check, srces = tee(srces)
+    if target_dir.exists():
+        shutil.rmtree(target_dir)
+    target_dir.mkdir(parents=True)
+    if not compare_configs(cfg_check):
+        print("Mismatched config")
+        return
+    first = next(srces)
+    shutil.copy(first / "config.json", target_dir / "config.json")
+    copy_files(first, target_dir, 0)
+    for src in srces:
+        existing_samples = target_dir.glob("samples_*_*.th")
+        max_sim_num = max(map(lambda x: find_sim_numbers(x)[0], existing_samples))
+        copy_files(src, target_dir, max_sim_num)
+    print(f"Created combined dir '{target_dir.name}' with {count_samples(target_dir)} samples")
+
+
+def main():
+    args = parse_args()
+    dir_list = map(lambda x: args.parent / Path(x) if args.parent is not None else Path(x), args.dir_list.split(","))
+    combine_exps(dir_list, args.dest)
+
+
+def parse_args():
+    parser = ArgumentParser(prog="Exp utils CLI")
+    subparsers = parser.add_subparsers(help="sub parser")
+
+    combine_parser = subparsers.add_parser("combine", help="Combine samples with the same exp config")
+    combine_parser.add_argument("--dir_list", type=str, help="comma separated list of dirs to combine", required=True)
+    combine_parser.add_argument(
+        "--parent",
+        type=str,
+        help="optional parent directory, which dirs in dir_list are relative to, if None, dir_list paths are treated as absolute",
+    )
+    combine_parser.add_argument("--dest", type=Path, help="output dir", required=True)
+
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    test()
+    main()

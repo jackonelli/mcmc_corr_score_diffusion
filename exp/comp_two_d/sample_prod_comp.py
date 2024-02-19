@@ -3,7 +3,6 @@ import sys
 
 
 sys.path.append(".")
-from typing import Optional
 from pathlib import Path
 from argparse import ArgumentParser
 import torch as th

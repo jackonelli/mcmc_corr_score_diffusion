@@ -56,6 +56,19 @@ class GmmRadial(Gmm):
         return self.isotropic_nll(x)
 
 
+def sample_from_product(num_samples: int, gmm: GmmRadial, bar: Bar):
+    """Dumb but correct (ancestral) sampling from product distribution"""
+    num_ok_samples = 0
+    factor = 4
+    while num_ok_samples < num_samples:
+        sample, _ = gmm.sample(factor * num_samples)
+        in_, _ = bar.compute_support(sample)
+        num_ok_samples = in_.float().sum()
+        factor *= 2
+    ok_samples = sample[in_]
+    return ok_samples[:num_samples]
+
+
 import matplotlib.pyplot as plt
 
 

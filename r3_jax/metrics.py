@@ -6,12 +6,10 @@ import numpy as np
 from sklearn.mixture import GaussianMixture
 from scipy.spatial.distance import cdist
 from scipy.optimize import linear_sum_assignment
-from src.datasets import toy_gmm, bar
+from datasets import toy_gmm, bar
 
 
-def wasserstein_metric(
-    x_samples: np.ndarray, y_samples: np.ndarray, p: float = 2.0
-) -> float:
+def wasserstein_metric(x_samples: np.ndarray, y_samples: np.ndarray, p: float = 2.0) -> float:
     """Wasserstein metric
 
     Computes the empirical Wasserstein p-distance between x_samples and y_samples
@@ -29,6 +27,8 @@ def wasserstein_metric(
     return dist.item()
 
 
+# TODO: Shouldn't this be "spherical"? I guess "diag" is how R3 does it, anyway I don't think it will affect the results much.
+# TODO: We should assure that the association between x and y components are correct.
 def gmm_metric(x_samples: np.ndarray, y_samples: np.ndarray, cov_type="diag") -> float:
     """GMM metric wrapper
 
@@ -41,17 +41,13 @@ def gmm_metric(x_samples: np.ndarray, y_samples: np.ndarray, cov_type="diag") ->
     return gmm_params_metric(x_covs, y_covs)
 
 
-def fit_gmm(
-    samples: np.ndarray, cov_type: str, n_comp=2
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def fit_gmm(samples: np.ndarray, cov_type: str, n_comp=2) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Fit Gaussian mixture model (GMM)
 
     Thin wrapper around scikit's GaussianMixture for our 2D product example.
     """
     allowed_cov_types = {"full", "tied", "diag", "spherical"}
-    assert (
-        cov_type in allowed_cov_types
-    ), f"Incorrect covariance type, must be one of {allowed_cov_types}"
+    assert cov_type in allowed_cov_types, f"Incorrect covariance type, must be one of {allowed_cov_types}"
     model = GaussianMixture(n_components=n_comp, covariance_type=cov_type)
     gmm = model.fit(samples)
     return gmm.weights_, gmm.means_, gmm.covariances_
@@ -72,7 +68,7 @@ def gmm_params_metric(x_covs: np.ndarray, y_covs: np.ndarray) -> float:
     cov_metric = 0.0
     for x_cov_n, y_cov_n in zip(x_covs, y_covs):
         diff_ = x_cov_n - y_cov_n
-        cov_metric += np.sqrt(np.sum(diff_ ** 2)).item()
+        cov_metric += np.sqrt(np.sum(diff_**2)).item()
     return cov_metric / n_comp
 
 
@@ -91,9 +87,7 @@ def ll_prod_metric(y_samples):
 
     # Bar
     nll_bar, _, pdf_outer, pdf_inner = bar(scale=scale, r=r, prob_inside=prob_inside)
-    c = compute_normalizing_constant(
-        means, std, n_comp, pdf_outer, pdf_inner, bounds_outer, bounds_inner
-    )
+    c = compute_normalizing_constant(means, std, n_comp, pdf_outer, pdf_inner, bounds_outer, bounds_inner)
     return ll_prod(nll_gmm(y_samples), nll_bar(y_samples), c)
 
 
@@ -126,9 +120,7 @@ def prob_gmm_independent_uniform(means, sigmas, bounds, weights=None):
     return total_prob
 
 
-def compute_normalizing_constant(
-    means, std, n_comp, pdf_outer, pdf_inner, bounds_outer, bounds_inner
-):
+def compute_normalizing_constant(means, std, n_comp, pdf_outer, pdf_inner, bounds_outer, bounds_inner):
     """Compute the normalisation constant for the product distribution of the bar and circle gmm distr's"""
     prob_all = prob_gmm_independent_uniform(
         means,
