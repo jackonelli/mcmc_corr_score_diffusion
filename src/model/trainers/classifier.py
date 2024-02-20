@@ -158,7 +158,12 @@ class DiffusionClassifier(pl.LightningModule):
         optimizer = th.optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         # scheduler = th.optim.lr_scheduler.StepLR(optimizer, 1, gamma=1.0)
         scheduler = th.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=warmup_lr)
-        return [optimizer], [scheduler]
+        return {
+        "optimizer": optimizer,
+        "lr_scheduler": {
+            "scheduler": scheduler,
+            "interval": "step",
+        }}
 
 
 class StandardClassifier(pl.LightningModule):

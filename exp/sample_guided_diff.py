@@ -114,9 +114,21 @@ def load_models(config, device):
                                     device=device,
                                     energy_param=energy_param,
                                     image_size=CIFAR_IMAGE_SIZE,
-                                    num_steps=config.num_steps)
+                                    num_steps=config.num_diff_steps)
         diff_model.eval()
-        classifier = select_cifar_classifier(model_path=classifier_path, dev=device, num_steps=config.num_steps)
+        classifier = select_cifar_classifier(model_path=classifier_path, dev=device, num_steps=config.num_diff_steps)
+        classifier.eval()
+    elif 'cifar10' in diff_model_name:
+        dataset_name = "cifar10"
+        if "cos" in diff_model_name:
+            beta_schedule, post_var = improved_beta_schedule, "beta"
+        else:
+            beta_schedule, post_var = linear_beta_schedule, "beta"
+        image_size, num_classes, num_channels = (CIFAR_IMAGE_SIZE, 10, CIFAR_NUM_CHANNELS)
+        diff_model = get_diff_model(diff_model_name, diff_model_path, device, energy_param, CIFAR_IMAGE_SIZE,
+                                    config.num_diff_steps)
+        diff_model.eval()
+        classifier = select_cifar_classifier(model_path=classifier_path, dev=device, num_steps=config.num_diff_steps)
         classifier.eval()
     elif f"{config.image_size}x{config.image_size}_diffusion" in diff_model_name:
         dataset_name = "imagenet"
