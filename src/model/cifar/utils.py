@@ -156,8 +156,8 @@ def select_cifar_classifier(model_path: Path, dev, num_steps):
                              dropout=0., num_diff_steps=num_steps, model_path=model_path)
 
 def best_match(s: str, options: list[str]) -> str:
-    matches = [opt for opt in options if s in opt]
-    return matches[np.argmin([len(match) for match in matches])]
+    matches = [opt for opt in options if opt in s]
+    return matches[np.argmax([len(match) for match in matches])]
 
 def parse_class(model_path: Path) -> int:
     name = model_path.name
@@ -188,7 +188,20 @@ def load_unet_ho_drop_classifier_t(
                              num_res_blocks=num_res_blocks, dropout=dropout, num_classes=num_classes,
                              x_size=x_size)
     if model_path is not None:
-        model.load_state_dict(load_params_from_file(model_path))
+        params = load_params_from_file(model_path)
+
+        if 'ema' in model_path.stem:
+            if 'ema_model' in params.keys():
+                params = params['ema_model']
+            else:
+                all_keys = [k for k in params.keys()]
+                ema_keys = all_keys[int(len(all_keys) / 2):]
+                keys = all_keys[:int(len(all_keys) / 2)]
+                params_ = OrderedDict()
+                for key, ema_key in zip(keys, ema_keys):
+                    params_[key] = params[ema_key]
+                params = params_
+        model.load_state_dict(params)
     model.to(dev)
     return model
 

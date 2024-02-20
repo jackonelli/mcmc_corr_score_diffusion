@@ -19,8 +19,14 @@ from exp.imagenet_metrics.common import PATTERN, compute_acc
 
 # Cifar
 from src.model.resnet import load_classifier_t as load_resnet_classifier_t
-from src.data.cifar import CIFAR_100_NUM_CLASSES, CIFAR_NUM_CHANNELS
-from src.model.cifar.standard_class import load_standard_class
+from src.data.cifar import CIFAR_100_NUM_CLASSES, CIFAR_NUM_CHANNELS, CIFAR_10_NUM_CLASSES, CIFAR_IMAGE_SIZE
+from src.model.cifar.standard_class import load_standard_class, vgg13_bn
+from src.model.cifar.utils import load_unet_ho_drop_classifier_t
+from torchvision.transforms import (
+    Compose,
+    Normalize,
+    Lambda,
+)
 
 DEVICE = get_device(Device.GPU)
 CHANNELS, IMAGE_SIZE = 3, 256
@@ -103,7 +109,7 @@ def load_classifier(type_: str, dataset: str, batch_size: int):
     if dataset == "imagenet":
         classifier, transform = load_classifier_imagenet(type_, IMAGE_SIZE, batch_size)
     elif dataset == "cifar100":
-        classifier, transform = load_classifier_cifar(type_, batch_size)
+        classifier, transform = load_classifier_cifar100(type_, batch_size)
     else:
         raise ValueError(f"Incorrect data set {dataset}")
 
@@ -132,7 +138,7 @@ def load_classifier_imagenet(type_: str, image_size: int, batch_size: int):
     return classifier, transform
 
 
-def load_classifier_cifar(type_: str, batch_size: int):
+def load_classifier_cifar100(type_: str, batch_size: int):
     if type_ == "guidance":
         classifier = load_resnet_classifier_t(
             model_path=Path.cwd() / "models/cifar100_resnet_class_t.ckpt",
@@ -158,6 +164,36 @@ def load_classifier_cifar(type_: str, batch_size: int):
     else:
         raise ValueError("Incorrect classifier type")
     return classifier, lambda x: x
+
+
+def load_classifier_cifar10(type_: str, batch_size: int):
+    if type_ == "guidance":
+        x_size = (CIFAR_NUM_CHANNELS, CIFAR_IMAGE_SIZE, CIFAR_IMAGE_SIZE)
+        classifier = load_unet_ho_drop_classifier_t(
+            model_path=Path.cwd() / "models/cifar10_class_t.ckpt",
+            dev=DEVICE,
+            dropout=0.,
+            num_diff_steps=1000,
+            num_classes=CIFAR_10_NUM_CLASSES,
+            x_size=x_size
+        ).to(DEVICE)
+        classifier.eval()
+        # Remove time-dependency
+        ts = th.zeros((batch_size,)).to(DEVICE)
+        classifier = partial(classifier, t=ts)
+        transform = lambda x: x
+    elif type_ == "independent":
+        classifier = vgg13_bn(pretrained=True).to(DEVICE)
+        classifier.eval()
+        transform = Compose(
+            [
+                Lambda(lambda x: (x + 1) / 2),
+                Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ]
+        )
+    else:
+        raise ValueError("Incorrect classifier type")
+    return classifier, transform
 
 
 def collect_sim_dirs(res_dir: Path):
