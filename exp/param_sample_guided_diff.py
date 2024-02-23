@@ -98,7 +98,7 @@ def generate_samples(args,
                      i):
 
     # Setup and assign a directory where simulation results are saved.
-    sim_dir = setup_results_dir(config, args.job_id + args.sim_batch + i)
+    sim_dir = setup_results_dir(config, args.job_id + args.sim_batch + i*100)
 
     guidance = ClassifierFullGuidance(classifier, lambda_=config.guid_scale)
     guid_sampler = get_guid_sampler(config, diff_model, diff_sampler,
