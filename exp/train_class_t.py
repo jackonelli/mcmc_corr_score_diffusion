@@ -16,7 +16,7 @@ import torch as th
 import pytorch_lightning as pl
 
 #
-from src.model.cifar.utils import select_classifier
+from src.model.cifar.utils import select_classifier_t
 from src.diffusion.base import DiffusionSampler
 from src.model.trainers.classifier import (DiffusionClassifier, process_labelled_batch_cifar100,
                                            process_labelled_batch_cifar10)
@@ -50,8 +50,8 @@ def main():
         raise ValueError('Invalid dataset')
 
     # Classifier
-    class_t = select_classifier(arch=args.arch, dev=dev, num_channels=num_channels, img_size=img_size,
-                                num_classes=num_classes, dropout=args.dropout, num_diff_steps=num_diff_steps)
+    class_t = select_classifier_t(arch=args.arch, dev=dev, num_channels=num_channels, img_size=img_size,
+                                  num_classes=num_classes, dropout=args.dropout, num_diff_steps=num_diff_steps)
     class_t.train()
 
     # Diffusion process
@@ -121,9 +121,9 @@ def main():
 
 
 def parse_args():
-    parser = ArgumentParser(prog="Train Cifar100 classification model")
+    parser = ArgumentParser(prog="Train classification t model")
     parser.add_argument("--dataset", type=str, choices=["cifar100", "cifar10"], help="Dataset selection")
-    parser.add_argument("--dataset_path", type=Path, required=True, help="Path to dataset root")
+    parser.add_argument("--dataset_path", type=str, default=None, help="Path to dataset root")
     parser.add_argument("--max_epochs", type=int, default=-1, help="Max. number of epochs")
     parser.add_argument("--max_steps", type=int, default=int(3e5), help="Max. number of steps")
     parser.add_argument("--batch_size", type=int, default=128, help="Batch size")

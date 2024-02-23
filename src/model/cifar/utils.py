@@ -12,6 +12,8 @@ from src.model.cifar.unet_ho_drop import UnetDropEnergy, Unet_drop
 from src.model.guided_diff.classifier import load_guided_classifier as load_guided_diff_classifier_t
 from src.model.resnet import load_classifier_t as load_resnet_classifier_t
 from src.utils.net import load_params_from_file
+from src.model.cifar.standard_class import load_standard_class, vgg11_bn, vgg13_bn, vgg19_bn, vgg16_bn
+from src.utils.callbacks import load_ema, load_non_ema
 
 
 def get_diff_model(name, diff_model_path, device, energy_param, image_size, num_steps, dropout=0.,
@@ -58,12 +60,7 @@ def load_unet_diff_model(
     if model_path is not None:
         params = load_params_from_file(model_path)
         if 'ema' in model_path.stem:
-            keys = [k for k in params.keys()]
-            keys = keys[:int(len(keys) / 2)]
-            params_ = OrderedDict()
-            for key in keys:
-                params_[key] = params[key]
-            params = params_
+            params = load_ema(params)
         unet.load_state_dict(params)
     unet.to(device)
     unet.eval()
@@ -87,13 +84,7 @@ def load_unet_ho_diff_model(
     if model_path is not None:
         params = load_params_from_file(model_path)
         if 'ema' in model_path.stem:
-            all_keys = [k for k in params.keys()]
-            ema_keys = all_keys[int(len(all_keys) / 2):]
-            keys = all_keys[:int(len(all_keys) / 2)]
-            params_ = OrderedDict()
-            for key, ema_key in zip(keys, ema_keys):
-                params_[key] = params[ema_key]
-            params = params_
+            params = load_ema(params)
         unet.load_state_dict(params)
     unet.to(device)
     unet.eval()
@@ -122,26 +113,12 @@ def load_unet_ho_drop_diff_model(
 
     if model_path is not None:
         params = load_params_from_file(model_path)
+        if 'ema' in model_path.stem:
+            if org_model:
+                params = load_non_ema(params)
+            else:
+                params = load_ema(params)
 
-        if org_model:
-            params_ = OrderedDict()
-            all_keys = [k for k in params.keys()]
-            org_keys = all_keys[:int(len(all_keys) / 2)]
-            for org_key in org_keys:
-                params_[org_key] = params[org_key]
-            params = params_
-        else:
-            if 'ema' in model_path.stem:
-                if 'ema_model' in params.keys():
-                    params = params['ema_model']
-                else:
-                    all_keys = [k for k in params.keys()]
-                    ema_keys = all_keys[int(len(all_keys) / 2):]
-                    keys = all_keys[:int(len(all_keys)/2)]
-                    params_ = OrderedDict()
-                    for key, ema_key in zip(keys, ema_keys):
-                        params_[key] = params[ema_key]
-                    params = params_
         unet.load_state_dict(params)
     unet.to(device)
     unet.eval()
@@ -151,9 +128,9 @@ def load_unet_ho_drop_diff_model(
 def select_cifar_classifier(model_path: Path, dev, num_steps):
     arch = parse_arch(model_path)
     num_classes = parse_class(model_path)
-    return select_classifier(arch=arch, dev=dev, num_classes=num_classes,
-                             num_channels=CIFAR_NUM_CHANNELS, img_size=CIFAR_IMAGE_SIZE,
-                             dropout=0., num_diff_steps=num_steps, model_path=model_path)
+    return select_classifier_t(arch=arch, dev=dev, num_classes=num_classes,
+                               num_channels=CIFAR_NUM_CHANNELS, img_size=CIFAR_IMAGE_SIZE,
+                               dropout=0., num_diff_steps=num_steps, model_path=model_path)
 
 def best_match(s: str, options: list[str]) -> str:
     matches = [opt for opt in options if opt in s]
@@ -191,23 +168,14 @@ def load_unet_ho_drop_classifier_t(
         params = load_params_from_file(model_path)
 
         if 'ema' in model_path.stem:
-            if 'ema_model' in params.keys():
-                params = params['ema_model']
-            else:
-                all_keys = [k for k in params.keys()]
-                ema_keys = all_keys[int(len(all_keys) / 2):]
-                keys = all_keys[:int(len(all_keys) / 2)]
-                params_ = OrderedDict()
-                for key, ema_key in zip(keys, ema_keys):
-                    params_[key] = params[ema_key]
-                params = params_
+            params = load_ema(params)
         model.load_state_dict(params)
     model.to(dev)
     return model
 
 
-def select_classifier(arch, dev, num_classes, num_channels, img_size, dropout=0., num_diff_steps=1000,
-                      model_path=None):
+def select_classifier_t(arch, dev, num_classes, num_channels, img_size, dropout=0., num_diff_steps=1000,
+                        model_path=None):
     if arch == "unet":
         class_t = load_unet_classifier_t(model_path, dev)
     elif arch == "resnet":
@@ -232,3 +200,24 @@ def select_classifier(arch, dev, num_classes, num_channels, img_size, dropout=0.
     else:
         raise ValueError(f"Incorrect model arch: {arch}")
     return class_t
+
+
+def select_classifier(arch, dev, num_classes, num_channels, dataset):
+    if arch == "simple_resnet":
+        class_ = load_standard_class(
+            model_path=None,
+            device=dev,
+            num_channels=num_channels,
+            num_classes=num_classes,
+        ).to(dev)
+    elif arch == "vgg11_bn":
+        class_ = vgg11_bn(dataset=dataset).to(dev)
+    elif arch == "vgg13_bn":
+        class_ = vgg13_bn(dataset=dataset).to(dev)
+    elif arch == "vgg16_bn":
+        class_ = vgg16_bn(dataset=dataset).to(dev)
+    elif arch == "vgg19_bn":
+        class_ = vgg19_bn(dataset=dataset).to(dev)
+    else:
+        raise ValueError(f"Incorrect model arch: {arch}")
+    return class_

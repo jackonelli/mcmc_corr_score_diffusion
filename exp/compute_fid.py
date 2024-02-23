@@ -13,48 +13,48 @@ import torch
 import os
 
 
-def get_statistics(model, device, args, path_dataset, type_dataset, num_workers, path_save_stats):
+def get_statistics(model, device, batch_size, dims, path_dataset, type_dataset, num_workers, path_save_stats):
     if type_dataset == 'th':
         dataset = dataset_thfiles(path_dataset)
-        dataloader = th.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=False, drop_last=False,
+        dataloader = th.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=False,
                                               num_workers=num_workers)
-        m, s = compute_fid_statistics_dataloader(model, dataloader, device, args.dims)
+        m, s = compute_fid_statistics_dataloader(model, dataloader, device, dims)
     elif type_dataset == 'cifar100_train':
         if path_dataset is not None:
             path_dataset = str(path_dataset)
         dataset = PILDataset(load_dataset("cifar100", cache_dir= path_dataset)['train']['img'], TF.ToTensor())
-        dataloader = th.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=False, drop_last=False,
+        dataloader = th.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=False,
                                               num_workers=num_workers)
-        m, s = compute_fid_statistics_dataloader(model, dataloader, device, args.dims)
+        m, s = compute_fid_statistics_dataloader(model, dataloader, device, dims)
     elif type_dataset == 'cifar100_val':
         if path_dataset is not None:
             path_dataset = str(path_dataset)
         dataset = PILDataset(load_dataset("cifar100", cache_dir=path_dataset)['test']['img'], TF.ToTensor())
-        dataloader = th.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=False, drop_last=False,
+        dataloader = th.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=False,
                                               num_workers=num_workers)
-        m, s = compute_fid_statistics_dataloader(model, dataloader, device, args.dims)
+        m, s = compute_fid_statistics_dataloader(model, dataloader, device, dims)
     elif type_dataset == 'cifar10_train':
         if path_dataset is not None:
             path_dataset = str(path_dataset)
         dataset = PILDataset(load_dataset("cifar10", cache_dir= path_dataset)['train']['img'], TF.ToTensor())
-        dataloader = th.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=False, drop_last=False,
+        dataloader = th.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=False,
                                               num_workers=num_workers)
-        m, s = compute_fid_statistics_dataloader(model, dataloader, device, args.dims)
+        m, s = compute_fid_statistics_dataloader(model, dataloader, device, dims)
     elif type_dataset == 'cifar10_val':
         if path_dataset is not None:
             path_dataset = str(path_dataset)
         dataset = PILDataset(load_dataset("cifar10", cache_dir=path_dataset)['test']['img'], TF.ToTensor())
-        dataloader = th.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=False, drop_last=False,
+        dataloader = th.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=False,
                                               num_workers=num_workers)
-        m, s = compute_fid_statistics_dataloader(model, dataloader, device, args.dims)
+        m, s = compute_fid_statistics_dataloader(model, dataloader, device, dims)
     elif type_dataset == 'stats':
         with np.load(path_dataset) as f:
             m, s = f['mu'][:], f['sigma'][:]
     elif type_dataset == 'jpeg':
         dataset = dataset_jpeg(path_dataset)
-        dataloader = th.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=False, drop_last=False,
+        dataloader = th.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=False,
                                               num_workers=num_workers)
-        m, s = compute_fid_statistics_dataloader(model, dataloader, device, args.dims)
+        m, s = compute_fid_statistics_dataloader(model, dataloader, device, dims)
     else:
         raise ValueError
 
@@ -88,10 +88,10 @@ def main():
     model = get_model(device, dims=args.dims)
 
     # Dataset 1
-    m1, s1 = get_statistics(model, device, args, args.path_dataset1, args.type_dataset1, num_workers, args.path_save_stats_1)
+    m1, s1 = get_statistics(model, device, args.batch_size, args.dims, args.path_dataset1, args.type_dataset1, num_workers, args.path_save_stats_1)
 
     # Dataset 2
-    m2, s2 = get_statistics(model, device, args, args.path_dataset2, args.type_dataset2, num_workers, args.path_save_stats_2)
+    m2, s2 = get_statistics(model, device, args.batch_size, args.dims, args.path_dataset2, args.type_dataset2, num_workers, args.path_save_stats_2)
 
     fid_value = calculate_frechet_distance(m1, s1, m2, s2)
 

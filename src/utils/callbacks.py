@@ -55,3 +55,26 @@ class EMACallback(Callback):
             for ema_v, model_v in zip(ema_module.state_dict().values(), module.state_dict().values()):
                 ema_v.copy_(update_fn(ema_v, model_v))
 
+
+
+def load_non_ema(params):
+    params_ = OrderedDict()
+    all_keys = [k for k in params.keys()]
+    org_keys = all_keys[:int(len(all_keys) / 2)]
+    for org_key in org_keys:
+        params_[org_key] = params[org_key]
+    params = params_
+    return params
+
+def load_ema(params):
+    if 'ema_model' in params.keys():
+        params = params['ema_model']
+    else:
+        all_keys = [k for k in params.keys()]
+        ema_keys = all_keys[int(len(all_keys) / 2):]
+        keys = all_keys[:int(len(all_keys) / 2)]
+        params_ = OrderedDict()
+        for key, ema_key in zip(keys, ema_keys):
+            params_[key] = params[ema_key]
+        params = params_
+    return params

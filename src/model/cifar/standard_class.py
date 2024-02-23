@@ -4,7 +4,8 @@ from pathlib import Path
 import torch.nn as nn
 from src.data.cifar import CIFAR_100_NUM_CLASSES, CIFAR_IMAGE_SIZE, CIFAR_NUM_CHANNELS
 from src.utils.net import load_params_from_file
-import os
+from src.utils.datasets import dataset_image_description
+from src.utils.callbacks import load_ema
 import torch
 
 
@@ -56,7 +57,7 @@ class StandardClassifier(nn.Module):
 
         self.classifier = nn.Sequential(nn.MaxPool2d(4), nn.Flatten(), nn.Dropout(0.2), nn.Linear(512, num_classes))
 
-    def forward(self, xb, t):
+    def forward(self, xb):
         out = self.conv1(xb)
         out = self.conv2(out)
         out = self.res1(out) + out
@@ -183,54 +184,36 @@ cfgs = {
 }
 
 
-def _vgg(arch, cfg, batch_norm, pretrained, progress, device, **kwargs):
-    if pretrained:
+def _vgg(cfg, batch_norm, model_path, device, dataset='cifar10', **kwargs):
+    num_classes, _, _ = dataset_image_description(dataset)
+    if model_path is not None:
         kwargs["init_weights"] = False
-    model = VGG(make_layers(cfgs[cfg], batch_norm=batch_norm), **kwargs)
-    if pretrained:
-        script_dir = os.path.dirname(__file__)
-        state_dict = torch.load(
-            script_dir + "/models/" + arch + ".pt", map_location=device
-        )
-        model.load_state_dict(state_dict)
+    model = VGG(make_layers(cfgs[cfg], batch_norm=batch_norm), num_classes, **kwargs)
+    if model_path is not None:
+        params = load_params_from_file(model_path)
+        if 'ema' in model_path.stem:
+            params = load_ema(params)
+        model.load_state_dict(params)
     return model
 
 
-def vgg11_bn(pretrained=False, progress=True, device="cpu", **kwargs):
+def vgg11_bn(model_path=None, dataset='cifar10', device="cpu", **kwargs):
     """VGG 11-layer model (configuration "A") with batch normalization
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
     """
-    return _vgg("vgg11_bn", "A", True, pretrained, progress, device, **kwargs)
+    return _vgg("A", True, model_path, device, dataset, **kwargs)
 
 
-def vgg13_bn(pretrained=False, progress=True, device="cpu", **kwargs):
-    """VGG 13-layer model (configuration "B") with batch normalization
+def vgg13_bn(model_path=None, dataset='cifar10', device="cpu", **kwargs):
+    """VGG 13-layer model (configuration "B") with batch normalization"""
 
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    return _vgg("vgg13_bn", "B", True, pretrained, progress, device, **kwargs)
+    return _vgg("B", True, model_path, device, dataset, **kwargs)
 
 
-def vgg16_bn(pretrained=False, progress=True, device="cpu", **kwargs):
-    """VGG 16-layer model (configuration "D") with batch normalization
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    return _vgg("vgg16_bn", "D", True, pretrained, progress, device, **kwargs)
+def vgg16_bn(model_path=None, dataset='cifar10', device="cpu", **kwargs):
+    """VGG 16-layer model (configuration "D") with batch normalization"""
+    return _vgg("D", True, model_path, device, dataset, **kwargs)
 
 
-def vgg19_bn(pretrained=False, progress=True, device="cpu", **kwargs):
-    """VGG 19-layer model (configuration 'E') with batch normalization
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    return _vgg("vgg19_bn", "E", True, pretrained, progress, device, **kwargs)
+def vgg19_bn(model_path=None, dataset='cifar10', device="cpu", **kwargs):
+    """VGG 19-layer model (configuration 'E') with batch normalization"""
+    return _vgg("E", True, model_path, device, dataset, **kwargs)

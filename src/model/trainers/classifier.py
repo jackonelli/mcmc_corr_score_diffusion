@@ -133,24 +133,6 @@ class DiffusionClassifier(pl.LightningModule):
         self.val_acc0 = 0.0
         self.i_batch_val = 0
 
-    """
-    def configure_optimizers(self):
-        optimizer = th.optim.Adam(self.parameters(), lr=1e-3)
-        decay_every_nth = self._batches_per_epoch * 20
-        scheduler = th.optim.lr_scheduler.StepLR(optimizer, decay_every_nth, gamma=0.5)
-        # scheduler = th.optim.lr_scheduler.OneCycleLR(
-        #     optimizer,
-        #     0.001,
-        #     epochs=self.trainer.max_epochs,
-        #     steps_per_epoch=self._batches_per_epoch,
-        # )
-        # scheduler = th.optim.lr_scheduler.LinearLR(optimizer, start_factor=0.5, total_iters=4)
-        scheduler_dict = {
-            "scheduler": scheduler,
-            "interval": "step",
-        }
-        return {"optimizer": optimizer, "lr_scheduler": scheduler_dict}
-    """
     def configure_optimizers(self):
         warmup = 5000
         def warmup_lr(step):
@@ -188,12 +170,12 @@ class StandardClassifier(pl.LightningModule):
         self._batch_fn = batch_fn
         self._batches_per_epoch = batches_per_epoch
 
+        self.weight_decay = 0.
+        self.lr = 2e-4
+
     def training_step(self, batch, batch_idx):
         batch_size, x, y = self._batch_fn(batch, self.device)
-        # Algorithm 1 line 3: sample t uniformally for every example in the batch
-        ts = th.zeros((batch_size,), device=self.device).long()
-
-        predicted_y = self.model(x, ts)
+        predicted_y = self.model(x)
         loss = self.loss_f(predicted_y, y)
         self.log("train_loss", loss)
         self.train_loss += loss.detach().cpu().item()
@@ -209,14 +191,7 @@ class StandardClassifier(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         batch_size, x, y = self._batch_fn(batch, self.device)
 
-        rng_state = th.get_rng_state()
-        th.manual_seed(self.i_batch_val)
-
-        # Only report val. acc for t=0
-        ts_0 = th.zeros((batch_size,), device=self.device).long()
-        ts = th.zeros((batch_size,), device=self.device).long()
-        th.set_rng_state(rng_state)
-        logits = self.model(x, ts)
+        logits = self.model(x)
         loss = self.loss_f(logits, y)
         acc = accuracy(hard_label_from_logit(logits), y)
 
@@ -236,18 +211,15 @@ class StandardClassifier(pl.LightningModule):
         self.i_batch_val = 0
 
     def configure_optimizers(self):
-        optimizer = th.optim.Adam(self.parameters(), lr=1e-2)
-        # decay_every_nth = self._batches_per_epoch *
-        # scheduler = th.optim.lr_scheduler.StepLR(optimizer, decay_every_nth, gamma=0.1)
-        scheduler = th.optim.lr_scheduler.OneCycleLR(
-            optimizer,
-            0.01,
-            epochs=self.trainer.max_epochs,
-            steps_per_epoch=self._batches_per_epoch,
-        )
-        scheduler_dict = {
-            "scheduler": scheduler,
-            "interval": "step",
-        }
-        return {"optimizer": optimizer, "lr_scheduler": scheduler_dict}
-        # return [optimizer], [scheduler]
+        warmup = 5000
+        def warmup_lr(step):
+            return min(step, warmup) / warmup
+
+        optimizer = th.optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+        scheduler = th.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=warmup_lr)
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "step",
+            }}

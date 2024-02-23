@@ -3,6 +3,7 @@ import json
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, ToTensor, Resize, Lambda, RandomHorizontalFlip
 from datasets import load_dataset
+from typing import Optional
 
 CIFAR_IMAGE_SIZE = 32
 CIFAR_NUM_CHANNELS = 3
@@ -25,8 +26,8 @@ def get_cifar100_class_map(json_path: Path = Path.cwd() / "static/cifar100_class
     return class_map
 
 
-def get_cifar100_data_loaders(batch_size: int, data_root: Path):
-    dataset = load_dataset("cifar100", cache_dir=str(data_root))
+def get_cifar100_data_loaders(batch_size: int, data_root: Optional[str] = None):
+    dataset = load_dataset("cifar100", cache_dir=data_root)
 
     # define image transformations
     def transforms_f(train=True):
@@ -72,8 +73,8 @@ def get_cifar100_data_loaders(batch_size: int, data_root: Path):
     return dataloader_train, dataloader_val
 
 
-def get_cifar10_data_loaders(batch_size: int, data_root: Path):
-    dataset = load_dataset("cifar10", cache_dir=str(data_root))
+def get_cifar10_data_loaders(batch_size: int, data_root: Optional[str] = None):
+    dataset = load_dataset("cifar10", cache_dir=data_root)
 
     # define image transformations
     def transforms_f(train=True):

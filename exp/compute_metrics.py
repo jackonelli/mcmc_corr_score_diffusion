@@ -2,7 +2,7 @@
 import sys
 
 
-sys.path.append(".")
+sys.path.append("imagenet_metrics")
 from dataclasses import dataclass
 from pathlib import Path
 from argparse import ArgumentParser
@@ -20,12 +20,16 @@ from exp.imagenet_metrics.common import PATTERN, compute_acc
 # Cifar
 from src.model.resnet import load_classifier_t as load_resnet_classifier_t
 from src.data.cifar import CIFAR_100_NUM_CLASSES, CIFAR_NUM_CHANNELS, CIFAR_10_NUM_CLASSES, CIFAR_IMAGE_SIZE
-from src.model.cifar.standard_class import load_standard_class, vgg13_bn
+from src.model.cifar.standard_class import load_standard_class, vgg13_bn, vgg16_bn
+from src.utils.fid_utils import get_model
+from pytorch_fid.fid_score import calculate_frechet_distance
 from src.model.cifar.utils import load_unet_ho_drop_classifier_t
+from exp.compute_fid import get_statistics
 from torchvision.transforms import (
     Compose,
     Normalize,
     Lambda,
+    ToTensor
 )
 
 DEVICE = get_device(Device.GPU)
@@ -38,9 +42,9 @@ def main():
     # Setup and assign a directory where simulation results are saved.
     sim_dirs = collect_sim_dirs(args.res_dir)
     pattern = SimPattern(args.method, args.param, args.guid_scale, args.step_factor)
-    res = compute_metrics(sim_dirs, pattern, args.classifier, args.dataset, args.batch_size)
-    format_metrics(res)
-    save_metrics(res, dataset=args.dataset, param=args.param, dir_=args.store_dir)
+    res_acc, res_fid = compute_metrics(sim_dirs, pattern, args.classifier, args.dataset, args.batch_size, args.path_fid)
+    format_metrics(res_acc, res_fid)
+    # save_metrics(res, dataset=args.dataset, param=args.param, dir_=args.store_dir)
 
 
 def save_metrics(
@@ -65,8 +69,8 @@ def save_metrics(
         pickle.dump(compiled_res, ff)
 
 
-def format_metrics(res: List[Tuple[float, float, float, SimulationConfig, int, str]]):
-    for acc, r3_acc, top_5_acc, config, num_samples, sim_dir in res:
+def format_metrics(res: List[Tuple[float, float, float, SimulationConfig, int, str]], res_fid: List[Tuple[float]]):
+    for (acc, r3_acc, top_5_acc, config, num_samples, sim_dir), (fid,) in zip(res, res_fid):
         lambda_ = config.guid_scale
         if config.mcmc_method is None:
             str_ = f"Rev, lambda={lambda_}"
@@ -81,13 +85,26 @@ def format_metrics(res: List[Tuple[float, float, float, SimulationConfig, int, s
             str_ = f"{mcmc_method.upper()}-{mcmc_steps}({mcmc_lower_t}), lambda={lambda_}, n_trapets={n_trapets}, {factor} * beta_{step_sch}^{exp}"
         print(f"\n{sim_dir}")
         print(str_)
-        print(f"Acc: {acc}, R3 acc: {r3_acc}, Top-5 acc: {top_5_acc}, with {num_samples} samples")
+        print(f"Acc: {acc}, R3 acc: {r3_acc}, Top-5 acc: {top_5_acc}, FID: {fid} with {num_samples} samples")
         print(50 * "-")
 
 
-def compute_metrics(sim_dirs, pattern, classifier, dataset, batch_size):
+def compute_metrics(sim_dirs, pattern, classifier, dataset, batch_size, path_fid_compare=None):
     classifier, transform = load_classifier(classifier, dataset, batch_size)
-    res = []
+    dims = 2048
+    m1, s1, fid_model = None, None, None
+    if path_fid_compare is not None:
+        fid_model = get_model(DEVICE, dims)
+        m1, s1 = get_statistics(model=fid_model,
+                                device=DEVICE,
+                                batch_size=batch_size,
+                                dims=dims,
+                                path_dataset=path_fid_compare,
+                                type_dataset='stats',
+                                num_workers=8,
+                                path_save_stats=False)
+    res_acc = []
+    res_fid = []
     for sim_dir in sim_dirs:
         num_files = len(list(sim_dir.iterdir()))
         if num_files == 1:
@@ -101,8 +118,21 @@ def compute_metrics(sim_dirs, pattern, classifier, dataset, batch_size):
         simple_acc, r3_acc, top_5_acc, num_samples = compute_acc(
             classifier, classes_and_samples, transform, batch_size, DEVICE
         )
-        res.append((simple_acc, r3_acc, top_5_acc, config, num_samples, sim_dir.name))
-    return res
+        res_acc.append((simple_acc, r3_acc, top_5_acc, config, num_samples, sim_dir.name))
+        if path_fid_compare is not None:
+            m2, s2 = get_statistics(model=fid_model,
+                                    device=DEVICE,
+                                    batch_size=batch_size,
+                                    dims=dims,
+                                    path_dataset=sim_dir,
+                                    type_dataset='th',
+                                    num_workers=8,
+                                    path_save_stats=None)
+            fid_value = calculate_frechet_distance(m1, s1, m2, s2)
+            res_fid.append((fid_value,))
+        else:
+            res_fid.append(('-',))
+    return res_acc, res_fid
 
 
 def load_classifier(type_: str, dataset: str, batch_size: int):
@@ -110,6 +140,8 @@ def load_classifier(type_: str, dataset: str, batch_size: int):
         classifier, transform = load_classifier_imagenet(type_, IMAGE_SIZE, batch_size)
     elif dataset == "cifar100":
         classifier, transform = load_classifier_cifar100(type_, batch_size)
+    elif dataset == "cifar10":
+        classifier, transform = load_classifier_cifar10(type_, batch_size)
     else:
         raise ValueError(f"Incorrect data set {dataset}")
 
@@ -152,6 +184,7 @@ def load_classifier_cifar100(type_: str, batch_size: int):
         ts = th.zeros((batch_size,)).to(DEVICE)
         classifier = partial(classifier, t=ts)
     elif type_ == "independent":
+        """
         classifier = load_standard_class(
             model_path=Path.cwd() / "models/cifar100_simple_class.pt",
             device=DEVICE,
@@ -161,6 +194,10 @@ def load_classifier_cifar100(type_: str, batch_size: int):
         classifier.eval()
         ts = th.zeros((batch_size,)).to(DEVICE)
         classifier = partial(classifier, t=ts)
+        """
+        classifier = vgg16_bn(model_path=Path.cwd() / "models/vgg16_bn_ema_cifar100.ckpt",
+                              dataset='cifar100').to(DEVICE)
+        classifier.eval()
     else:
         raise ValueError("Incorrect classifier type")
     return classifier, lambda x: x
@@ -183,7 +220,7 @@ def load_classifier_cifar10(type_: str, batch_size: int):
         classifier = partial(classifier, t=ts)
         transform = lambda x: x
     elif type_ == "independent":
-        classifier = vgg13_bn(pretrained=True).to(DEVICE)
+        classifier = vgg13_bn(model_path=Path.cwd() / "models/vgg13_bn_cifar10.pt").to(DEVICE)
         classifier.eval()
         transform = Compose(
             [
@@ -273,7 +310,7 @@ def parse_args():
     )
     parser.add_argument("--batch_size", type=int, default=5, help="Batch size")
     parser.add_argument(
-        "--dataset", default="imagenet", type=str, choices=["imagenet", "cifar100"], help="Choose dataset"
+        "--dataset", default="cifar100", type=str, choices=["imagenet", "cifar100", "cifar10"], help="Choose dataset"
     )
     parser.add_argument(
         "--classifier",
@@ -297,6 +334,7 @@ def parse_args():
         type=float,
         help="Step factor (a) if 'None', then all a-values are included.",
     )
+    parser.add_argument("--path_fid", default=None, type=str, help="Path to fid-stats of data sets")
     return parser.parse_args()
 
 
