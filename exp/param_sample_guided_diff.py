@@ -62,11 +62,13 @@ def main():
     )
     diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance=post_var)
     mcmc_methods = ['hmc', 'la', 'uhmc', 'ula']
+    mcmc_steps = [2, 6, 2, 6]
     config.mcmc_stepsizes["params"]["factor"] = round(10 ** -np.random.randint(3) * np.random.rand() * 10, 3)
     config.mcmc_stepsizes["params"]["exponent"] = round(np.random.rand() * 1.5 + 0.5, 2)
     for i, method in enumerate(mcmc_methods):
         config.mcmc_method = method
         config.name = 'cifar100_' + method
+        config.mcmc_steps = mcmc_steps[i]
         generate_samples(args,
                          config,
                          classifier,
