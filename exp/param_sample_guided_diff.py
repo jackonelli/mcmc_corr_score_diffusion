@@ -66,6 +66,7 @@ def main():
     config.mcmc_stepsizes["params"]["exponent"] = round(np.random.rand() * 1.5 + 0.5, 2)
     for i, method in enumerate(mcmc_methods):
         config.mcmc_method = method
+        config.name = 'cifar100_' + method
         generate_samples(args,
                          config,
                          classifier,
