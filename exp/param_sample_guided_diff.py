@@ -65,7 +65,7 @@ def main():
     mcmc_steps = [2, 6, 2, 6]
     config.mcmc_stepsizes["params"]["factor"] = round(10 ** -np.random.randint(3) * np.random.rand() * 10, 3)
     config.mcmc_stepsizes["params"]["exponent"] = round(np.random.rand() * 1.2 + 0.5, 2)
-    config.guid_scale = np.random.choice([1, 3, 5, 7, 10])
+    config.guid_scale = np.random.choice([1., 3., 5., 7., 10.])
     for i, method in enumerate(mcmc_methods):
         config.mcmc_method = method
         config.name = 'cifar100_' + method
