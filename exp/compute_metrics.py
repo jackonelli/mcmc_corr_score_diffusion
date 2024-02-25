@@ -1,6 +1,6 @@
 """Compute metrics on sampled images"""
 import sys
-
+sys.path.append(".")
 
 sys.path.append("imagenet_metrics")
 from dataclasses import dataclass
@@ -44,17 +44,18 @@ def main():
     pattern = SimPattern(args.method, args.param, args.guid_scale, args.step_factor)
     res_acc, res_fid = compute_metrics(sim_dirs, pattern, args.classifier, args.dataset, args.batch_size, args.path_fid)
     format_metrics(res_acc, res_fid)
-    # save_metrics(res, dataset=args.dataset, param=args.param, dir_=args.store_dir)
+    save_metrics(res_acc, res_fid, dataset=args.dataset, param=args.param, dir_=args.store_dir)
 
 
 def save_metrics(
-    res: List[Tuple[float, float, float, SimulationConfig, int, str]],
+    res_acc: List[Tuple[float, float, float, SimulationConfig, int, str]],
+    res_fid: List[Tuple[float]],
     dataset: str,
     param: str,
     dir_: Path,
 ):
     compiled_res = []
-    for acc, r3_acc, top_5_acc, config, num_samples, sim_dir in res:
+    for (acc, r3_acc, top_5_acc, config, num_samples, sim_dir), (fid,) in zip(res_acc, res_fid):
         metric = {
             "config": config,
             "acc": acc,
@@ -62,11 +63,13 @@ def save_metrics(
             "top_5_acc": top_5_acc,
             "num_samples": num_samples,
             "sim_dir": sim_dir,
+            "fid": fid,
         }
         compiled_res.append(metric)
     dir_.mkdir(exist_ok=True, parents=True)
-    with open(dir_ / f"{dataset}_{param}.p", "wb") as ff:
-        pickle.dump(compiled_res, ff)
+    pickle.dump(compiled_res, open( dir_ / f"{dataset}_{param}.p", "wb" ))
+    # with open(dir_ / f"{dataset}_{param}.p", "wb") as ff:
+    #    pickle.dump(compiled_res, ff)
 
 
 def format_metrics(res: List[Tuple[float, float, float, SimulationConfig, int, str]], res_fid: List[Tuple[float]]):

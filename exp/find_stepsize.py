@@ -207,7 +207,7 @@ def parse_args():
     parser.add_argument("--n_mcmc_steps", default=1, type=int, help="Number of MCMC steps")
     parser.add_argument(
         "--respaced_num_diff_steps",
-        default=100,
+        default=1000,
         type=int,
         help="Number of respaced diffusion steps (fewer than or equal to num_diff_steps)",
     )
