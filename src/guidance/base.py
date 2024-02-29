@@ -244,13 +244,19 @@ class MCMCGuidanceSamplerStacking(MCMCGuidanceSampler):
             diff_cond=diff_cond,
         )
 
-    def sample_stacking(self, num_samples: int, batch_size: int, classes: th.Tensor, device: th.device, shape: tuple):
+    def sample_stacking(self, num_samples: int, batch_size: int, classes: th.Tensor, device: th.device, shape: tuple,
+                        verbose=False):
         n_batches = int(np.ceil(num_samples / batch_size))
         idx = np.array([i * batch_size for i in range(n_batches)] + [num_samples - 1])
         x = th.randn((num_samples,) + shape)
 
+        verbose_counter = 0
         for t, t_idx in zip(self.diff_proc.time_steps.__reversed__(), reversed(self.diff_proc.time_steps_idx)):
             print("Diff step: ", t.item())
+            if verbose and self.diff_proc.verbose_split[verbose_counter] == t:
+                print("Diff step", t.item())
+                verbose_counter += 1
+
             if self.reverse:
                 for i in range(n_batches - 1):
                     x_tm1 = x[idx[i] : idx[i + 1]].to(device)

@@ -34,7 +34,18 @@ from src.utils.seeding import set_seed
 from src.model.comp_two_d.diffusion import load_diff_model_gmm
 from src.model.comp_two_d.classifier import load_classifier
 import numpy as np
+from src.model.cifar.utils import get_diff_model, select_cifar_classifier
+from src.data.cifar import CIFAR_100_NUM_CLASSES, CIFAR_IMAGE_SIZE, CIFAR_NUM_CHANNELS
 
+
+def _get_beta_schedule(name):
+    if 'lin' in name:
+        beta_schedule = linear_beta_schedule
+    elif 'cos' in name:
+        beta_schedule = improved_beta_schedule
+    else:
+        raise ValueError('Invalid beta schedule')
+    return beta_schedule, "beta"
 
 def main():
     args = parse_args()
@@ -45,10 +56,11 @@ def main():
     sim_dir = _setup_results_dir(Path.cwd() / "results", args)
     device = get_device(Device.GPU)
     models_dir = Path.cwd() / "models"
+    energy_param = "energy" in args.diff_model
     # uncond_diff = load_mnist_diff(models_dir / "uncond_unet_mnist.pt", device)
     # classifier = _load_class(models_dir / "resnet_classifier_t_mnist.pt", device)
-    diff_model_path = models_dir / f"{args.diff_model}.pt"
-    class_model_path = models_dir / f"{args.class_model}.pt"
+    diff_model_path = models_dir / f"{args.diff_model}"
+    class_model_path = models_dir / f"{args.class_model}"
     T = args.num_diff_steps
     if "mnist" in args.diff_model:
         dataset_name = "mnist"
@@ -72,7 +84,7 @@ def main():
         posterior_variance = "learned"
         num_classes = 1000
         size = th.Size((channels, image_size, image_size))
-    elif "gmm":
+    elif "gmm" in args.diff_model:
         dataset_name = "2d_gmm"
         beta_schedule = improved_beta_schedule
         diff_model = load_diff_model_gmm(diff_model_path, T, device, energy=args.energy)
@@ -80,6 +92,24 @@ def main():
         classifier = load_classifier(class_model_path, num_classes, device, num_diff_steps=T)
         size = th.Size((2,))
         posterior_variance = "beta"
+    elif "cifar100" in args.diff_model:
+        dataset_name = "cifar100"
+        beta_schedule, post_var = _get_beta_schedule(args.diff_model)
+        image_size, num_classes, num_channels = (CIFAR_IMAGE_SIZE, CIFAR_100_NUM_CLASSES, CIFAR_NUM_CHANNELS)
+        diff_model = get_diff_model(args.diff_model, diff_model_path, device, energy_param, CIFAR_IMAGE_SIZE, T)
+        classifier = select_cifar_classifier(model_path=class_model_path, dev=device, num_steps=T)
+        size = th.Size((CIFAR_NUM_CHANNELS, CIFAR_IMAGE_SIZE, CIFAR_IMAGE_SIZE))
+        posterior_variance = "beta"
+    elif "cifar10" in args.diff_model:
+        dataset_name = "cifar10"
+        beta_schedule, post_var = _get_beta_schedule(args.diff_model)
+        image_size, num_classes, num_channels = (CIFAR_IMAGE_SIZE, 10, CIFAR_NUM_CHANNELS)
+        diff_model = get_diff_model(args.diff_model, diff_model_path, device, energy_param, CIFAR_IMAGE_SIZE, T)
+        classifier = select_cifar_classifier(model_path=class_model_path, dev=device, num_steps=T)
+        size = th.Size((CIFAR_NUM_CHANNELS, CIFAR_IMAGE_SIZE, CIFAR_IMAGE_SIZE))
+        posterior_variance = "beta"
+    else:
+        raise ValueError('Not a valid name of diff-model')
 
     respaced_T = args.respaced_num_diff_steps
 
@@ -114,6 +144,7 @@ def main():
             mcmc_sampler = AnnealedLAScoreSampler(mcmc_steps, step_sizes, None)
     else:
         print(f"Incorrect MCMC method: '{args.mcmc}'")
+        raise ValueError('')
     max_iter = args.max_iter
 
     guidance = ClassifierFullGuidance(classifier, lambda_=args.guid_scale)
@@ -136,7 +167,7 @@ def main():
             diff_cond=args.class_cond,
         )
         samples, _ = guided_sampler.sample_stacking(
-            num_samples, batch_size, classes, device, size
+            num_samples, batch_size, classes, device, size, verbose=True
         )
     else:
         print("Running Adaptive MCMC sampler")
@@ -153,12 +184,12 @@ def main():
             mcmc_sampler=sampler,
             diff_cond=args.class_cond,
         )
-        samples, _ = guided_sampler.sample(num_samples, classes, device, size)
+        samples, _ = guided_sampler.sample(num_samples, classes, device, size, verbose=True)
 
     adaptive_step_sizes = sampler.res
     adaptive_step_sizes = best_step_size([a / 100 for a in accept_rate_bound_pct], adaptive_step_sizes)
     lower_bound, upper_bound = accept_rate_bound_pct
-    save_path = sim_dir / f"{dataset_name}_{respaced_T}_{lower_bound}_{upper_bound}.p"
+    save_path = sim_dir / f"{args.mcmc}_{dataset_name}_{respaced_T}_{lower_bound}_{upper_bound}.p"
     pickle.dump(adaptive_step_sizes, open(save_path, "wb"))
 
 

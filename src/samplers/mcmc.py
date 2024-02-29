@@ -619,10 +619,12 @@ class AdaptiveStepSizeMCMCSamplerWrapper(MCMCMHCorrSampler):
         while not step_found and i < self.max_iter:
             current_rng_state = th.get_rng_state()
             torch.manual_seed(t)
+            self.sampler.update_save_dicts(t)
             x_ = self.sampler.sample_step(x, t, t_idx, classes)
             th.set_rng_state(current_rng_state)
             x_ = x_.detach()
-            a_rate = np.mean(self.sampler.accept_ratio[t])
+            # a_rate = np.mean(self.sampler.accept_ratio[t])
+            a_rate = np.mean([th.clip(alpha, 0., 1.).mean().item() for alpha in self.sampler.alpha[t]])
             step_s = self.sampler.step_sizes[t].clone()
             self.res[t]["accepts"].append(a_rate)
             self.res[t]["step_sizes"].append(step_s.detach().cpu().item())
@@ -713,11 +715,13 @@ class AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize(MCMCMHCorrSampler):
             torch.manual_seed(t)
             accepts = list()
             for j in range(n_batches - 1):
+                self.sampler.update_save_dicts(t)
                 x_ = x[idx[j] : idx[j + 1]].to(self.device)
                 y_ = text_embeddings[idx[j] : idx[j + 1]].to(self.device)
                 x_ = self.sampler.sample_step(x_, t, t_idx, y_)
                 x_next[idx[j] : idx[j + 1]] = x_.detach().cpu()
-                accepts += list(itertools.chain(*[acc.numpy().tolist() for acc in self.sampler.all_accepts[t]]))
+                # accepts += list(itertools.chain(*[acc.numpy().tolist() for acc in self.sampler.all_accepts[t]]))
+                accepts += [np.mean([th.clip(alpha, 0., 1.).mean().item() for alpha in self.sampler.alpha[t]])]
                 del x_
                 del y_
                 gc.collect()
