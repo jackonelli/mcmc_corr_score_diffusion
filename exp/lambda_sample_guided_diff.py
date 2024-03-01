@@ -60,9 +60,9 @@ def main():
         respaced_T=config.num_respaced_diff_steps,
     )
     diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance=post_var)
-    mcmc_methods = ['hmc', 'la']
-    mcmc_steps = [2, 6]
-    bounds = ['65_75', '55_65']
+    mcmc_methods = ['hmc', 'la', None]
+    mcmc_steps = [2, 6, None]
+    bounds = ['65_75', '55_65', None]
     config.guid_scale = 9*np.random.rand() + 1
     for i, method in enumerate(mcmc_methods):
         config.mcmc_method = method
