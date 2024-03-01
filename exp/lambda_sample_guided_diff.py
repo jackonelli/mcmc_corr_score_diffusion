@@ -66,7 +66,7 @@ def main():
     config.guid_scale = 9*np.random.rand() + 1
     for i, method in enumerate(mcmc_methods):
         config.mcmc_method = method
-        config.name = 'cifar100_' + method
+        config.name = 'cifar100_' + str(method)
         config.mcmc_steps = mcmc_steps[i]
         config.mcmc_stepsizes['load'] = True
         config.mcmc_stepsizes['bounds'] = bounds[i]
