@@ -63,7 +63,7 @@ def main():
     mcmc_methods = ['hmc', 'la', None]
     mcmc_steps = [2, 6, None]
     bounds = ['65_75', '55_65', None]
-    config.guid_scale = 9*np.random.rand() + 1
+    config.guid_scale = round(9*np.random.rand() + 1, 2)
     for i, method in enumerate(mcmc_methods):
         config.mcmc_method = method
         config.name = 'cifar100_' + str(method)
