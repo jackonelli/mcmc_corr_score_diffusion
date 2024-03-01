@@ -215,9 +215,17 @@ def get_guid_sampler(config, diff_model, diff_sampler, guidance, time_steps, dat
             T=config.num_diff_steps,
             respaced_T=config.num_respaced_diff_steps,
         )
-        a = config.mcmc_stepsizes["params"]["factor"]
-        b = config.mcmc_stepsizes["params"]["exponent"]
-        step_sizes = {int(t.item()): a * beta**b for (t, beta) in zip(time_steps, betas_mcmc)}
+
+        if config.mcmc_stepsizes["load"]:
+            print("Load step sizes for MCMC.")
+            step_sizes = get_step_size(
+                MODELS_DIR / "step_sizes", dataset_name, config.mcmc_method, config.mcmc_stepsizes["bounds"],
+                str(config.num_diff_steps)
+            )
+        else:
+            a = config.mcmc_stepsizes["params"]["factor"]
+            b = config.mcmc_stepsizes["params"]["exponent"]
+            step_sizes = {int(t.item()): a * beta**b for (t, beta) in zip(time_steps, betas_mcmc)}
 
         if config.mcmc_method == "hmc":
             if energy_param:

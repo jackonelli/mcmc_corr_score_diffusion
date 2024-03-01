@@ -166,7 +166,8 @@ def get_guid_sampler(config, diff_model, diff_sampler, guidance, time_steps, dat
         if config.mcmc_stepsizes["load"]:
             print("Load step sizes for MCMC.")
             step_sizes = get_step_size(
-                MODELS_DIR / "step_sizes", dataset_name, config.mcmc_method, config.mcmc_stepsizes["bounds"]
+                MODELS_DIR / "step_sizes", dataset_name, config.mcmc_method, config.mcmc_stepsizes["bounds"],
+                str(config.num_diff_steps)
             )
         else:
             print("Use parameterized step sizes for MCMC.")

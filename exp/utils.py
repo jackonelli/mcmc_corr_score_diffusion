@@ -115,17 +115,14 @@ class UnguidedSimulationConfig:
             json.dump(asdict(tmp_config), outfile, indent=4, sort_keys=False)
 
 
-def get_step_size(step_size_dir: Path, dataset_name: str, mcmc_method: str, mcmc_accept_bounds: str):
-    # print("Warning: using steps from T_resp = 500")
-    # steps = 500
-    path = step_size_dir / f"{dataset_name}_{mcmc_method}_{mcmc_accept_bounds}.p"
+def get_step_size(step_size_dir: Path, dataset_name: str, mcmc_method: str, mcmc_accept_bounds: str, num_steps: str):
+    path = step_size_dir / f"{mcmc_method}_{dataset_name}_{num_steps}_{mcmc_accept_bounds}.p"
     assert path.exists(), f"Step size file '{path}' not found"
     with open(path, "rb") as f:
         res = pickle.load(f)
-    # We accidentally save the last index (which we then leave with a reverse step)
-    # Therefore we include t=T in the dict, but it's not populated with a step size.
-    extracted = [(int(t), x["step_sizes"][-1]) for t, x in res.items() if x["step_sizes"]]
-    return dict(extracted)
+
+    step_size = {k: v for k, v in zip([i for i in range(len(res['best']['step_sizes']))], res['best']['step_sizes'])}
+    return step_size
 
 
 def setup_results_dir(config: Union[SimulationConfig, UnguidedSimulationConfig], job_id: Optional[int]) -> Path:
