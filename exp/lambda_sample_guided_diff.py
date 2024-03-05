@@ -60,10 +60,13 @@ def main():
         respaced_T=config.num_respaced_diff_steps,
     )
     diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance=post_var)
-    mcmc_methods = ['hmc', 'la', None]
-    mcmc_steps = [2, 6, None]
-    bounds = ['65_75', '55_65', None]
+    mcmc_methods = [None, 'hmc', 'la']
+    mcmc_steps = [None, 2, 6]
+    bounds = [None, '65_75', '55_65']
+
+    np.random.seed(args.job_id)
     config.guid_scale = round(9*np.random.rand() + 1, 2)
+
     for i, method in enumerate(mcmc_methods):
         config.mcmc_method = method
         config.name = 'cifar100_' + str(method)
@@ -115,9 +118,8 @@ def generate_samples(args,
         samples = samples.detach().cpu()
         th.save(samples, sim_dir / f"samples_{args.sim_batch}_{batch}.th")
         th.save(classes.detach().cpu(), sim_dir / f"classes_{args.sim_batch}_{batch}.th")
-        if config.mcmc_method == "hmc" or config.mcmc_method == "la":
-            guid_sampler.mcmc_sampler.save_stats_to_file(dir_=sim_dir,
-                                                         suffix=f"{args.sim_batch}_{batch}")
+        if (config.mcmc_method == "hmc" or config.mcmc_method == "la") and args.sim_batch == 0 and batch == 0:
+            guid_sampler.mcmc_sampler.save_stats_to_file(dir_=sim_dir, suffix=f"{args.sim_batch}_{batch}")
     print(f"Results written to '{sim_dir}'")
 
 
