@@ -63,9 +63,11 @@ def main():
     mcmc_methods = [None, 'hmc'] #, 'la']
     mcmc_steps = [None, 2] #, 6]
     bounds = [None, '65_75'] #, '55_65']
+    save_grad = True
+    config.t_skip = 50
 
     np.random.seed(args.job_id)
-    config.guid_scale = round(8*np.random.rand()+12, 2)
+    config.guid_scale = round(9*np.random.rand(), 2)
 
     for i, method in enumerate(mcmc_methods):
         config.mcmc_method = method
@@ -84,7 +86,8 @@ def main():
                          num_classes,
                          device,
                          num_channels,
-                         image_size)
+                         image_size,
+                         save_grad)
 
 
 def generate_samples(args,
@@ -98,13 +101,15 @@ def generate_samples(args,
                      num_classes,
                      device,
                      num_channels,
-                     image_size):
+                     image_size,
+                     save_grad):
     # Setup and assign a directory where simulation results are saved.
     sim_dir = setup_results_dir(config, args.job_id)
 
     guidance = ClassifierFullGuidance(classifier, lambda_=config.guid_scale)
     guid_sampler = get_guid_sampler(config, diff_model, diff_sampler,
-                                    guidance, time_steps, dataset_name, energy_param)
+                                    guidance, time_steps, dataset_name, energy_param, save_grad=save_grad,
+                                    t_skip=config.t_skip)
 
     print("Sampling...")
     for batch in range(config.num_samples // config.batch_size):
@@ -118,6 +123,9 @@ def generate_samples(args,
         th.save(classes.detach().cpu(), sim_dir / f"classes_{args.sim_batch}_{batch}.th")
         if (config.mcmc_method == "hmc" or config.mcmc_method == "la") and args.sim_batch == 1 and batch == 0:
             guid_sampler.mcmc_sampler.save_stats_to_file(dir_=sim_dir, suffix=f"{args.sim_batch}_{batch}")
+
+        if save_grad and args.sim_batch == 1 and batch == 0:
+            guid_sampler.save_grads_to_file(dir_=sim_dir, suffix=f"{args.sim_batch}_{batch}")
     print(f"Results written to '{sim_dir}'")
 
 
@@ -195,9 +203,11 @@ def load_models(config, device):
     )
 
 
-def get_guid_sampler(config, diff_model, diff_sampler, guidance, time_steps, dataset_name, energy_param: bool):
+def get_guid_sampler(config, diff_model, diff_sampler, guidance, time_steps, dataset_name, energy_param: bool,
+                     save_grad=False, t_skip=0):
     if config.mcmc_method is None:
-        guid_sampler = GuidanceSampler(diff_model, diff_sampler, guidance, diff_cond=config.class_cond)
+        guid_sampler = GuidanceSampler(diff_model, diff_sampler, guidance, diff_cond=config.class_cond,
+                                       save_grad=save_grad)
     else:
         assert config.mcmc_steps is not None
         assert config.mcmc_stepsizes is not None
@@ -260,6 +270,8 @@ def get_guid_sampler(config, diff_model, diff_sampler, guidance, time_steps, dat
             mcmc_sampler=mcmc_sampler,
             reverse=True,
             diff_cond=config.class_cond,
+            save_grad=save_grad,
+            mcmc_sampling_predicate=lambda t: t >= t_skip,
         )
     return guid_sampler
 

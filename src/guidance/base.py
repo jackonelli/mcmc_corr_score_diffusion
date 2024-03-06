@@ -19,6 +19,8 @@ from src.samplers.mcmc import (
 from src.model.base import EnergyModel
 from typing import List
 import gc
+from pathlib import Path
+import pickle
 
 
 class Guidance(ABC):
@@ -37,7 +39,8 @@ class Guidance(ABC):
 class GuidanceSampler:
     """Sampling from classifier guided DDPM"""
 
-    def __init__(self, diff_model: nn.Module, diff_proc: DiffusionSampler, guidance: Guidance, diff_cond: bool = False):
+    def __init__(self, diff_model: nn.Module, diff_proc: DiffusionSampler, guidance: Guidance, diff_cond: bool = False,
+                 save_grad=False):
         self.diff_model = diff_model
         self.diff_proc = diff_proc
         self.guidance = guidance
@@ -48,12 +51,19 @@ class GuidanceSampler:
         if isinstance(self.diff_model, EnergyModel):
             self.require_g = True
 
+        self.save_grad = save_grad
         # Seed only for noise in reverse step
-        current_rng_state = th.get_rng_state()
-        initial_seed = th.initial_seed()
-        th.manual_seed(initial_seed)
-        self.rng_state = th.get_rng_state()
-        th.set_rng_state(current_rng_state)
+        # current_rng_state = th.get_rng_state()
+        # initial_seed = th.initial_seed()
+        # th.manual_seed(initial_seed)
+        # self.rng_state = th.get_rng_state()
+        # th.set_rng_state(current_rng_state)
+
+
+    def save_grads_to_file(self, dir_: Path, suffix: str):
+        with open(dir_ / f"grads_{suffix}", "wb") as ff:
+            pickle.dump(self.grads, ff)
+
 
     def sample(
         self, num_samples: int, classes: th.Tensor, device: th.device, shape: tuple, verbose=False, save_traj=False
@@ -107,19 +117,21 @@ class GuidanceSampler:
         a_bar_t = extract(self.diff_proc.alphas_bar, t_idx, x_t)
 
         if t_idx > 0:
-            current_rng_state = th.get_rng_state()
-            th.set_rng_state(self.rng_state)
+            # current_rng_state = th.get_rng_state()
+            # th.set_rng_state(self.rng_state)
             z = th.randn_like(x_t)
-            self.rng_state = th.get_rng_state()
-            th.set_rng_state(current_rng_state)
+            # self.rng_state = th.get_rng_state()
+            # th.set_rng_state(current_rng_state)
         else:
             z = 0
 
         sigma_t = self.diff_proc.sigma_t(t_idx, x_t)
         t_tensor = th.full((x_t.shape[0],), t_idx, device=x_t.device)
         class_score = self.guidance.grad(x_t, t_tensor, classes, pred_noise)
-        self.grads["uncond"][t_idx] = th.norm(-pred_noise).detach().cpu()
-        self.grads["class"][t_idx] = th.norm(sigma_t * class_score).detach().cpu()
+        if self.save_grad:
+            dims = tuple([i for i in range(1, len(class_score.shape))])
+            self.grads["uncond"][t_idx] = th.linalg.vector_norm(-pred_noise, dim=dims).detach().cpu()
+            self.grads["class"][t_idx] = th.linalg.vector_norm(sigma_t * class_score, dim=dims).detach().cpu()
         m_tm1 = (x_t + b_t / (th.sqrt(1 - a_bar_t)) * (sigma_t * class_score - pred_noise)) / a_t.sqrt()
         noise = sqrt_post_var_t * z
         xtm1 = m_tm1 + noise
@@ -133,11 +145,13 @@ class MCMCGuidanceSampler(GuidanceSampler):
         diff_proc: DiffusionSampler,
         guidance: Guidance,
         mcmc_sampler: MCMCSampler,
-        mcmc_sampling_predicate: Callable = lambda t: t > 0,
+        mcmc_sampling_predicate: Callable = lambda t: t >= 0,
         reverse=True,
         diff_cond: bool = False,
+        save_grad: bool = False,
     ):
-        super().__init__(diff_model=diff_model, diff_proc=diff_proc, guidance=guidance, diff_cond=diff_cond)
+        super().__init__(diff_model=diff_model, diff_proc=diff_proc, guidance=guidance, diff_cond=diff_cond,
+                         save_grad=save_grad)
         self.mcmc_sampler = mcmc_sampler
         # Function which maps diff step t to a bool, controlling for which timesteps to to MCMC sampling.
         self._mcmc_sampling_predicate = mcmc_sampling_predicate
@@ -215,8 +229,8 @@ class MCMCGuidanceSampler(GuidanceSampler):
                 else:
                     x_tm1 = reverse_func(self, t, t_idx, x_tm1, classes, device, self.diff_cond)
 
-            if self._mcmc_sampling_predicate(t):
-                respaced_t = self.diff_proc.time_steps[t_idx - 1].item()
+            respaced_t = self.diff_proc.time_steps[t_idx - 1].item()
+            if self._mcmc_sampling_predicate(respaced_t):
                 x_tm1 = self.mcmc_sampler.sample_step(x_tm1, respaced_t, t_idx - 1, classes)
             x_tm1 = x_tm1.detach()
             if save_traj:

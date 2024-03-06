@@ -47,6 +47,7 @@ class SimulationConfig:
     # Meta
     save_traj: bool = False
     results_dir: Path = Path.cwd() / "results"
+    t_skip: Optional[int] = 0
 
     @staticmethod
     def from_json(cfg_file_path: Path):
