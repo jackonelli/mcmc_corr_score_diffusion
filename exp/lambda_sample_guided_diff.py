@@ -65,7 +65,7 @@ def main():
     bounds = [None, '65_75', '55_65']
 
     np.random.seed(args.job_id)
-    config.guid_scale = round(9*np.random.rand() + 1, 2)
+    config.guid_scale = round(2*np.random.rand(), 2)
 
     for i, method in enumerate(mcmc_methods):
         config.mcmc_method = method
@@ -84,8 +84,7 @@ def main():
                          num_classes,
                          device,
                          num_channels,
-                         image_size,
-                         i)
+                         image_size)
 
 
 def generate_samples(args,
@@ -99,10 +98,9 @@ def generate_samples(args,
                      num_classes,
                      device,
                      num_channels,
-                     image_size,
-                     i):
+                     image_size):
     # Setup and assign a directory where simulation results are saved.
-    sim_dir = setup_results_dir(config, args.job_id + i)
+    sim_dir = setup_results_dir(config, args.job_id)
 
     guidance = ClassifierFullGuidance(classifier, lambda_=config.guid_scale)
     guid_sampler = get_guid_sampler(config, diff_model, diff_sampler,
