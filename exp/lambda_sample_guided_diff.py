@@ -60,9 +60,9 @@ def main():
         respaced_T=config.num_respaced_diff_steps,
     )
     diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance=post_var)
-    mcmc_methods = [None, 'hmc', 'la']
-    mcmc_steps = [None, 2, 6]
-    bounds = [None, '65_75', '55_65']
+    mcmc_methods = [None, 'hmc'] #, 'la']
+    mcmc_steps = [None, 2] #, 6]
+    bounds = [None, '65_75'] #, '55_65']
 
     np.random.seed(args.job_id)
     config.guid_scale = round(2*np.random.rand(), 2)
