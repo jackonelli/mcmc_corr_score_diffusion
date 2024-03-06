@@ -42,9 +42,11 @@ def main():
     # Setup and assign a directory where simulation results are saved.
     sim_dirs = collect_sim_dirs(args.res_dir)
     pattern = SimPattern(args.method, args.param, args.guid_scale, args.step_factor)
-    res_acc, res_fid = compute_metrics(sim_dirs, pattern, args.classifier, args.dataset, args.batch_size, args.path_fid)
+    res_acc, res_fid = compute_metrics(sim_dirs, pattern, args.classifier, args.dataset, args.batch_size, args.path_fid,
+                                       args.num_samples)
     format_metrics(res_acc, res_fid)
-    save_metrics(res_acc, res_fid, dataset=args.dataset, param=args.param, dir_=args.store_dir)
+    if not args.no_save:
+        save_metrics(res_acc, res_fid, dataset=args.dataset, param=args.param, dir_=args.store_dir)
 
 
 def save_metrics(
@@ -92,7 +94,7 @@ def format_metrics(res: List[Tuple[float, float, float, SimulationConfig, int, s
         print(50 * "-")
 
 
-def compute_metrics(sim_dirs, pattern, classifier, dataset, batch_size, path_fid_compare=None):
+def compute_metrics(sim_dirs, pattern, classifier, dataset, batch_size, path_fid_compare=None, n_max=None):
     classifier, transform = load_classifier(classifier, dataset, batch_size)
     dims = 2048
     m1, s1, fid_model = None, None, None
@@ -119,7 +121,7 @@ def compute_metrics(sim_dirs, pattern, classifier, dataset, batch_size, path_fid
         classes_and_samples, num_batches = collect_samples(sim_dir)
         print(f"Processing '{sim_dir.name}' with {num_batches} batches")
         simple_acc, r3_acc, top_5_acc, num_samples = compute_acc(
-            classifier, classes_and_samples, transform, batch_size, DEVICE
+            classifier, classes_and_samples, transform, batch_size, DEVICE, n_max
         )
         res_acc.append((simple_acc, r3_acc, top_5_acc, config, num_samples, sim_dir.name))
         if path_fid_compare is not None:
@@ -130,7 +132,8 @@ def compute_metrics(sim_dirs, pattern, classifier, dataset, batch_size, path_fid
                                     path_dataset=sim_dir,
                                     type_dataset='th',
                                     num_workers=8,
-                                    path_save_stats=None)
+                                    path_save_stats=None,
+                                    num_samples=n_max)
             fid_value = calculate_frechet_distance(m1, s1, m2, s2)
             res_fid.append((fid_value,))
         else:
@@ -338,6 +341,9 @@ def parse_args():
         help="Step factor (a) if 'None', then all a-values are included.",
     )
     parser.add_argument("--path_fid", default=None, type=str, help="Path to fid-stats of data sets")
+    parser.add_argument('--num_samples', default=None, type=int, help='Number of samples to evaluate. '
+                                                                      'If None, then all samples are evaluated.')
+    parser.add_argument('--no_save', action='store_true')
     return parser.parse_args()
 
 

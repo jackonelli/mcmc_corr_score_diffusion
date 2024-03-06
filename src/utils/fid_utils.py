@@ -64,7 +64,7 @@ def get_model(device, dims=2048):
     return model
 
 
-def dataset_thfiles(path_folder, data_name='samples'):
+def dataset_thfiles(path_folder, data_name='samples', num_samples=None):
     files = os.listdir(path_folder)
     files = [os.path.join(path_folder, file) for file in files if file.split('.')[-1] == 'th' and data_name in file]
     images_ = [th.load(file) for file in files]
@@ -75,6 +75,11 @@ def dataset_thfiles(path_folder, data_name='samples'):
     for im in images_:
         images[i:i+im.shape[0], ...] = im
         i += im.shape[0]
+        if num_samples is not None and i > num_samples:
+            break
+
+    if num_samples is not None:
+        images = images[:num_samples]
     images = convert_to_transformed_data(images)
     return images
 

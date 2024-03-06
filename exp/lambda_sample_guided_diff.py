@@ -65,7 +65,7 @@ def main():
     bounds = [None, '65_75'] #, '55_65']
 
     np.random.seed(args.job_id)
-    config.guid_scale = round(2*np.random.rand(), 2)
+    config.guid_scale = round(0.2*np.random.rand(), 2)
 
     for i, method in enumerate(mcmc_methods):
         config.mcmc_method = method
