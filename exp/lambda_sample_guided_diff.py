@@ -60,9 +60,9 @@ def main():
         respaced_T=config.num_respaced_diff_steps,
     )
     diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance=post_var)
-    mcmc_methods = ['hmc'] # [None, 'hmc'] #, 'la']
-    mcmc_steps = [2] # [None, 2] #, 6]
-    bounds = ['65_75'] # [None, '65_75'] #, '55_65']
+    mcmc_methods = ['hmc', None] # [None, 'hmc'] #, 'la']
+    mcmc_steps = [2, None] # [None, 2] #, 6]
+    bounds = ['65_75', None] # [None, '65_75'] #, '55_65']
     save_grad = True
     config.t_skip = 50
 
