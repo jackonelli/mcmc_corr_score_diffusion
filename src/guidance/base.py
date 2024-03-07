@@ -230,7 +230,7 @@ class MCMCGuidanceSampler(GuidanceSampler):
                     x_tm1 = reverse_func(self, t, t_idx, x_tm1, classes, device, self.diff_cond)
 
             respaced_t = self.diff_proc.time_steps[t_idx - 1].item()
-            if self._mcmc_sampling_predicate(respaced_t):
+            if self._mcmc_sampling_predicate(respaced_t) and t_idx > 0:
                 x_tm1 = self.mcmc_sampler.sample_step(x_tm1, respaced_t, t_idx - 1, classes)
             x_tm1 = x_tm1.detach()
             if save_traj:
