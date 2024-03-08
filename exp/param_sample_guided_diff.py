@@ -1,6 +1,7 @@
 """Sampled from guided diffusion models"""
 import sys
 
+from bokeh.core.property import factors
 
 sys.path.append(".")
 from pathlib import Path
@@ -61,15 +62,19 @@ def main():
         respaced_T=config.num_respaced_diff_steps,
     )
     diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance=post_var)
-    mcmc_methods = ['hmc', 'la', 'uhmc', 'ula']
-    mcmc_steps = [2, 6, 2, 6]
-    config.mcmc_stepsizes["params"]["factor"] = round(10 ** -np.random.randint(3) * np.random.rand() * 10, 3)
-    config.mcmc_stepsizes["params"]["exponent"] = round(np.random.rand() * 1.2 + 0.5, 2)
-    config.guid_scale = np.random.choice([1, 3, 5, 7, 10])
+    mcmc_methods = ['hmc', 'la']
+    mcmc_steps = [2, 6]
+    if args.parallell:
+        np.random.seed(args.job_id)
+    factors = [round(5*np.random.rand() + 1, 2), round(5*np.random.rand() + 5, 2)]
+    exponents = [round(0.2 * np.random.rand() + 1.4, 2), round(0.1 * np.random.rand() + 0.95, 2)]
+    config.guid_scale = 20
     for i, method in enumerate(mcmc_methods):
         config.mcmc_method = method
         config.name = 'cifar100_' + method
         config.mcmc_steps = mcmc_steps[i]
+        config.mcmc_stepsizes["params"]["factor"] = factors[i]
+        config.mcmc_stepsizes["params"]["exponent"] = exponents[i]
         generate_samples(args,
                          config,
                          classifier,
@@ -81,8 +86,7 @@ def main():
                          num_classes,
                          device,
                          num_channels,
-                         image_size,
-                         i)
+                         image_size)
 
 def generate_samples(args,
                      config,
@@ -95,11 +99,13 @@ def generate_samples(args,
                      num_classes,
                      device,
                      num_channels,
-                     image_size,
-                     i):
+                     image_size):
 
     # Setup and assign a directory where simulation results are saved.
-    sim_dir = setup_results_dir(config, args.job_id + args.sim_batch + i*100)
+    if args.parallell:
+        sim_dir = setup_results_dir(config, args.job_id)
+    else:
+        sim_dir = setup_results_dir(config, args.job_id + args.sim_batch)
 
     guidance = ClassifierFullGuidance(classifier, lambda_=config.guid_scale)
     guid_sampler = get_guid_sampler(config, diff_model, diff_sampler,
@@ -276,6 +282,8 @@ def parse_args():
     parser.add_argument(
         "--sim_batch", type=int, default=0, help="Simulation batch index, indexes parallell simulations."
     )
+    parser.add_argument('--parallell', action='store_true', help='All the parallell simulations save '
+                                                                 'at the same location')
     return parser.parse_args()
 
 
