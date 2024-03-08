@@ -1,8 +1,6 @@
 """Sampled from guided diffusion models"""
 import sys
 
-from bokeh.core.property import factors
-
 sys.path.append(".")
 from pathlib import Path
 from argparse import ArgumentParser
