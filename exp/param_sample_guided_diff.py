@@ -66,15 +66,15 @@ def main():
     mcmc_steps = [2, 6]
     if args.parallell:
         np.random.seed(args.job_id)
-    factors = [round(5*np.random.rand() + 1, 2), round(5*np.random.rand() + 5, 2)]
-    exponents = [round(0.2 * np.random.rand() + 1.4, 2), round(0.1 * np.random.rand() + 0.95, 2)]
+    factors_ = [round(5*np.random.rand() + 1, 2), round(5*np.random.rand() + 5, 2)]
+    exponents_ = [round(0.2 * np.random.rand() + 1.4, 2), round(0.1 * np.random.rand() + 0.95, 2)]
     config.guid_scale = 20
     for i, method in enumerate(mcmc_methods):
         config.mcmc_method = method
         config.name = 'cifar100_' + method
         config.mcmc_steps = mcmc_steps[i]
-        config.mcmc_stepsizes["params"]["factor"] = factors[i]
-        config.mcmc_stepsizes["params"]["exponent"] = exponents[i]
+        config.mcmc_stepsizes["params"]["factor"] = factors_[i]
+        config.mcmc_stepsizes["params"]["exponent"] = exponents_[i]
         generate_samples(args,
                          config,
                          classifier,
