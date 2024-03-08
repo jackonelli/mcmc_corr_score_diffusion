@@ -76,7 +76,7 @@ def main():
         samples = samples.detach().cpu()
         th.save(samples, sim_dir / f"samples_{args.sim_batch}_{batch}.th")
         th.save(classes, sim_dir / f"classes_{args.sim_batch}_{batch}.th")
-        if config.mcmc_method == "hmc" or config.mcmc_method == "la":
+        if (config.mcmc_method == "hmc" or config.mcmc_method == "la") and args.sim_batch == 1 and batch == 0:
             guid_sampler.mcmc_sampler.save_stats_to_file(dir_=sim_dir,
                                                          suffix=f"{args.sim_batch}_{batch}")
     print(f"Results written to '{sim_dir}'")
