@@ -60,12 +60,12 @@ def main():
         respaced_T=config.num_respaced_diff_steps,
     )
     diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance=post_var)
-    mcmc_methods = ['hmc'] # ['hmc', 'la']
-    mcmc_steps = [2] # [2, 6]
+    mcmc_methods = ['ula', 'uhmc'] # ['hmc'] # ['hmc', 'la']
+    mcmc_steps = [6, 2] # [2] # [2, 6]
     if args.parallell:
         np.random.seed(args.job_id)
-    factors_ = [round(5*np.random.rand() + 1, 2)] # [round(5*np.random.rand() + 1, 2), round(5*np.random.rand() + 5, 2)]
-    exponents_ = [round(0.2 * np.random.rand() + 1.5, 2)] # [round(0.2 * np.random.rand() + 1.4, 2), round(0.1 * np.random.rand() + 0.95, 2)]
+    factors_ = [round(10 * np.random.rand() + 0.5, 2), round(5*np.random.rand(), 2)]
+    exponents_ = [round(0.1 * np.random.rand() + 0.95, 2), round(0.1 * np.random.rand() + 1.45, 2)]
     config.guid_scale = 20
     for i, method in enumerate(mcmc_methods):
         config.mcmc_method = method
