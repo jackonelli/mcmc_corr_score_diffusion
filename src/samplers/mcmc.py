@@ -172,15 +172,24 @@ class AnnealedLAScoreSampler(MCMCMHCorrSampler):
         self.update_save_dicts(t)
 
         for _ in range(self.num_samples_per_step):
-            x_hat, mean_x, ss = langevin_step(x, t, t_idx, classes, self.step_sizes, self.gradient_function)
+            # x_hat, mean_x, ss = langevin_step(x, t, t_idx, classes, self.step_sizes, self.gradient_function)
+            x_hat, mean_x, ss, grad_0 = langevin_step_grad(x, t, t_idx, classes, self.step_sizes, self.gradient_function)
 
-            mean_x_hat = get_mean(self.gradient_function, x_hat, t, t_idx, ss, classes)
+            # mean_x_hat = get_mean(self.gradient_function, x_hat, t, t_idx, ss, classes)
+            mean_x_hat, grad_1 = get_mean_grad(self.gradient_function, x_hat, t, t_idx, ss, classes)
             logp_reverse, logp_forward = transition_factor(x, mean_x, x_hat, mean_x_hat, ss, dims)
 
             intermediate_steps = th.linspace(0, 1, steps=self.n_trapets).to(x.device)
-            energy_diff = estimate_energy_diff_linear(
-                self.gradient_function, x, x_hat, t, t_idx, intermediate_steps, classes, dims
+
+            grads = [None for _ in range(self.n_trapets)]
+            grads[0] = grad_0
+            grads[-1] = grad_1
+            energy_diff = estimate_energy_diff_linear_given(
+                self.gradient_function, grads, x, x_hat, t, t_idx, intermediate_steps, classes, dims
             )
+            # energy_diff = estimate_energy_diff_linear(
+            #     self.gradient_function, x, x_hat, t, t_idx, intermediate_steps, classes, dims
+            # )
             logp_accept = energy_diff + logp_reverse - logp_forward
 
             u = th.rand(x.shape[0]).to(x.device)
@@ -246,11 +255,24 @@ def langevin_step(x, t, t_idx, classes, step_sizes, gradient_function):
     x_hat = mean_x + noise
     return x_hat, mean_x, ss
 
+def langevin_step_grad(x, t, t_idx, classes, step_sizes, gradient_function):
+    ss = step_sizes[t]
+    std = (2 * ss) ** 0.5
+    mean_x, grad = get_mean_grad(gradient_function, x, t, t_idx, ss, classes)
+    noise = th.randn_like(x) * std
+    x_hat = mean_x + noise
+    return x_hat, mean_x, ss, grad
+
 
 def get_mean(gradient_function, x, t, t_idx, ss, classes):
     """Get mean of transition distribution"""
     grad = gradient_function(x, t, t_idx, classes)
     return x + grad * ss
+
+def get_mean_grad(gradient_function, x, t, t_idx, ss, classes):
+    """Get mean of transition distribution and gradient"""
+    grad = gradient_function(x, t, t_idx, classes)
+    return x + grad * ss, grad
 
 
 def transition_factor(x, mean_x, x_hat, mean_x_hat, ss, dims):
@@ -268,6 +290,26 @@ def estimate_energy_diff_linear(gradient_function, x, x_hat, t, t_idx, ss_, clas
         x_ = x + ss_[j] * diff
         e = th.cat(
             (e, (gradient_function(x_, t, t_idx, classes) * diff).sum(dim=tuple(range(1, dims))).reshape(-1, 1)), 1
+        )
+    return th.trapz(e, ss_)
+
+
+def estimate_energy_diff_linear_given(gradient_function, grads, x, x_hat, t, t_idx, ss_, classes, dims):
+    diff = x_hat - x
+    x_ = x + ss_[0] * diff
+    if grads[0] is not None:
+        grad = grads[0]
+    else:
+        grad = gradient_function(x_, t, t_idx, classes)
+    e = (grad * diff).sum(dim=tuple(range(1, dims))).reshape(-1, 1)
+    for j in range(1, len(ss_)):
+        x_ = x + ss_[j] * diff
+        if grads[j] is not None:
+            grad = grads[j]
+        else:
+            grad = gradient_function(x_, t, t_idx, classes)
+        e = th.cat(
+            (e, (grad * diff).sum(dim=tuple(range(1, dims))).reshape(-1, 1)), 1
         )
     return th.trapz(e, ss_)
 
