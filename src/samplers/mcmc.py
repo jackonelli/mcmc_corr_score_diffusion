@@ -603,8 +603,8 @@ def leapfrog_steps(
         x_k = (x_k + step_size * v_k / mass_diag).detach()  # Step in x
         xs.append(x_k.clone())
         x_k = x_k.requires_grad_(True)
-        grad = gradient_function(x_k, t, t_idx, classes)
-        grads.append(grad.clone().detach())
+        grad = gradient_function(x_k, t, t_idx, classes).detach()
+        grads.append(grad.clone())
         v_k += 0.5 * step_size * grad  # half step in v
     return x_k, v_k, xs, grads
 
