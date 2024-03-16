@@ -60,11 +60,11 @@ def main():
         respaced_T=config.num_respaced_diff_steps,
     )
     diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance=post_var)
-    mcmc_methods = [# 'hmc',
+    mcmc_methods = ['hmc',
                     'la',
                     'ula',
                     'uhmc']
-    mcmc_steps = [# 2,
+    mcmc_steps = [2,
                   6,
                   6,
                   2]
@@ -80,11 +80,11 @@ def main():
                   round(0.1 * np.random.rand() + 0.95, 2),
                   round(0.1 * np.random.rand() + 1.45, 2)] 
     """
-    factors_ = [# round(10*np.random.rand(), 2),
+    factors_ = [round(10*np.random.rand(), 2),
                 round(10*np.random.rand(), 2),
                 round(10*np.random.rand(), 2),
                 round(10*np.random.rand(), 2)]
-    exponents_ = [# round(np.random.rand() + 0.5, 2),
+    exponents_ = [round(np.random.rand() + 0.5, 2),
                   round(np.random.rand() + 0.5, 2),
                   round(np.random.rand() + 0.5, 2),
                   round(np.random.rand() + 0.5, 2)]
