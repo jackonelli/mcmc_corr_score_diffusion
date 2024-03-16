@@ -60,8 +60,14 @@ def main():
         respaced_T=config.num_respaced_diff_steps,
     )
     diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance=post_var)
-    mcmc_methods = ['hmc', 'la', 'ula', 'uhmc'] # ['hmc'] # ['hmc', 'la']
-    mcmc_steps = [2, 6, 6, 2] # [2] # [2, 6]
+    mcmc_methods = [# 'hmc',
+                    'la',
+                    'ula',
+                    'uhmc']
+    mcmc_steps = [# 2,
+                  6,
+                  6,
+                  2]
     if args.parallell:
         np.random.seed(args.job_id)
     """
@@ -74,11 +80,11 @@ def main():
                   round(0.1 * np.random.rand() + 0.95, 2),
                   round(0.1 * np.random.rand() + 1.45, 2)] 
     """
-    factors_ = [round(10*np.random.rand(), 2),
+    factors_ = [# round(10*np.random.rand(), 2),
                 round(10*np.random.rand(), 2),
                 round(10*np.random.rand(), 2),
                 round(10*np.random.rand(), 2)]
-    exponents_ = [round(np.random.rand() + 0.5, 2),
+    exponents_ = [# round(np.random.rand() + 0.5, 2),
                   round(np.random.rand() + 0.5, 2),
                   round(np.random.rand() + 0.5, 2),
                   round(np.random.rand() + 0.5, 2)]
@@ -86,7 +92,7 @@ def main():
     config.guid_scale = 20
     for i, method in enumerate(mcmc_methods):
         config.mcmc_method = method
-        config.name = 'cifar100_' + method
+        config.name = 'cifar100_param_' + method
         config.mcmc_steps = mcmc_steps[i]
         config.mcmc_stepsizes["params"]["factor"] = factors_[i]
         config.mcmc_stepsizes["params"]["exponent"] = exponents_[i]

@@ -227,12 +227,15 @@ class AnnealedLAEnergySampler(MCMCMHCorrSampler):
         for i in range(self.num_samples_per_step):
             x.requires_grad_(True)
             x_hat, mean_x, ss = langevin_step(x, t, t_idx, classes, self.step_sizes, self.gradient_function)
-            x_hat.requires_grad_(True)
+            x = x.detach()
 
-            mean_x_hat = get_mean(self.gradient_function, x_hat, t, t_idx, ss, classes)
+            x_hat.requires_grad_(True)
+            mean_x_hat = get_mean(self.gradient_function, x_hat, t, t_idx, ss, classes).detach()
+
             logp_reverse, logp_forward = transition_factor(x, mean_x, x_hat, mean_x_hat, ss, dims)
 
-            energy_diff = self.energy_function(x_hat, t, t_idx, classes) - self.energy_function(x, t, t_idx, classes)
+            energy_diff = (self.energy_function(x_hat, t, t_idx, classes).detach()
+                           - self.energy_function(x, t, t_idx, classes).detach())
             logp_accept = energy_diff + logp_reverse - logp_forward
 
             u = th.rand(x.shape[0]).to(x.device)
@@ -266,12 +269,12 @@ def langevin_step_grad(x, t, t_idx, classes, step_sizes, gradient_function):
 
 def get_mean(gradient_function, x, t, t_idx, ss, classes):
     """Get mean of transition distribution"""
-    grad = gradient_function(x, t, t_idx, classes)
+    grad = gradient_function(x, t, t_idx, classes).detach()
     return x + grad * ss
 
 def get_mean_grad(gradient_function, x, t, t_idx, ss, classes):
     """Get mean of transition distribution and gradient"""
-    grad = gradient_function(x, t, t_idx, classes)
+    grad = gradient_function(x, t, t_idx, classes).detach()
     return x + grad * ss, grad
 
 
@@ -554,7 +557,8 @@ class AnnealedHMCEnergySampler(MCMCMHCorrSampler):
             )
 
             # Energy diff estimation
-            energy_diff = self.energy_function(x_next, t, t_idx, classes) - self.energy_function(x, t, t_idx, classes)
+            energy_diff = (self.energy_function(x_next, t, t_idx, classes).detach()
+                           - self.energy_function(x, t, t_idx, classes).detach())
             logp_accept = logp_v - logp_v_p + energy_diff
 
             u = th.rand(x_next.shape[0]).to(x_next.device)
