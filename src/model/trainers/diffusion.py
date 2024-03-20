@@ -57,7 +57,7 @@ class DiffusionModel(pl.LightningModule):
         warmup = 5000
         def warmup_lr(step):
             return min(step, warmup) / warmup
-        optimizer = th.optim.Adam(self.parameters(), lr=5e-5)
+        optimizer = th.optim.Adam(self.parameters(), lr=2e-4)
         # scheduler = th.optim.lr_scheduler.StepLR(optimizer, 1, gamma=1.0)
 
         checkpoint = None
