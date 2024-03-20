@@ -136,6 +136,7 @@ class DiffusionSampler(ABC):
                 pred_noise, log_var = model(x_tm1, t_tensor).split(x_tm1.size(1), dim=1)
                 log_var, _ = self._clip_var(x_tm1, t_idx_tensor, log_var)
                 sqrt_post_var_t = th.exp(0.5 * log_var)
+            pred_noise = pred_noise.detach()
             x_tm1 = self._sample_x_tm1_given_x_t(x_tm1, t_idx, pred_noise, sqrt_post_var_t=sqrt_post_var_t)
             x_tm1 = x_tm1.detach()
             # steps.append((t, x_tm1.detach().cpu()))

@@ -17,9 +17,12 @@ def get_statistics(model, device, batch_size, dims, path_dataset, type_dataset, 
                    num_samples=None):
     if type_dataset == 'th':
         dataset = dataset_thfiles(path_dataset, num_samples=num_samples)
-        dataloader = th.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=False,
-                                              num_workers=num_workers)
-        m, s = compute_fid_statistics_dataloader(model, dataloader, device, dims)
+        if th.any(dataset.isnan()).item():
+            m, s = None, None
+        else:
+            dataloader = th.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=False,
+                                                  num_workers=num_workers)
+            m, s = compute_fid_statistics_dataloader(model, dataloader, device, dims)
     elif type_dataset == 'cifar100_train':
         if path_dataset is not None:
             path_dataset = str(path_dataset)

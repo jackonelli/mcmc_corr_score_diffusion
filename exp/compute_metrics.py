@@ -134,7 +134,10 @@ def compute_metrics(sim_dirs, pattern, classifier, dataset, batch_size, path_fid
                                     num_workers=8,
                                     path_save_stats=None,
                                     num_samples=n_max)
-            fid_value = calculate_frechet_distance(m1, s1, m2, s2)
+            if m2 is None or s2 is None:
+                fid_value = th.inf
+            else:
+                fid_value = calculate_frechet_distance(m1, s1, m2, s2)
             res_fid.append((fid_value,))
         else:
             res_fid.append(('-',))
@@ -302,7 +305,7 @@ class SimPattern:
             else:
                 # Include "Reverse" if a specific factor is selected
                 include = True
-        include &= self.param in config.diff_model
+        include &= self.param in config.diff_model or self.param == 'both'
         return include
 
 
@@ -312,7 +315,7 @@ def parse_args():
     parser.add_argument("--store_dir", type=Path, default=Path.cwd() / "results/cifar100", help="Dir to sort tables to")
     parser.add_argument("--metric", default="all", type=str, choices=["all", "acc", "fid"], help="Metric to compute")
     parser.add_argument(
-        "--param", default="score", type=str, choices=["energy", "score"], help="Choose diff model parameterisation"
+        "--param", default="both", type=str, choices=["energy", "score", "both"], help="Choose diff model parameterisation"
     )
     parser.add_argument("--batch_size", type=int, default=5, help="Batch size")
     parser.add_argument(
