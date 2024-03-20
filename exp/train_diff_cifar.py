@@ -108,7 +108,7 @@ def main():
     unet.train()
     diff_sampler = DiffusionSampler(betas, time_steps)
 
-    diffm = DiffusionModel(model=unet, loss_f=F.mse_loss, noise_scheduler=diff_sampler, fixed=args.fixed,
+    diffm = DiffusionModel(model=unet, loss_f=F.mse_loss, noise_scheduler=diff_sampler, fixed=args.fixed_val,
                            path_load_state=args.path_checkpoint)
     filename = args.dataset + "_" + param_model + "_" + args.beta + "_" + args.model_size + "_" + str(int(args.dropout*100)) + ema + "_diff_{epoch:02d}"
     checkpoint_callback = ModelCheckpoint(
