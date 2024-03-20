@@ -14,7 +14,7 @@ from torchvision.models import regnet_x_8gf, RegNet_X_8GF_Weights
 from src.data.imagenet import CLASSIFIER_TRANSFORM
 from src.utils.net import get_device, Device
 from src.model.guided_diff.classifier import load_guided_classifier
-from exp.utils import SimulationConfig
+from exp.utils import SimulationConfig, UnguidedSimulationConfig
 from exp.imagenet_metrics.common import PATTERN, compute_acc
 
 # Cifar
@@ -115,7 +115,11 @@ def compute_metrics(sim_dirs, pattern, classifier, dataset, batch_size, path_fid
         if num_files == 1:
             print(f"Skipping dir '{sim_dir.name}', with no samples")
             continue
-        config = SimulationConfig.from_json(sim_dir / "config.json")
+        config = SimulationConfig.load(sim_dir / "config.json")
+        if 'unguided' in config['name']:
+            config = UnguidedSimulationConfig.from_json_no_load(sim_dir / "config.json")
+        else:
+            config = SimulationConfig.from_json_no_load(config)
         if not pattern.include_sim(config):
             continue
         classes_and_samples, num_batches = collect_samples(sim_dir)

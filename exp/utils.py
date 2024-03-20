@@ -50,12 +50,23 @@ class SimulationConfig:
     t_skip: int = 0
 
     @staticmethod
-    def from_json(cfg_file_path: Path):
+    def load(cfg_file_path: Path):
         with open(cfg_file_path) as cfg_file:
             cfg = json.load(cfg_file)
+        return cfg
+
+
+    @staticmethod
+    def from_json_no_load(cfg):
         cfg = SimulationConfig(**cfg)
         cfg.results_dir = Path(cfg.results_dir)
         cfg._validate()
+        return cfg
+
+    @staticmethod
+    def from_json(cfg_file_path: Path):
+        cfg = SimulationConfig.load(cfg_file_path)
+        cfg = SimulationConfig.from_json_no_load(cfg)
         return cfg
 
     def _validate(self):
@@ -103,8 +114,18 @@ class UnguidedSimulationConfig:
 
     @staticmethod
     def from_json(cfg_file_path: Path):
+        cfg = UnguidedSimulationConfig.load(cfg_file_path)
+        cfg = UnguidedSimulationConfig.from_json_no_load(cfg)
+        return cfg
+
+    @staticmethod
+    def load(cfg_file_path: Path):
         with open(cfg_file_path) as cfg_file:
             cfg = json.load(cfg_file)
+        return cfg
+
+    @staticmethod
+    def from_json_no_load(cfg):
         cfg = UnguidedSimulationConfig(**cfg)
         cfg.results_dir = Path(cfg.results_dir)
         return cfg
