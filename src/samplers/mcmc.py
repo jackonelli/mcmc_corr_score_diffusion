@@ -239,13 +239,12 @@ class AnnealedLAEnergySampler(MCMCMHCorrSampler):
             logp_accept = energy_diff + logp_reverse - logp_forward
 
             u = th.rand(x.shape[0]).to(x.device)
+            alpha = th.exp(logp_accept)
             accept = (
-                (u < th.exp(logp_accept)).to(th.float32).reshape((x.shape[0],) + tuple(([1 for _ in range(dims - 1)])))
+                (u < alpha).to(th.float32).reshape((x.shape[0],) + tuple(([1 for _ in range(dims - 1)])))
             )
-            self.accept_ratio[t].append((th.sum(accept) / accept.shape[0]).detach().cpu().item())
-            self.all_accepts[t].append(accept.detach().cpu())
-            self.energy_diff[t].append(energy_diff.detach().cpu())
             x = accept * x_hat + (1 - accept) * x
+            self.save_stats(t, alpha, accept, energy_diff)
             x = x.detach()
         return x
 
@@ -532,9 +531,6 @@ class AnnealedHMCEnergySampler(MCMCMHCorrSampler):
 
         # Sample Momentum
         v = th.randn_like(x) * self._mass_diag_sqrt[t_idx]
-        self.accept_ratio[t] = list()
-        self.all_accepts[t] = list()
-        self.energy_diff[t] = list()
 
         for i in range(self.num_samples_per_step):
             # Partial Momentum Refreshment
@@ -562,8 +558,9 @@ class AnnealedHMCEnergySampler(MCMCMHCorrSampler):
             logp_accept = logp_v - logp_v_p + energy_diff
 
             u = th.rand(x_next.shape[0]).to(x_next.device)
+            alpha = th.exp(logp_accept)
             accept = (
-                (u < th.exp(logp_accept))
+                (u < alpha)
                 .to(th.float32)
                 .reshape((x_next.shape[0],) + tuple(([1 for _ in range(dims - 1)])))
             )
@@ -572,9 +569,7 @@ class AnnealedHMCEnergySampler(MCMCMHCorrSampler):
             x = accept * x_next + (1 - accept) * x
             x = x.detach()
             v = accept * v_next + (1 - accept) * v_prime
-            self.accept_ratio[t].append((th.sum(accept) / accept.shape[0]).detach().cpu().item())
-            self.all_accepts[t].append(accept.detach().cpu().squeeze())
-            self.energy_diff[t].append(energy_diff.detach().cpu())
+            self.save_stats(t, alpha, accept, energy_diff)
         return x
 
 
