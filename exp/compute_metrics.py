@@ -9,13 +9,14 @@ from argparse import ArgumentParser
 from typing import Tuple, List
 from functools import partial
 import pickle
+import os
 import torch as th
 from torchvision.models import regnet_x_8gf, RegNet_X_8GF_Weights
 from src.data.imagenet import CLASSIFIER_TRANSFORM
 from src.utils.net import get_device, Device
 from src.model.guided_diff.classifier import load_guided_classifier
 from exp.utils import SimulationConfig, UnguidedSimulationConfig
-from exp.imagenet_metrics.common import PATTERN, compute_acc
+from exp.imagenet_metrics.common import PATTERN, compute_acc, compute_nbr_samples
 
 # Cifar
 from src.model.resnet import load_classifier_t as load_resnet_classifier_t
@@ -41,8 +42,9 @@ def main():
     args = parse_args()
     # Setup and assign a directory where simulation results are saved.
     sim_dirs = collect_sim_dirs(args.res_dir)
+    p_file = collect_computed_res(args.res_dir, args.param)
     pattern = SimPattern(args.method, args.param, args.guid_scale, args.step_factor)
-    res_acc, res_fid = compute_metrics(sim_dirs, pattern, args.classifier, args.dataset, args.batch_size, args.path_fid,
+    res_acc, res_fid = compute_metrics(p_file, sim_dirs, pattern, args.classifier, args.dataset, args.batch_size, args.path_fid,
                                        args.num_samples)
     format_metrics(res_acc, res_fid)
     if not args.no_save:
@@ -76,25 +78,28 @@ def save_metrics(
 
 def format_metrics(res: List[Tuple[float, float, float, SimulationConfig, int, str]], res_fid: List[Tuple[float]]):
     for (acc, r3_acc, top_5_acc, config, num_samples, sim_dir), (fid,) in zip(res, res_fid):
-        lambda_ = config.guid_scale
-        if config.mcmc_method is None:
-            str_ = f"Rev, lambda={lambda_}"
+        if isinstance(config, SimulationConfig):
+            lambda_ = config.guid_scale
+            if config.mcmc_method is None:
+                str_ = f"Rev, lambda={lambda_}"
+            else:
+                mcmc_method = config.mcmc_method if config.mcmc_method is not None else "Rev"
+                mcmc_steps = config.mcmc_steps
+                mcmc_lower_t = config.mcmc_lower_t if config.mcmc_lower_t is not None else 0
+                n_trapets = config.n_trapets
+                step_params = config.mcmc_stepsizes["params"]
+                step_sch = config.mcmc_stepsizes["beta_schedule"]
+                factor, exp = step_params["factor"], step_params["exponent"]
+                str_ = f"{mcmc_method.upper()}-{mcmc_steps}({mcmc_lower_t}), lambda={lambda_}, n_trapets={n_trapets}, {factor} * beta_{step_sch}^{exp}"
         else:
-            mcmc_method = config.mcmc_method if config.mcmc_method is not None else "Rev"
-            mcmc_steps = config.mcmc_steps
-            mcmc_lower_t = config.mcmc_lower_t if config.mcmc_lower_t is not None else 0
-            n_trapets = config.n_trapets
-            step_params = config.mcmc_stepsizes["params"]
-            step_sch = config.mcmc_stepsizes["beta_schedule"]
-            factor, exp = step_params["factor"], step_params["exponent"]
-            str_ = f"{mcmc_method.upper()}-{mcmc_steps}({mcmc_lower_t}), lambda={lambda_}, n_trapets={n_trapets}, {factor} * beta_{step_sch}^{exp}"
+            str_ = f"Rev"
         print(f"\n{sim_dir}")
         print(str_)
         print(f"Acc: {acc}, R3 acc: {r3_acc}, Top-5 acc: {top_5_acc}, FID: {fid} with {num_samples} samples")
         print(50 * "-")
 
 
-def compute_metrics(sim_dirs, pattern, classifier, dataset, batch_size, path_fid_compare=None, n_max=None):
+def compute_metrics(p_file, sim_dirs, pattern, classifier, dataset, batch_size, path_fid_compare=None, n_max=None):
     classifier, transform = load_classifier(classifier, dataset, batch_size)
     dims = 2048
     m1, s1, fid_model = None, None, None
@@ -110,41 +115,63 @@ def compute_metrics(sim_dirs, pattern, classifier, dataset, batch_size, path_fid
                                 path_save_stats=False)
     res_acc = []
     res_fid = []
+
+    if p_file is not None:
+        computed_dirs = [f['sim_dir'] for f in p_file]
+    else:
+        computed_dirs = []
+
     for sim_dir in sim_dirs:
         num_files = len(list(sim_dir.iterdir()))
         if num_files == 1:
             print(f"Skipping dir '{sim_dir.name}', with no samples")
             continue
+
         config = SimulationConfig.load(sim_dir / "config.json")
         if 'unguided' in config['name']:
-            config = UnguidedSimulationConfig.from_json_no_load(sim_dir / "config.json")
+            config = UnguidedSimulationConfig.from_json_no_load(config)
         else:
             config = SimulationConfig.from_json_no_load(config)
         if not pattern.include_sim(config):
             continue
-        classes_and_samples, num_batches = collect_samples(sim_dir)
-        print(f"Processing '{sim_dir.name}' with {num_batches} batches")
-        simple_acc, r3_acc, top_5_acc, num_samples = compute_acc(
-            classifier, classes_and_samples, transform, batch_size, DEVICE, n_max
-        )
-        res_acc.append((simple_acc, r3_acc, top_5_acc, config, num_samples, sim_dir.name))
-        if path_fid_compare is not None:
-            m2, s2 = get_statistics(model=fid_model,
-                                    device=DEVICE,
-                                    batch_size=batch_size,
-                                    dims=dims,
-                                    path_dataset=sim_dir,
-                                    type_dataset='th',
-                                    num_workers=8,
-                                    path_save_stats=None,
-                                    num_samples=n_max)
-            if m2 is None or s2 is None:
-                fid_value = th.inf
-            else:
-                fid_value = calculate_frechet_distance(m1, s1, m2, s2)
+
+        if sim_dir.name in computed_dirs:
+            print(f"The directory '{sim_dir.name}' has been processed earlier - load results")
+            idx = computed_dirs.index(sim_dir.name)
+            comp_res = p_file[idx]
+            simple_acc, r3_acc, top_5_acc, num_samples, fid_value = (
+                comp_res['acc'], comp_res['r3_acc'], comp_res['top_5_acc'], comp_res['num_samples'], comp_res['fid']
+            )
+            res_acc.append((simple_acc, r3_acc, top_5_acc, config, num_samples, sim_dir.name))
             res_fid.append((fid_value,))
         else:
-            res_fid.append(('-',))
+            classes_and_samples, num_batches = collect_samples(sim_dir)
+            if isinstance(config, SimulationConfig):
+                print(f"Processing '{sim_dir.name}' with {num_batches} batches")
+                simple_acc, r3_acc, top_5_acc, num_samples = compute_acc(
+                    classifier, classes_and_samples, transform, batch_size, DEVICE, n_max
+                )
+            else:
+                num_samples = compute_nbr_samples(classes_and_samples)
+                simple_acc, r3_acc, top_5_acc = "-", "-", "-"
+            res_acc.append((simple_acc, r3_acc, top_5_acc, config, num_samples, sim_dir.name))
+            if path_fid_compare is not None:
+                m2, s2 = get_statistics(model=fid_model,
+                                        device=DEVICE,
+                                        batch_size=batch_size,
+                                        dims=dims,
+                                        path_dataset=sim_dir,
+                                        type_dataset='th',
+                                        num_workers=8,
+                                        path_save_stats=None,
+                                        num_samples=n_max)
+                if m2 is None or s2 is None:
+                    fid_value = th.inf
+                else:
+                    fid_value = calculate_frechet_distance(m1, s1, m2, s2)
+                res_fid.append((fid_value,))
+            else:
+                res_fid.append(('-',))
     return res_acc, res_fid
 
 
@@ -250,6 +277,15 @@ def collect_sim_dirs(res_dir: Path):
     dirs = filter(lambda x: x.is_dir(), res_dir.iterdir())
     dirs = filter(lambda x: (x / "config.json").exists(), dirs)
     return dirs
+
+
+def collect_computed_res(res_dir: Path, param: str):
+    pickle_file = [f for f in os.listdir(res_dir) if ".p" in f and param in f]
+    if len(pickle_file) > 0:
+        file = pickle.load(open(res_dir / pickle_file[0], "rb"))
+    else:
+        file = None
+    return file
 
 
 def collect_samples(sim_dir: Path) -> Tuple[List[Tuple[Path, Path]], int]:

@@ -118,8 +118,12 @@ class DiffusionSampler(ABC):
         steps = []
         x_tm1 = th.randn((num_samples,) + shape).to(device)
         verbose_counter = 0
-
+        # import time
         for t, t_idx in zip(self.time_steps.__reversed__(), reversed(self.time_steps_idx)):
+            # start_time = time.time()
+            # start = th.cuda.Event(enable_timing=True)
+            # end = th.cuda.Event(enable_timing=True)
+            # start.record()
             x_tm1 = x_tm1.requires_grad_(True)
             t_tensor = th.full((x_tm1.shape[0],), t.item(), device=device)
             t_idx_tensor = th.full((x_tm1.shape[0],), t_idx, device=device)
@@ -139,6 +143,10 @@ class DiffusionSampler(ABC):
             pred_noise = pred_noise.detach()
             x_tm1 = self._sample_x_tm1_given_x_t(x_tm1, t_idx, pred_noise, sqrt_post_var_t=sqrt_post_var_t)
             x_tm1 = x_tm1.detach()
+            # print(time.time() - start_time)
+            # end.record()
+            # th.cuda.synchronize()
+            # print(start.elapsed_time(end) / 1000)
             # steps.append((t, x_tm1.detach().cpu()))
 
         return x_tm1, steps

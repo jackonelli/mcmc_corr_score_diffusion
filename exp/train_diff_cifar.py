@@ -63,34 +63,22 @@ def main():
     else:
         if args.path_checkpoint is not None:
             path_model = Path(args.path_checkpoint)
-            unet = get_diff_model(name=path_model.name,
-                                  diff_model_path=path_model,
-                                  device=dev,
-                                  energy_param='energy' in path_model.name,
-                                  image_size=image_size,
-                                  num_steps=num_diff_steps,
-                                  dropout=args.dropout,
-                                  org_model=True)
+            model_name = path_model.name
+            energy_param = 'energy' in path_model.name
         else:
-            if args.model_size == 'small':
-                if args.energy:
-                    unet = UNetEnergy(image_size, time_emb_dim, channels, dropout=args.dropout).to(dev)
-                else:
-                    unet = UNet(image_size, time_emb_dim, channels, dropout=args.dropout).to(dev)
-            elif args.model_size == 'large':
-                if args.energy:
-                    unet = UNetEnergy_Ho(dim=64, dim_mults=(1, 2, 4, 8), flash_attn=False, dropout=args.dropout)
-                else:
-                    unet = Unet_Ho(dim=64, dim_mults=(1, 2, 4, 8), flash_attn=False, dropout=args.dropout)
-            elif args.model_size == 'large2':
-                if args.energy:
-                    unet = UnetDropEnergy(T=num_diff_steps, ch=128, ch_mult=[1, 2, 2, 2], attn=[1],
-                                          num_res_blocks=2, dropout=args.dropout)
-                else:
-                    unet = Unet_drop(T=num_diff_steps, ch=128, ch_mult=[1, 2, 2, 2], attn=[1],
-                                     num_res_blocks=2, dropout=args.dropout)
-            else:
-                raise NotImplementedError("Not a valid model size.")
+            path_model = None
+            model_name = args.model_size
+            energy_param = args.energy
+
+        unet = get_diff_model(name=model_name,
+                              diff_model_path=path_model,
+                              device=dev,
+                              energy_param=energy_param,
+                              image_size=image_size,
+                              num_steps=num_diff_steps,
+                              dropout=args.dropout,
+                              org_model=True,
+                              make_compile=args.make_compile)
 
     if args.beta == 'lin':
         beta_schedule, post_var = linear_beta_schedule, "beta"
@@ -109,7 +97,7 @@ def main():
     diff_sampler = DiffusionSampler(betas, time_steps)
 
     diffm = DiffusionModel(model=unet, loss_f=F.mse_loss, noise_scheduler=diff_sampler, fixed=args.fixed_val,
-                           path_load_state=args.path_checkpoint)
+                           path_load_state=args.path_checkpoint, lr=args.learning_rate)
     filename = args.dataset + "_" + param_model + "_" + args.beta + "_" + args.model_size + "_" + str(int(args.dropout*100)) + ema + "_diff_{epoch:02d}"
     checkpoint_callback = ModelCheckpoint(
         filename=filename,
@@ -167,6 +155,8 @@ def parse_args():
     parser.add_argument("--path_checkpoint", default=None, help="If path is provided then resume training "
                                                                 "from checkpoint.")
     parser.add_argument("--fixed_val", action='store_true', help='If fixed val is True is that noise for validation always the same')
+    parser.add_argument("--make_compile", action='store_true', help='Compile for speed-up')
+    parser.add_argument("--learning_rate", type=float, default=2e-4, help="Learning rate")
     return parser.parse_args()
 
 

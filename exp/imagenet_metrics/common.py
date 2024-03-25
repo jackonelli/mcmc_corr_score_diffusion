@@ -7,6 +7,15 @@ from src.utils.metrics import accuracy, hard_label_from_logit, prob_vec_from_log
 PATTERN = re.compile(r".*_(\d+)_(\d+).th")
 
 
+def compute_nbr_samples(classes_and_samples):
+    true_classes = []
+    for _, (classes_path, samples_path) in enumerate(classes_and_samples):
+        classes = th.load(classes_path).detach().cpu()
+        true_classes.append(classes)
+    true_classes = th.cat(true_classes, dim=0)
+    return true_classes.size(0)
+
+
 def compute_acc(classifier_fn, classes_and_samples, transform, batch_size, device, n_max=None) -> Tuple[float, float, float, int]:
     pred_logits = []
     true_classes = []

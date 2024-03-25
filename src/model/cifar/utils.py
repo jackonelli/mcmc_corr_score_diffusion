@@ -2,6 +2,7 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Optional
 import numpy as np
+import torch as th
 
 from src.data.cifar import CIFAR_IMAGE_SIZE, CIFAR_NUM_CHANNELS, CIFAR_100_NUM_CLASSES
 from src.model.cifar.class_t import load_unet_classifier_t as load_unet_classifier_t, ClassifierHoDrop, \
@@ -17,7 +18,7 @@ from src.utils.callbacks import load_ema, load_non_ema
 
 
 def get_diff_model(name, diff_model_path, device, energy_param, image_size, num_steps, dropout=0.,
-                   org_model=False):
+                   org_model=False, make_compile=False):
     if "small" in name:
         diff_model = load_unet_diff_model(
             diff_model_path, device, image_size=image_size, energy_param=energy_param
@@ -37,6 +38,10 @@ def get_diff_model(name, diff_model_path, device, energy_param, image_size, num_
         )
     else:
         raise ValueError("Not specified model size")
+
+    if make_compile:
+        diff_model = th.compile(diff_model, mode="reduce-overhead")
+        th.set_float32_matmul_precision('high')
     return diff_model
 
 

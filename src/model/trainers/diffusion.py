@@ -7,7 +7,7 @@ import pytorch_lightning as pl
 
 class DiffusionModel(pl.LightningModule):
     def __init__(self, model: nn.Module, loss_f: Callable, noise_scheduler, fixed=False,
-                 path_load_state=None):
+                 path_load_state=None, lr: float = 2e-4):
         super().__init__()
         self.model = model
         self.loss_f = loss_f
@@ -21,12 +21,18 @@ class DiffusionModel(pl.LightningModule):
         self.i_epoch = 0
 
         self.require_g = False
-        if isinstance(self.model, EnergyModel):
-            self.require_g = True
+
+        if '_orig_mod' in dir(self.model):
+            if isinstance(self.model._orig_mod, EnergyModel):
+                self.require_g = True
+        else:
+            if isinstance(self.model, EnergyModel):
+                self.require_g = True
 
         self.fixed_noise_t = {'noise': {}, 'ts': {}}
         self.fixed = fixed
         self.path_load_state = path_load_state
+        self.lr = lr
 
     def training_step(self, batch, batch_idx):
         batch_size = batch["pixel_values"].shape[0]
@@ -40,7 +46,7 @@ class DiffusionModel(pl.LightningModule):
         if self.require_g:
             x_noisy = x_noisy.requires_grad_(True)
         predicted_noise = self.model(x_noisy, ts)
-
+        print(predicted_noise)
         loss = self.loss_f(noise, predicted_noise)
         self.train_loss += loss.detach().cpu().item()
         self.i_batch_train += 1
@@ -57,7 +63,7 @@ class DiffusionModel(pl.LightningModule):
         warmup = 5000
         def warmup_lr(step):
             return min(step, warmup) / warmup
-        optimizer = th.optim.Adam(self.parameters(), lr=2e-4)
+        optimizer = th.optim.Adam(self.parameters(), lr=self.lr)
         # scheduler = th.optim.lr_scheduler.StepLR(optimizer, 1, gamma=1.0)
 
         checkpoint = None
