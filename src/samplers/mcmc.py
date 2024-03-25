@@ -220,9 +220,7 @@ class AnnealedLAEnergySampler(MCMCMHCorrSampler):
 
     def sample_step(self, x, t, t_idx, classes=None):
         dims = x.dim()
-        self.accept_ratio[t] = list()
-        self.all_accepts[t] = list()
-        self.energy_diff[t] = list()
+        self.update_save_dicts(t)
 
         for i in range(self.num_samples_per_step):
             x.requires_grad_(True)
@@ -531,6 +529,7 @@ class AnnealedHMCEnergySampler(MCMCMHCorrSampler):
 
         # Sample Momentum
         v = th.randn_like(x) * self._mass_diag_sqrt[t_idx]
+        self.update_save_dicts(t)
 
         for i in range(self.num_samples_per_step):
             # Partial Momentum Refreshment
