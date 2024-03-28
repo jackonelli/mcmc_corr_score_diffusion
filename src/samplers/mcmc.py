@@ -946,7 +946,7 @@ class AnnealedHMCEnergyApproxSampler(MCMCMHCorrSampler):
             alpha = th.exp(logp_accept)
             alpha_approx = th.exp(logp_accept_approx)
             accept = (
-                (u < alpha)
+                (u < alpha_approx)
                 .to(th.float32)
                 .reshape((x_next.shape[0],) + tuple(([1 for _ in range(dims - 1)])))
             )
