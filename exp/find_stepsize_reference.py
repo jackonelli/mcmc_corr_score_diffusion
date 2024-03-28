@@ -3,7 +3,7 @@
 import sys
 
 
-sys.path.append("..")
+sys.path.append(".")
 from argparse import ArgumentParser
 from pathlib import Path
 import pickle
