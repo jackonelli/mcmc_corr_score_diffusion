@@ -64,7 +64,8 @@ def main():
     )
     diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance=post_var)
     guidance = ClassifierFullGuidance(classifier, lambda_=config.guid_scale)
-    guid_sampler = get_guid_sampler(config, diff_model, diff_sampler, guidance, time_steps, dataset_name, energy_param)
+    guid_sampler = get_guid_sampler(config, diff_model, diff_sampler, guidance, time_steps, dataset_name, energy_param,
+                                    save_grad=args.save_grad)
 
     print("Sampling...")
     for batch in range(config.num_samples // config.batch_size):
@@ -77,8 +78,9 @@ def main():
         th.save(samples, sim_dir / f"samples_{args.sim_batch}_{batch}.th")
         th.save(classes, sim_dir / f"classes_{args.sim_batch}_{batch}.th")
         if (config.mcmc_method == "hmc" or config.mcmc_method == "la") and args.sim_batch == 1 and batch == 0:
-            guid_sampler.mcmc_sampler.save_stats_to_file(dir_=sim_dir,
-                                                         suffix=f"{args.sim_batch}_{batch}")
+            guid_sampler.mcmc_sampler.save_stats_to_file(dir_=sim_dir, suffix=f"{args.sim_batch}_{batch}")
+        if args.save_grad and args.sim_batch == 1 and batch == 0:
+            guid_sampler.save_grads_to_file(dir_=sim_dir, suffix=f"{args.sim_batch}_{batch}")
     print(f"Results written to '{sim_dir}'")
 
 
@@ -156,9 +158,11 @@ def load_models(config, device):
     )
 
 
-def get_guid_sampler(config, diff_model, diff_sampler, guidance, time_steps, dataset_name, energy_param: bool):
+def get_guid_sampler(config, diff_model, diff_sampler, guidance, time_steps, dataset_name, energy_param: bool,
+                     save_grad=False):
     if config.mcmc_method is None:
-        guid_sampler = GuidanceSampler(diff_model, diff_sampler, guidance, diff_cond=config.class_cond)
+        guid_sampler = GuidanceSampler(diff_model, diff_sampler, guidance, diff_cond=config.class_cond,
+                                       save_grad=save_grad)
     else:
         assert config.mcmc_steps is not None
         assert config.mcmc_method is not None
@@ -220,6 +224,7 @@ def get_guid_sampler(config, diff_model, diff_sampler, guidance, time_steps, dat
             mcmc_sampler=mcmc_sampler,
             reverse=True,
             diff_cond=config.class_cond,
+            save_grad=save_grad,
         )
     return guid_sampler
 
@@ -236,6 +241,7 @@ def parse_args():
     parser.add_argument(
         "--sim_batch", type=int, default=0, help="Simulation batch index, indexes parallell simulations."
     )
+    parser.add_argument("--save_grad", action="store_true", help="Save norm of gradients")
     return parser.parse_args()
 
 

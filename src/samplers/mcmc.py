@@ -630,7 +630,7 @@ def estimate_energy_diff(xs_, grads_, dims):
     return energy
 
 
-class AdaptiveStepSizeMCMCSamplerWrapper(MCMCMHCorrSampler):
+class AdaptiveStepSizeConstantMCMCSamplerWrapper(MCMCMHCorrSampler):
     def __init__(self, sampler: MCMCMHCorrSampler, accept_rate_bound: list, time_steps, max_iter: int = 10):
         super().__init__(
             num_samples_per_step=sampler.num_samples_per_step,
@@ -712,7 +712,7 @@ class AdaptiveStepSizeMCMCSamplerWrapper(MCMCMHCorrSampler):
         self.sampler.set_energy_function(energy_function)
 
 
-class AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize(MCMCMHCorrSampler):
+class AdaptiveStepSizeConstantMCMCSamplerWrapperSmallBatchSize(MCMCMHCorrSampler):
     def __init__(
         self,
         sampler: MCMCMHCorrSampler,
@@ -800,3 +800,156 @@ class AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize(MCMCMHCorrSampler):
 
     def set_energy_function(self, energy_function):
         self.sampler.set_energy_function(energy_function)
+
+
+class AdaptiveStepSizeReferenceMCMCSamplerWrapper(MCMCMHCorrSampler):
+    def __init__(self, sampler: MCMCMHCorrSampler, accept_rate_reference, marginal: float, time_steps, max_iter: int = 10):
+        super().__init__(
+            num_samples_per_step=sampler.num_samples_per_step,
+            step_sizes=sampler.step_sizes,
+            gradient_function=sampler.gradient_function,
+            energy_function=sampler.energy_function,
+        )
+        self.sampler = sampler
+        self.accept_rate_reference = accept_rate_reference
+        self.max_iter = max_iter
+        self.respaced_T = time_steps.size(0)
+        self.marginal = marginal
+        self.time_steps = time_steps
+        self.res = {t.item(): {"accepts": [], "step_sizes": []} for t in time_steps}
+
+    def sample_step(self, x, t, t_idx, classes=None):
+        state = torch.get_rng_state()
+        step_found = False
+        upper = {"stepsize": None, "accept": 1}
+        lower = {"stepsize": None, "accept": 0}
+        if t_idx < self.respaced_T - 2:
+            prev_respaced_t = self.time_steps[t_idx + 1].item()
+            self.sampler.step_sizes[t] = th.tensor(self.res[prev_respaced_t]["step_sizes"][-1])
+
+        i = 0
+        x_ = None
+        while not step_found and i < self.max_iter:
+            current_rng_state = th.get_rng_state()
+            torch.manual_seed(t)
+            self.sampler.update_save_dicts(t)
+            x_ = self.sampler.sample_step(x, t, t_idx, classes)
+            th.set_rng_state(current_rng_state)
+            x_ = x_.detach()
+            a_rate = np.mean([th.clip(alpha, 0., 1.).mean().item() for alpha in self.sampler.alpha[t]])
+            step_s = self.sampler.step_sizes[t].clone()
+            self.res[t]["accepts"].append(a_rate)
+            self.res[t]["step_sizes"].append(step_s.detach().cpu().item())
+            if self.accept_rate_reference[t] - self.marginal <= a_rate <= self.accept_rate_reference[t] + self.marginal:
+                step_found = True
+            else:
+                # Update best bound so far
+                if self.accept_rate_reference[t] + self.marginal < a_rate <= upper["accept"]:
+                    upper["accept"] = a_rate
+                    upper["stepsize"] = step_s
+
+                if lower["accept"] <= a_rate < self.accept_rate_reference[t] - self.marginal:
+                    lower["accept"] = a_rate
+                    lower["stepsize"] = step_s
+
+                # New step size
+                step_s_ = step_s.clone()
+                if upper["stepsize"] is not None and lower["stepsize"] is not None:
+                    w = th.rand(1).item()
+                    new_step_s = torch.exp(w * torch.log(upper["stepsize"]) + (1 - w) * torch.log(lower["stepsize"]))
+                else:
+                    if a_rate > self.accept_rate_reference[t] + self.marginal:
+                        new_step_s = step_s_ * 10
+                    else:  # a_rate < self.accept_rate_bound[0]
+                        new_step_s = step_s_ / 10
+
+                self.sampler.step_sizes[t] = new_step_s
+            i += 1
+        torch.set_rng_state(state)
+        return x_
+
+    def set_gradient_function(self, gradient_function):
+        self.sampler.set_gradient_function(gradient_function)
+
+    def set_energy_function(self, energy_function):
+        self.sampler.set_energy_function(energy_function)
+
+
+class AnnealedHMCEnergySampler(MCMCMHCorrSampler):
+    """Annealed Metropolis-Hasting Adjusted Hamiltonian Monte Carlo using energy-parameterization"""
+
+    def __init__(
+        self,
+        num_samples_per_step: int,
+        step_sizes: Dict[int, float],
+        damping_coeff: float,
+        mass_diag_sqrt: th.Tensor,
+        num_leapfrog_steps: int,
+        gradient_function: Callable,
+        energy_function: Optional[Callable] = None,
+    ):
+        """
+        @param num_samples_per_step: Number of HMC steps per timestep t
+        @param step_sizes: Step size for leapfrog steps for each t
+        @param damping_coeff: Damping coefficient
+        @param mass_diag_sqrt: Square root of mass diagonal matrix for each t
+        @param num_leapfrog_steps: Number of leapfrog steps per HMC step
+        @param gradient_function: Function that returns the score for a given x, t, and text_embedding
+        @param energy_function: Function that returns the energy for a given x, t, and text_embedding
+        """
+        super().__init__(
+            num_samples_per_step=num_samples_per_step,
+            step_sizes=step_sizes,
+            gradient_function=gradient_function,
+            energy_function=energy_function,
+        )
+        self._damping_coeff = damping_coeff
+        self._mass_diag_sqrt = mass_diag_sqrt
+        self._num_leapfrog_steps = num_leapfrog_steps
+
+    def sample_step(self, x, t, t_idx, classes=None):
+        dims = x.dim()
+
+        # Sample Momentum
+        v = th.randn_like(x) * self._mass_diag_sqrt[t_idx]
+        self.update_save_dicts(t)
+
+        for i in range(self.num_samples_per_step):
+            # Partial Momentum Refreshment
+            v_prime = get_v_prime(v=v, damping_coeff=self._damping_coeff, mass_diag_sqrt=self._mass_diag_sqrt[t_idx])
+
+            x_next, v_next, _, _ = leapfrog_steps(
+                x_0=x,
+                v_0=v_prime,
+                t=t,
+                t_idx=t_idx,
+                gradient_function=self.gradient_function,
+                step_size=self.step_sizes[t],
+                mass_diag_sqrt=self._mass_diag_sqrt[t_idx],
+                num_steps=self._num_leapfrog_steps,
+                classes=classes,
+            )
+
+            logp_v_p, logp_v = transition_hmc(
+                v_prime=v_prime, v_next=v_next, mass_diag_sqrt=self._mass_diag_sqrt[t_idx], dims=dims
+            )
+
+            # Energy diff estimation
+            energy_diff = (self.energy_function(x_next, t, t_idx, classes).detach()
+                           - self.energy_function(x, t, t_idx, classes).detach())
+            logp_accept = logp_v - logp_v_p + energy_diff
+
+            u = th.rand(x_next.shape[0]).to(x_next.device)
+            alpha = th.exp(logp_accept)
+            accept = (
+                (u < alpha)
+                .to(th.float32)
+                .reshape((x_next.shape[0],) + tuple(([1 for _ in range(dims - 1)])))
+            )
+
+            # update samples
+            x = accept * x_next + (1 - accept) * x
+            x = x.detach()
+            v = accept * v_next + (1 - accept) * v_prime
+            self.save_stats(t, alpha, accept, energy_diff)
+        return x

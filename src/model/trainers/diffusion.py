@@ -46,7 +46,7 @@ class DiffusionModel(pl.LightningModule):
         if self.require_g:
             x_noisy = x_noisy.requires_grad_(True)
         predicted_noise = self.model(x_noisy, ts)
-        print(predicted_noise)
+
         loss = self.loss_f(noise, predicted_noise)
         self.train_loss += loss.detach().cpu().item()
         self.i_batch_train += 1
@@ -64,7 +64,6 @@ class DiffusionModel(pl.LightningModule):
         def warmup_lr(step):
             return min(step, warmup) / warmup
         optimizer = th.optim.Adam(self.parameters(), lr=self.lr)
-        # scheduler = th.optim.lr_scheduler.StepLR(optimizer, 1, gamma=1.0)
 
         checkpoint = None
         if self.path_load_state is not None:
@@ -74,7 +73,7 @@ class DiffusionModel(pl.LightningModule):
         scheduler = th.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=warmup_lr)
         if self.path_load_state is not None:
             scheduler.load_state_dict(checkpoint['lr_schedulers'][0])
-        # return [optimizer], [scheduler]
+
         return {
         "optimizer": optimizer,
         "lr_scheduler": {

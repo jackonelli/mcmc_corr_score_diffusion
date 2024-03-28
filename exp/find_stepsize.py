@@ -12,8 +12,8 @@ from src.guidance.base import MCMCGuidanceSampler, MCMCGuidanceSamplerStacking
 from src.guidance.classifier_full import ClassifierFullGuidance
 from src.samplers.mcmc import (
     AnnealedHMCScoreSampler,
-    AdaptiveStepSizeMCMCSamplerWrapper,
-    AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize,
+    AdaptiveStepSizeConstantMCMCSamplerWrapper,
+    AdaptiveStepSizeConstantMCMCSamplerWrapperSmallBatchSize,
     AnnealedLAScoreSampler,
     AnnealedHMCEnergySampler,
     AnnealedLAEnergySampler,
@@ -150,7 +150,7 @@ def main():
     guidance = ClassifierFullGuidance(classifier, lambda_=args.guid_scale)
     classes = th.randint(num_classes, (num_samples,), dtype=th.int64)
     if batch_size < num_samples:
-        sampler = AdaptiveStepSizeMCMCSamplerWrapperSmallBatchSize(
+        sampler = AdaptiveStepSizeConstantMCMCSamplerWrapperSmallBatchSize(
             sampler=mcmc_sampler,
             accept_rate_bound=[a / 100 for a in accept_rate_bound_pct],
             time_steps=time_steps,
@@ -171,7 +171,7 @@ def main():
         )
     else:
         print("Running Adaptive MCMC sampler")
-        sampler = AdaptiveStepSizeMCMCSamplerWrapper(
+        sampler = AdaptiveStepSizeConstantMCMCSamplerWrapper(
             sampler=mcmc_sampler,
             accept_rate_bound=[a / 100 for a in accept_rate_bound_pct],
             time_steps=time_steps,
