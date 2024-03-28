@@ -875,7 +875,7 @@ class AdaptiveStepSizeReferenceMCMCSamplerWrapper(MCMCMHCorrSampler):
         self.sampler.set_energy_function(energy_function)
 
 
-class AnnealedHMCEnergySampler(MCMCMHCorrSampler):
+class AnnealedHMCEnergyApproxSampler(MCMCMHCorrSampler):
     """Annealed Metropolis-Hasting Adjusted Hamiltonian Monte Carlo using energy-parameterization"""
 
     def __init__(
@@ -918,7 +918,7 @@ class AnnealedHMCEnergySampler(MCMCMHCorrSampler):
             # Partial Momentum Refreshment
             v_prime = get_v_prime(v=v, damping_coeff=self._damping_coeff, mass_diag_sqrt=self._mass_diag_sqrt[t_idx])
 
-            x_next, v_next, _, _ = leapfrog_steps(
+            x_next, v_next, xs, grads = leapfrog_steps(
                 x_0=x,
                 v_0=v_prime,
                 t=t,
@@ -937,10 +937,14 @@ class AnnealedHMCEnergySampler(MCMCMHCorrSampler):
             # Energy diff estimation
             energy_diff = (self.energy_function(x_next, t, t_idx, classes).detach()
                            - self.energy_function(x, t, t_idx, classes).detach())
+            energy_diff_approx = estimate_energy_diff(xs, grads, dims)
+
             logp_accept = logp_v - logp_v_p + energy_diff
+            logp_accept_approx = logp_v - logp_v_p + energy_diff_approx
 
             u = th.rand(x_next.shape[0]).to(x_next.device)
             alpha = th.exp(logp_accept)
+            alpha_approx = th.exp(logp_accept_approx)
             accept = (
                 (u < alpha)
                 .to(th.float32)
@@ -951,5 +955,13 @@ class AnnealedHMCEnergySampler(MCMCMHCorrSampler):
             x = accept * x_next + (1 - accept) * x
             x = x.detach()
             v = accept * v_next + (1 - accept) * v_prime
-            self.save_stats(t, alpha, accept, energy_diff)
+            alphas = {'energy': alpha, 'approx': alpha_approx}
+            self.save_stats(t, alphas, accept, energy_diff)
         return x
+
+    def save_stats(self, t, alpha, all_accepts, energy_diff):
+        alpha['energy'] = alpha['energy'].detach().cpu()
+        alpha['approx'] = alpha['approx'].detach().cpu()
+        self.alpha[t].append(alpha)
+        self.all_accepts[t].append(all_accepts.detach().cpu())
+        self.energy_diff[t].append(energy_diff.detach().cpu())
