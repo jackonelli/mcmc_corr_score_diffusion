@@ -18,6 +18,7 @@ from src.guidance.base import GuidanceSampler, MCMCGuidanceSampler
 from src.guidance.classifier_full import ClassifierFullGuidance
 from src.samplers.mcmc import (
     AnnealedHMCEnergySampler,
+    AnnealedHMCEnergyApproxSampler,
     AnnealedHMCScoreSampler,
     AnnealedUHMCEnergySampler,
     AnnealedUHMCScoreSampler,
@@ -60,6 +61,7 @@ def main():
         respaced_T=config.num_respaced_diff_steps,
     )
     diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance=post_var)
+    """
     mcmc_methods = ['hmc',
                     'la',
                     'ula',
@@ -68,6 +70,9 @@ def main():
                   6,
                   6,
                   2]
+    """
+    mcmc_methods = ['hmc']
+    mcmc_steps = [2]
     if args.parallell:
         np.random.seed(args.job_id)
     """
@@ -259,7 +264,8 @@ def get_guid_sampler(config, diff_model, diff_sampler, guidance, time_steps, dat
 
         if config.mcmc_method == "hmc":
             if energy_param:
-                mcmc_sampler = AnnealedHMCEnergySampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
+               # mcmc_sampler = AnnealedHMCEnergySampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
+               mcmc_sampler = AnnealedHMCEnergyApproxSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
             else:
                 mcmc_sampler = AnnealedHMCScoreSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
         elif config.mcmc_method == "la":

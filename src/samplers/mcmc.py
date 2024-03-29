@@ -887,6 +887,8 @@ class AnnealedHMCEnergyApproxSampler(MCMCMHCorrSampler):
         num_leapfrog_steps: int,
         gradient_function: Callable,
         energy_function: Optional[Callable] = None,
+        n_intermediate_steps: int = 0,
+        exact_energy: bool = False
     ):
         """
         @param num_samples_per_step: Number of HMC steps per timestep t
@@ -906,6 +908,8 @@ class AnnealedHMCEnergyApproxSampler(MCMCMHCorrSampler):
         self._damping_coeff = damping_coeff
         self._mass_diag_sqrt = mass_diag_sqrt
         self._num_leapfrog_steps = num_leapfrog_steps
+        self.n_intermediate_steps = n_intermediate_steps
+        self.exact_energy = exact_energy
 
     def sample_step(self, x, t, t_idx, classes=None):
         dims = x.dim()
@@ -918,7 +922,7 @@ class AnnealedHMCEnergyApproxSampler(MCMCMHCorrSampler):
             # Partial Momentum Refreshment
             v_prime = get_v_prime(v=v, damping_coeff=self._damping_coeff, mass_diag_sqrt=self._mass_diag_sqrt[t_idx])
 
-            x_next, v_next, xs, grads = leapfrog_steps(
+            x_next, v_next, diffs, grads = leapfrog_steps_intermediate(
                 x_0=x,
                 v_0=v_prime,
                 t=t,
@@ -928,6 +932,7 @@ class AnnealedHMCEnergyApproxSampler(MCMCMHCorrSampler):
                 mass_diag_sqrt=self._mass_diag_sqrt[t_idx],
                 num_steps=self._num_leapfrog_steps,
                 classes=classes,
+                n_intermediate_steps=self.n_intermediate_steps,
             )
 
             logp_v_p, logp_v = transition_hmc(
@@ -935,15 +940,30 @@ class AnnealedHMCEnergyApproxSampler(MCMCMHCorrSampler):
             )
 
             # Energy diff estimation
-            energy_diff = (self.energy_function(x_next, t, t_idx, classes).detach()
-                           - self.energy_function(x, t, t_idx, classes).detach())
-            energy_diff_approx = estimate_energy_diff(xs, grads, dims)
+            if self.exact_energy:
+                energy_diff = (self.energy_function(x_next, t, t_idx, classes).detach()
+                               - self.energy_function(x, t, t_idx, classes).detach())
+                logp_accept = logp_v - logp_v_p + energy_diff
+                alpha = th.exp(logp_accept)
+            else:
+                alpha = None
+                energy_diff = None
+            energy_diff_approx = estimate_energy_diff_intermediate(diffs, grads, dims).to(x_next.device)
 
-            logp_accept = logp_v - logp_v_p + energy_diff
+            """
+            n_trapets = 5
+            intermediate_steps = th.linspace(0, 1, steps=n_trapets).to(x.device)
+
+            grads = [None for _ in range(n_trapets)]
+            energy_diff_approx2 = estimate_energy_diff_linear_given(
+                self.gradient_function, grads, x, x_next, t, t_idx, intermediate_steps, classes, dims
+            )
+            """
+
             logp_accept_approx = logp_v - logp_v_p + energy_diff_approx
 
             u = th.rand(x_next.shape[0]).to(x_next.device)
-            alpha = th.exp(logp_accept)
+
             alpha_approx = th.exp(logp_accept_approx)
             accept = (
                 (u < alpha_approx)
@@ -956,12 +976,72 @@ class AnnealedHMCEnergyApproxSampler(MCMCMHCorrSampler):
             x = x.detach()
             v = accept * v_next + (1 - accept) * v_prime
             alphas = {'energy': alpha, 'approx': alpha_approx}
-            self.save_stats(t, alphas, accept, energy_diff)
+            energy_diffs = {'energy': energy_diff, 'approx': energy_diff_approx}
+            self.save_stats(t, alphas, accept, energy_diffs)
         return x
 
     def save_stats(self, t, alpha, all_accepts, energy_diff):
         alpha['energy'] = alpha['energy'].detach().cpu()
         alpha['approx'] = alpha['approx'].detach().cpu()
+        energy_diff['energy'] = energy_diff['energy'].detach().cpu()
+        energy_diff['approx'] = energy_diff['approx'].detach().cpu()
         self.alpha[t].append(alpha)
         self.all_accepts[t].append(all_accepts.detach().cpu())
-        self.energy_diff[t].append(energy_diff.detach().cpu())
+        self.energy_diff[t].append(energy_diff)
+
+
+def leapfrog_steps_intermediate(
+    x_0: th.Tensor,
+    v_0: th.Tensor,
+    t: int,
+    t_idx: int,
+    gradient_function: Callable,
+    step_size: float,
+    mass_diag_sqrt: th.Tensor,
+    num_steps: int,
+    classes: Optional[th.Tensor],
+    n_intermediate_steps: int = 0,
+):
+    """Multiple leapfrog steps with"""
+    x_k = x_0.clone()
+    v_k = v_0.clone()
+    if mass_diag_sqrt is None:
+        mass_diag_sqrt = th.ones_like(x_k)
+
+    mass_diag = mass_diag_sqrt**2.0
+    diffs, grads, all_grads = list(), list(), list()
+    x_k = x_k.requires_grad_(True)
+    grad = gradient_function(x_k, t, t_idx, classes).detach()
+    grads.append(grad.clone().cpu())
+
+    for _ in range(num_steps):  # Inefficient version - should combine half steps
+        x_km1 = x_k.detach().clone()
+        v_k += 0.5 * step_size * grad  # half step in v
+        x_k = (x_k + step_size * v_k / mass_diag).detach()  # Step in x
+        for n in range(n_intermediate_steps):
+            x_in = (x_k - x_km1) * (n + 1) / (n_intermediate_steps + 1) + x_km1
+            x_in = x_in.requires_grad_(True)
+            grad = gradient_function(x_in, t, t_idx, classes).detach()
+            grads.append(grad.clone().cpu())
+        diffs.append(x_k.clone().cpu() - x_km1.cpu())
+        x_k = x_k.requires_grad_(True)
+        grad = gradient_function(x_k, t, t_idx, classes).detach()
+        grads.append(grad.clone().cpu())
+        v_k += 0.5 * step_size * grad  # half step in v
+
+        all_grads.append(grads)
+        grads = [grad.clone().cpu()]
+    return x_k, v_k, diffs, all_grads
+
+
+def estimate_energy_diff_intermediate(diffs, all_grads, dims):
+    n_grads = len(all_grads)
+    n_grads_per_steps = len(all_grads[0])
+    energy = th.zeros((diffs[0].shape[0],))
+    for i in range(n_grads):
+        diff = diffs[i]
+        e = (all_grads[i][0] * diff).sum(dim=tuple(range(1, dims))).reshape(-1, 1)
+        for j in range(1, n_grads_per_steps):
+            e = th.cat((e, (all_grads[i][j] * diff).sum(dim=tuple(range(1, dims))).reshape(-1, 1)), 1)
+        energy += th.trapz(e, dx=1./(n_grads_per_steps - 1))
+    return energy
