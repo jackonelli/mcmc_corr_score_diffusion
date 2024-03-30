@@ -981,9 +981,10 @@ class AnnealedHMCEnergyApproxSampler(MCMCMHCorrSampler):
         return x
 
     def save_stats(self, t, alpha, all_accepts, energy_diff):
-        alpha['energy'] = alpha['energy'].detach().cpu()
+        if self.exact_energy:
+            alpha['energy'] = alpha['energy'].detach().cpu()
+            energy_diff['energy'] = energy_diff['energy'].detach().cpu()
         alpha['approx'] = alpha['approx'].detach().cpu()
-        energy_diff['energy'] = energy_diff['energy'].detach().cpu()
         energy_diff['approx'] = energy_diff['approx'].detach().cpu()
         self.alpha[t].append(alpha)
         self.all_accepts[t].append(all_accepts.detach().cpu())
