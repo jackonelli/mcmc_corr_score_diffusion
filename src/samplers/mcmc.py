@@ -855,6 +855,7 @@ class AdaptiveStepSizeReferenceMCMCSamplerWrapper(MCMCMHCorrSampler):
                 # New step size
                 step_s_ = step_s.clone()
                 if upper["stepsize"] is not None and lower["stepsize"] is not None:
+                    torch.manual_seed(t * 1000 + i)
                     w = th.rand(1).item()
                     new_step_s = torch.exp(w * torch.log(upper["stepsize"]) + (1 - w) * torch.log(lower["stepsize"]))
                 else:
@@ -867,6 +868,101 @@ class AdaptiveStepSizeReferenceMCMCSamplerWrapper(MCMCMHCorrSampler):
             i += 1
         torch.set_rng_state(state)
         return x_
+
+    def set_gradient_function(self, gradient_function):
+        self.sampler.set_gradient_function(gradient_function)
+
+    def set_energy_function(self, energy_function):
+        self.sampler.set_energy_function(energy_function)
+
+
+class AdaptiveStepSizeReferenceMCMCSamplerWrapperSmallBatchSize(MCMCMHCorrSampler):
+    def __init__(
+        self,
+        sampler: MCMCMHCorrSampler,
+        accept_rate_reference,
+        marginal: float,
+        time_steps,
+        batch_size: int,
+        device,
+        max_iter: int = 10,
+    ):
+        super().__init__(
+            num_samples_per_step=sampler.num_samples_per_step,
+            step_sizes=sampler.step_sizes,
+            gradient_function=sampler.gradient_function,
+            energy_function=sampler.energy_function,
+        )
+        self.sampler = sampler
+        self.accept_rate_reference = accept_rate_reference
+        self.marginal = marginal
+        self.max_iter = max_iter
+        self.respaced_T = time_steps.size(0)
+        self.time_steps = time_steps
+        self.res = {t.item(): {"accepts": [], "step_sizes": []} for t in time_steps}
+        self.batch_size = batch_size
+        self.device = device
+
+    def sample_step(self, x, t, t_idx, text_embeddings=None):
+        state = torch.get_rng_state()
+        step_found = False
+        upper = {"stepsize": None, "accept": 1}
+        lower = {"stepsize": None, "accept": 0}
+        if t < self.respaced_T - 2:
+            prev_respaced_t = self.time_steps[t_idx + 1].item()
+            self.sampler.step_sizes[t] = th.tensor(self.res[prev_respaced_t]["step_sizes"][-1])
+
+        i = 0
+        n_batches = int(np.ceil(x.shape[0] / self.batch_size))
+        idx = np.array([i * self.batch_size for i in range(n_batches)] + [x.shape[0]])
+        x_next = torch.empty(x.size())
+
+        while not step_found and i < self.max_iter:
+            torch.manual_seed(t)
+            accepts = list()
+            for j in range(n_batches):
+                self.sampler.update_save_dicts(t)
+                x_ = x[idx[j] : idx[j + 1]].to(self.device)
+                y_ = text_embeddings[idx[j] : idx[j + 1]].to(self.device)
+                x_ = self.sampler.sample_step(x_, t, t_idx, y_)
+                x_next[idx[j] : idx[j + 1]] = x_.detach().cpu()
+                accepts += [np.mean([th.clip(alpha, 0., 1.).mean().item() for alpha in self.sampler.alpha[t]])]
+                del x_
+                del y_
+                gc.collect()
+                torch.cuda.empty_cache()
+            a_rate = np.mean(accepts)
+            step_s = self.sampler.step_sizes[t].clone()
+            self.res[t]["accepts"].append(a_rate)
+            self.res[t]["step_sizes"].append(step_s.detach().cpu().item())
+            if self.accept_rate_reference[t] - self.marginal <= a_rate <= self.accept_rate_reference[t] + self.marginal:
+                step_found = True
+            else:
+                # Update best bound so far
+                if self.accept_rate_reference[t] + self.marginal < a_rate <= upper["accept"]:
+                    upper["accept"] = a_rate
+                    upper["stepsize"] = step_s
+
+                if lower["accept"] <= a_rate < self.accept_rate_reference[t] - self.marginal:
+                    lower["accept"] = a_rate
+                    lower["stepsize"] = step_s
+
+                # New step size
+                step_s_ = step_s.clone()
+                if upper["stepsize"] is not None and lower["stepsize"] is not None:
+                    torch.manual_seed(t * 1000 + i)
+                    w = th.rand(1).item()
+                    new_step_s = torch.exp(w * torch.log(upper["stepsize"]) + (1 - w) * torch.log(lower["stepsize"]))
+                else:
+                    if a_rate > self.accept_rate_reference[t] + self.marginal:
+                        new_step_s = step_s_ * 10
+                    else:  # a_rate < self.accept_rate_bound[0]
+                        new_step_s = step_s_ / 10
+
+                self.sampler.step_sizes[t] = new_step_s
+            i += 1
+        torch.set_rng_state(state)
+        return x_next
 
     def set_gradient_function(self, gradient_function):
         self.sampler.set_gradient_function(gradient_function)
@@ -953,18 +1049,18 @@ class AnnealedHMCEnergyApproxSampler(MCMCMHCorrSampler):
             """
             n_trapets = 5
             intermediate_steps = th.linspace(0, 1, steps=n_trapets).to(x.device)
-
             grads = [None for _ in range(n_trapets)]
-            energy_diff_approx2 = estimate_energy_diff_linear_given(
+            energy_diff_approx2 = estimate_energy_diff_linear_given_intermediate(
                 self.gradient_function, grads, x, x_next, t, t_idx, intermediate_steps, classes, dims
             )
             """
 
             logp_accept_approx = logp_v - logp_v_p + energy_diff_approx
+            alpha_approx = th.exp(logp_accept_approx)
+            # print(th.mean(th.abs(th.clip(alpha, 0, 1) - th.clip(alpha_approx, 0, 1))).item())
 
             u = th.rand(x_next.shape[0]).to(x_next.device)
 
-            alpha_approx = th.exp(logp_accept_approx)
             accept = (
                 (u < alpha_approx)
                 .to(th.float32)
@@ -1046,3 +1142,23 @@ def estimate_energy_diff_intermediate(diffs, all_grads, dims):
             e = th.cat((e, (all_grads[i][j] * diff).sum(dim=tuple(range(1, dims))).reshape(-1, 1)), 1)
         energy += th.trapz(e, dx=1./(n_grads_per_steps - 1))
     return energy
+
+
+def estimate_energy_diff_linear_given_intermediate(gradient_function, grads, x, x_hat, t, t_idx, ss_, classes, dims):
+    diff = x_hat - x
+    x_ = x + ss_[0] * diff
+    if grads[0] is not None:
+        grad = grads[0]
+    else:
+        grad = gradient_function(x_, t, t_idx, classes).detach()
+    e = (grad * diff.detach()).sum(dim=tuple(range(1, dims))).reshape(-1, 1)
+    for j in range(1, len(ss_)):
+        x_ = x + ss_[j] * diff
+        if grads[j] is not None:
+            grad = grads[j]
+        else:
+            grad = gradient_function(x_, t, t_idx, classes).detach()
+        e = th.cat(
+            (e, (grad * diff.detach()).sum(dim=tuple(range(1, dims))).reshape(-1, 1)), 1
+        )
+    return th.trapz(e, ss_)

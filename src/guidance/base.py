@@ -262,7 +262,7 @@ class MCMCGuidanceSamplerStacking(MCMCGuidanceSampler):
     def sample_stacking(self, num_samples: int, batch_size: int, classes: th.Tensor, device: th.device, shape: tuple,
                         verbose=False):
         n_batches = int(np.ceil(num_samples / batch_size))
-        idx = np.array([i * batch_size for i in range(n_batches)] + [num_samples - 1])
+        idx = np.array([i * batch_size for i in range(n_batches)] + [num_samples])
         x = th.randn((num_samples,) + shape)
 
         verbose_counter = 0
@@ -273,7 +273,7 @@ class MCMCGuidanceSamplerStacking(MCMCGuidanceSampler):
                 verbose_counter += 1
 
             if self.reverse:
-                for i in range(n_batches - 1):
+                for i in range(n_batches):
                     x_tm1 = x[idx[i] : idx[i + 1]].to(device)
                     if self.require_g:
                         x_tm1 = reverse_func_require_grad(
