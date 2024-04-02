@@ -153,24 +153,16 @@ class MCMCGuidanceSampler(GuidanceSampler):
         super().__init__(diff_model=diff_model, diff_proc=diff_proc, guidance=guidance, diff_cond=diff_cond,
                          save_grad=save_grad)
         self.mcmc_sampler = mcmc_sampler
-        # Function which maps diff step t to a bool, controlling for which timesteps to to MCMC sampling.
+        # Function which maps diff step t to a bool, controlling for which timesteps to MCMC sampling.
         self._mcmc_sampling_predicate = mcmc_sampling_predicate
         self.mcmc_sampler.set_gradient_function(self.grad)
         self.reverse = reverse
         self.mcmc_sampler.set_energy_function(self.energy)
+        if isinstance(self.mcmc_sampler, MCMCMHCorrSampler):
+            self.mcmc_sampler.set_class_log_prob(self.class_log_prob)
+        self.mcmc_sampler.set_grad_diff(self.grad_diff)
 
-    def energy(self, x_t, t, t_idx, classes):
-        sigma_t = self.diff_proc.sigma_t(t_idx, x_t).squeeze()
-        t_tensor = th.full((x_t.shape[0],), t, device=x_t.device)
-        args = [x_t, t_tensor]
-        if self.diff_cond:
-            args += [classes]
-        diff_energy = self.diff_model.energy(*args)
-        guidance_energy = self.guidance.log_prob(x_t, t_tensor, classes)
-        return guidance_energy - diff_energy / sigma_t
-
-    def grad(self, x_t, t, t_idx, classes):
-        """Compute"""
+    def grad_diff(self, x_t, t, t_idx, classes):
         sigma_t = self.diff_proc.sigma_t(t_idx, x_t)
         t_tensor = th.full((x_t.shape[0],), t, device=x_t.device)
         args = [x_t, t_tensor]
@@ -180,21 +172,35 @@ class MCMCGuidanceSampler(GuidanceSampler):
             pred_noise = self.diff_model(*args)
         else:
             pred_noise, _ = self.diff_model(*args).split(x_t.size(1), dim=1)
-        class_score = self.guidance.grad(x_t, t_tensor, classes, pred_noise)
-        return class_score - pred_noise / sigma_t
+        return - pred_noise / sigma_t
 
-    def grad_energy(self, x_t, t, t_idx, classes):
-        sigma_t = self.diff_proc.sigma_t(t_idx, x_t)
+    def class_log_prob(self, x_t, t, t_idx, classes):
+        t_tensor = th.full((x_t.shape[0],), t, device=x_t.device)
+        class_log_prob = self.guidance.log_prob(x_t, t_tensor, classes)
+        return class_log_prob
+
+    def energy(self, x_t, t, t_idx, classes):
+        sigma_t = self.diff_proc.sigma_t(t_idx, x_t).squeeze()
         t_tensor = th.full((x_t.shape[0],), t, device=x_t.device)
         args = [x_t, t_tensor]
         if self.diff_cond:
             args += [classes]
-        if not isinstance(self.diff_proc.posterior_variance, str):
-            energy_grad = self.diff_model(*args)
-        else:
-            energy_grad, _ = self.diff_model(*args).split(x_t.size(1), dim=1)
+        diff_energy = self.diff_model.energy(*args)
+        guidance_energy = self.class_log_prob(x_t, t, t_idx, classes)
+        return guidance_energy - diff_energy / sigma_t
+
+    def grad(self, x_t, t, t_idx, classes):
+        """Compute"""
+        grad_diff = self.grad_diff(x_t, t, t_idx, classes)
+        t_tensor = th.full((x_t.shape[0],), t, device=x_t.device)
         class_score = self.guidance.grad(x_t, t_tensor, classes, None)
-        return class_score - energy_grad / sigma_t
+        return class_score + grad_diff, grad_diff
+
+    def grad_energy(self, x_t, t, t_idx, classes):
+        grad_energy = self.grad_diff(x_t, t, t_idx, classes)
+        t_tensor = th.full((x_t.shape[0],), t, device=x_t.device)
+        class_score = self.guidance.grad(x_t, t_tensor, classes, None)
+        return class_score + grad_energy, grad_energy
 
     def sample(
         self, num_samples: int, classes: th.Tensor, device: th.device, shape: tuple, verbose=False, save_traj=False
