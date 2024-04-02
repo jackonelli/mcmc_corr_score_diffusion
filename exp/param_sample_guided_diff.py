@@ -61,7 +61,12 @@ def main():
         respaced_T=config.num_respaced_diff_steps,
     )
     diff_sampler = DiffusionSampler(betas, time_steps, posterior_variance=post_var)
-    """
+
+    if energy_param:
+        name_suffix = "_energy_"
+    else:
+        name_suffix = ""
+
     mcmc_methods = ['hmc',
                     'la',
                     'ula',
@@ -70,9 +75,9 @@ def main():
                   6,
                   6,
                   2]
-    """
-    mcmc_methods = ['hmc']
-    mcmc_steps = [2]
+    
+    # mcmc_methods = ['hmc']
+    # mcmc_steps = [2]
     if args.parallell:
         np.random.seed(args.job_id)
     """
@@ -97,7 +102,7 @@ def main():
     config.guid_scale = 20
     for i, method in enumerate(mcmc_methods):
         config.mcmc_method = method
-        config.name = 'cifar100_param_' + method
+        config.name = 'cifar100_param_' + name_suffix + method
         config.mcmc_steps = mcmc_steps[i]
         config.mcmc_stepsizes["params"]["factor"] = factors_[i]
         config.mcmc_stepsizes["params"]["exponent"] = exponents_[i]
