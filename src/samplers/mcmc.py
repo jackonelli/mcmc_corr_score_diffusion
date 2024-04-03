@@ -1113,12 +1113,17 @@ class AnnealedHMCEnergyApproxSampler(MCMCMHCorrSampler):
 
             logp_accept_approx = logp_v - logp_v_p + energy_diff_approx
             alpha_approx = th.exp(logp_accept_approx)
-            print(th.mean(th.abs(th.clip(alpha, 0, 1) - th.clip(alpha_approx, 0, 1))).item())
+            # print(th.mean(th.abs(th.clip(alpha, 0, 1) - th.clip(alpha_approx, 0, 1))).item())
 
             u = th.rand(x_next.shape[0]).to(x_next.device)
 
+            if alpha is None:
+                alpha_use = alpha_approx
+            else:
+                alpha_use = alpha
+
             accept = (
-                (u < alpha)
+                (u < alpha_use)
                 .to(th.float32)
                 .reshape((x_next.shape[0],) + tuple(([1 for _ in range(dims - 1)])))
             )

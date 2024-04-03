@@ -194,7 +194,7 @@ def get_guid_sampler(config, diff_model, diff_sampler, guidance, time_steps, dat
 
         if config.mcmc_method == "hmc":
             if energy_param:
-                if config.n_trapets <0:
+                if config.n_trapets < 0:
                     mcmc_sampler = AnnealedHMCEnergySampler(config.mcmc_steps, step_sizes, 0.9,
                                                             diff_sampler.betas, 3, None)
                 else:
