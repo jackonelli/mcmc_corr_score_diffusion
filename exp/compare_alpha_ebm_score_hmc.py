@@ -62,7 +62,7 @@ def main():
 
     differences = {}
     for t, t_idx in zip(diff_sampler.time_steps.__reversed__(), reversed(diff_sampler.time_steps_idx)):
-
+        print(t_idx)
         if args.follow_score:
             x_tm1 = reverse_func(guid_sampler_score, t, t_idx, x_tm1, classes, device, False).detach()
         else:
@@ -168,7 +168,6 @@ def main():
                 v = accept * v_next + (1 - accept) * v_prime
 
         x_tm1 = x
-        break
 
     th.save(x_tm1, sim_dir / f"samples_{args.sim_batch}_{0}.th")
     th.save(classes, sim_dir / f"classes_{args.sim_batch}_{0}.th")
