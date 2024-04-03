@@ -316,14 +316,36 @@ def estimate_energy_diff_linear_given(gradient_function, grads, x, x_hat, t, t_i
     if grads[0] is not None:
         grad = grads[0]
     else:
-        grad = gradient_function(x_, t, t_idx, classes)
+        grad = gradient_function(x_, t, t_idx, classes).detach()
     e = (grad * diff).sum(dim=tuple(range(1, dims))).reshape(-1, 1)
     for j in range(1, len(ss_)):
         x_ = x + ss_[j] * diff
         if grads[j] is not None:
             grad = grads[j]
         else:
-            grad = gradient_function(x_, t, t_idx, classes)
+            grad = gradient_function(x_, t, t_idx, classes).detach()
+        e = th.cat(
+            (e, (grad * diff).sum(dim=tuple(range(1, dims))).reshape(-1, 1)), 1
+        )
+    return th.trapz(e, ss_)
+
+
+def estimate_energy_diff_linear_given_require_grad(gradient_function, grads, x, x_hat, t, t_idx, ss_, classes, dims):
+    diff = x_hat - x
+    x_ = x + ss_[0] * diff
+    x_ = x_.requires_grad_(True)
+    if grads[0] is not None:
+        grad = grads[0]
+    else:
+        grad = gradient_function(x_, t, t_idx, classes).detach()
+    e = (grad * diff).sum(dim=tuple(range(1, dims))).reshape(-1, 1)
+    for j in range(1, len(ss_)):
+        x_ = x + ss_[j] * diff
+        x_ = x_.requires_grad_(True)
+        if grads[j] is not None:
+            grad = grads[j]
+        else:
+            grad = gradient_function(x_, t, t_idx, classes).detach()
         e = th.cat(
             (e, (grad * diff).sum(dim=tuple(range(1, dims))).reshape(-1, 1)), 1
         )
@@ -449,6 +471,7 @@ class AnnealedHMCScoreSampler(MCMCMHCorrSampler):
         mass_diag_sqrt: th.Tensor,
         num_leapfrog_steps: int,
         gradient_function: Callable,
+        n_intermediate_steps: Optional[int] = 0
     ):
         """
         @param num_samples_per_step: Number of HMC steps per timestep t
@@ -464,6 +487,7 @@ class AnnealedHMCScoreSampler(MCMCMHCorrSampler):
         self._damping_coeff = damping_coeff
         self._mass_diag_sqrt = mass_diag_sqrt
         self._num_leapfrog_steps = num_leapfrog_steps
+        self.n_intermediate_steps = n_intermediate_steps
 
     @th.no_grad()
     def sample_step(self, x, t, t_idx, classes=None):
@@ -477,7 +501,7 @@ class AnnealedHMCScoreSampler(MCMCMHCorrSampler):
             # Partial Momentum Refreshment
             v_prime = get_v_prime(v=v, damping_coeff=self._damping_coeff, mass_diag_sqrt=self._mass_diag_sqrt[t_idx])
 
-            x_next, v_next, xs, grads = leapfrog_steps(
+            x_next, v_next, diffs, grads = leapfrog_steps_intermediate(
                 x_0=x,
                 v_0=v_prime,
                 t=t,
@@ -487,6 +511,7 @@ class AnnealedHMCScoreSampler(MCMCMHCorrSampler):
                 mass_diag_sqrt=self._mass_diag_sqrt[t_idx],
                 num_steps=self._num_leapfrog_steps,
                 classes=classes,
+                n_intermediate_steps=self.n_intermediate_steps
             )
 
             logp_v_p, logp_v = transition_hmc(
@@ -499,7 +524,7 @@ class AnnealedHMCScoreSampler(MCMCMHCorrSampler):
                                           self.class_log_prob(x, t, t_idx, classes))
             else:
                 classifier_energy_diff = 0.
-            energy_diff = classifier_energy_diff + estimate_energy_diff(xs, grads, dims)
+            energy_diff = classifier_energy_diff + estimate_energy_diff_intermediate(diffs, grads, dims).to(x_next.device)
             logp_accept = logp_v - logp_v_p + energy_diff
 
             u = th.rand(x_next.shape[0]).to(x_next.device)
@@ -1088,12 +1113,12 @@ class AnnealedHMCEnergyApproxSampler(MCMCMHCorrSampler):
 
             logp_accept_approx = logp_v - logp_v_p + energy_diff_approx
             alpha_approx = th.exp(logp_accept_approx)
-            # print(th.mean(th.abs(th.clip(alpha, 0, 1) - th.clip(alpha_approx, 0, 1))).item())
+            print(th.mean(th.abs(th.clip(alpha, 0, 1) - th.clip(alpha_approx, 0, 1))).item())
 
             u = th.rand(x_next.shape[0]).to(x_next.device)
 
             accept = (
-                (u < alpha_approx)
+                (u < alpha)
                 .to(th.float32)
                 .reshape((x_next.shape[0],) + tuple(([1 for _ in range(dims - 1)])))
             )

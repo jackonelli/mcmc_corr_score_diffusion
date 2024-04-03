@@ -75,7 +75,7 @@ def main():
                   6,
                   6,
                   2]
-    
+
     # mcmc_methods = ['hmc']
     # mcmc_steps = [2]
     if args.parallell:

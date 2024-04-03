@@ -194,8 +194,8 @@ def get_guid_sampler(config, diff_model, diff_sampler, guidance, time_steps, dat
 
         if config.mcmc_method == "hmc":
             if energy_param:
-                mcmc_sampler = AnnealedHMCEnergySampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
-                # mcmc_sampler = AnnealedHMCEnergyApproxSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None, n_intermediate_steps=0)
+                # mcmc_sampler = AnnealedHMCEnergySampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
+                mcmc_sampler = AnnealedHMCEnergyApproxSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None, n_intermediate_steps=1, exact_energy=True)
             else:
                 mcmc_sampler = AnnealedHMCScoreSampler(config.mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None,)
         elif config.mcmc_method == "la":

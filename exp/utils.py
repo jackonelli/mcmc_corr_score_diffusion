@@ -86,10 +86,10 @@ class SimulationConfig:
             if self.mcmc_method == "la":
                 assert isinstance(self.n_trapets, int)
 
-    def save(self, sim_dir: Path):
+    def save(self, sim_dir: Path, suffix = ""):
         tmp_config = deepcopy(self)
         tmp_config.results_dir = str(tmp_config.results_dir)
-        with open(sim_dir / "config.json", "w") as outfile:
+        with open(sim_dir / f"config{suffix}.json", "w") as outfile:
             json.dump(asdict(tmp_config), outfile, indent=4, sort_keys=False)
 
 
@@ -147,7 +147,8 @@ def get_step_size(step_size_dir: Path, dataset_name: str, mcmc_method: str, mcmc
     return step_size
 
 
-def setup_results_dir(config: Union[SimulationConfig, UnguidedSimulationConfig], job_id: Optional[int]) -> Path:
+def setup_results_dir(config: Union[SimulationConfig, UnguidedSimulationConfig], job_id: Optional[int],
+                      suffix: str = "") -> Path:
     config.results_dir.mkdir(exist_ok=True, parents=True)
     if job_id is None:
         sim_id = f"{config.name}_{timestamp()}"
@@ -155,7 +156,7 @@ def setup_results_dir(config: Union[SimulationConfig, UnguidedSimulationConfig],
         sim_id = f"{config.name}_{job_id}"
     sim_dir = config.results_dir / sim_id
     sim_dir.mkdir(exist_ok=True)
-    config.save(sim_dir)
+    config.save(sim_dir, suffix)
     return sim_dir
 
 
