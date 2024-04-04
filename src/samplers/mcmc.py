@@ -728,18 +728,9 @@ class AdaptiveStepSizeConstantMCMCSamplerWrapper(MCMCMHCorrSampler):
                 # New step size
                 step_s_ = step_s.clone()
                 if upper["stepsize"] is not None and lower["stepsize"] is not None:
+                    torch.manual_seed(t * 1000 + i)
                     w = th.rand(1).item()
                     new_step_s = torch.exp(w * torch.log(upper["stepsize"]) + (1 - w) * torch.log(lower["stepsize"]))
-                    """
-                    suggest_new = torch.exp((torch.log(upper["stepsize"]) + torch.log(lower["stepsize"])) / 2)
-                    if suggest_new == step_s_:
-                        w = th.rand(1).item()
-                        new_step_s = torch.exp(
-                            w * torch.log(upper["stepsize"]) + (1 - w) * torch.log(lower["stepsize"])
-                        )
-                    else:
-                        new_step_s = suggest_new
-                    """
                 else:
                     if a_rate > self.accept_rate_bound[1]:
                         new_step_s = step_s_ * 10
@@ -827,16 +818,20 @@ class AdaptiveStepSizeConstantMCMCSamplerWrapperSmallBatchSize(MCMCMHCorrSampler
                     lower["accept"] = a_rate
                     lower["stepsize"] = step_s
 
-                # New step size
-                new_step_s = step_s.clone()
-                if upper["stepsize"] is None:
-                    new_step_s /= 10
-                elif lower["stepsize"] is None:
-                    new_step_s *= 10
-                else:
-                    new_step_s = torch.exp((torch.log(upper["stepsize"]) + torch.log(lower["stepsize"])) / 2)
+                    # New step size
+                    step_s_ = step_s.clone()
+                    if upper["stepsize"] is not None and lower["stepsize"] is not None:
+                        torch.manual_seed(t * 1000 + i)
+                        w = th.rand(1).item()
+                        new_step_s = torch.exp(
+                            w * torch.log(upper["stepsize"]) + (1 - w) * torch.log(lower["stepsize"]))
+                    else:
+                        if a_rate > self.accept_rate_bound[1]:
+                            new_step_s = step_s_ * 10
+                        else:  # a_rate < self.accept_rate_bound[0]
+                            new_step_s = step_s_ / 10
 
-                self.sampler.step_sizes[t] = new_step_s
+                    self.sampler.step_sizes[t] = new_step_s
             i += 1
         torch.set_rng_state(state)
         return x_next
@@ -846,6 +841,12 @@ class AdaptiveStepSizeConstantMCMCSamplerWrapperSmallBatchSize(MCMCMHCorrSampler
 
     def set_energy_function(self, energy_function):
         self.sampler.set_energy_function(energy_function)
+
+    def set_grad_diff(self, grad_diff):
+        self.sampler.set_grad_diff(grad_diff)
+
+    def set_class_log_prob(self, class_log_prob):
+        self.sampler.set_class_log_prob(class_log_prob)
 
 
 class AdaptiveStepSizeReferenceMCMCSamplerWrapper(MCMCMHCorrSampler):
@@ -920,6 +921,12 @@ class AdaptiveStepSizeReferenceMCMCSamplerWrapper(MCMCMHCorrSampler):
 
     def set_energy_function(self, energy_function):
         self.sampler.set_energy_function(energy_function)
+
+    def set_grad_diff(self, grad_diff):
+        self.sampler.set_grad_diff(grad_diff)
+
+    def set_class_log_prob(self, class_log_prob):
+        self.sampler.set_class_log_prob(class_log_prob)
 
 
 class AdaptiveStepSizeReferenceMCMCSamplerWrapperSmallBatchSize(MCMCMHCorrSampler):
@@ -1015,6 +1022,12 @@ class AdaptiveStepSizeReferenceMCMCSamplerWrapperSmallBatchSize(MCMCMHCorrSample
 
     def set_energy_function(self, energy_function):
         self.sampler.set_energy_function(energy_function)
+
+    def set_grad_diff(self, grad_diff):
+        self.sampler.set_grad_diff(grad_diff)
+
+    def set_class_log_prob(self, class_log_prob):
+        self.sampler.set_class_log_prob(class_log_prob)
 
 
 class AnnealedHMCEnergyApproxSampler(MCMCMHCorrSampler):
