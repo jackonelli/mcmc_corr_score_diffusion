@@ -748,6 +748,12 @@ class AdaptiveStepSizeConstantMCMCSamplerWrapper(MCMCMHCorrSampler):
     def set_energy_function(self, energy_function):
         self.sampler.set_energy_function(energy_function)
 
+    def set_grad_diff(self, grad_diff):
+        self.sampler.set_grad_diff(grad_diff)
+
+    def set_class_log_prob(self, class_log_prob):
+        self.sampler.set_class_log_prob(class_log_prob)
+
 
 class AdaptiveStepSizeConstantMCMCSamplerWrapperSmallBatchSize(MCMCMHCorrSampler):
     def __init__(
