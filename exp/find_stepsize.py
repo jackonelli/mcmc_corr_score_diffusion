@@ -133,15 +133,18 @@ def main():
 
     mcmc_steps = args.n_mcmc_steps
     if args.mcmc == "hmc":
-        if args.energy:
+        if energy_param:
             mcmc_sampler = AnnealedHMCEnergySampler(mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
         else:
-            mcmc_sampler = AnnealedHMCScoreSampler(mcmc_steps, step_sizes, 0.9, diff_sampler.betas, 3, None)
+            mcmc_sampler = AnnealedHMCScoreSampler(mcmc_steps, step_sizes, 0.9, diff_sampler.betas,
+                                                   3, None,
+                                                   n_intermediate_steps=args.n_intermediate_steps)
     elif args.mcmc == "la":
-        if args.energy:
+        if energy_param:
             mcmc_sampler = AnnealedLAEnergySampler(mcmc_steps, step_sizes, None)
         else:
-            mcmc_sampler = AnnealedLAScoreSampler(mcmc_steps, step_sizes, None)
+            mcmc_sampler = AnnealedLAScoreSampler(mcmc_steps, step_sizes, None,
+                                                  n_trapets=args.n_trapets)
     else:
         print(f"Incorrect MCMC method: '{args.mcmc}'")
         raise ValueError('')
@@ -228,7 +231,7 @@ def best_step_size(accept_rate_bound, a_step_sizes):
 
 def parse_args():
     parser = ArgumentParser(prog="Find step size for MCMC for classifier-full guidance")
-    parser.add_argument("--guid_scale", default=1.0, type=float, help="Guidance scale")
+    parser.add_argument("--guid_scale", default=20.0, type=float, help="Guidance scale")
     parser.add_argument("--num_diff_steps", default=1000, type=int, help="Num diffusion steps")
     parser.add_argument("--batch_size", default=10, type=int, help="Batch size")
     parser.add_argument("--num_samples", default=120, type=int, help="Number of samples for estimate acceptance ratio")
@@ -246,7 +249,8 @@ def parse_args():
     parser.add_argument("--class_model", type=str, help="Classifier model file (withouth '.pt' extension)")
     parser.add_argument("--class_cond", action="store_true", help="Use class conditional diff. model")
     parser.add_argument("--seed", type=int, default=None)
-    parser.add_argument("--energy", action="store_true", help="Energy-parameterization")
+    parser.add_argument("--n_trapets", type=int, default=5, help="Number of trapets steps for LA")
+    parser.add_argument("--n_intermediate_steps", type=int, default=0, help="Number of intermediate steps for HMC")
     return parser.parse_args()
 
 
