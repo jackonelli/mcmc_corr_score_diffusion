@@ -167,7 +167,7 @@ class AnnealedLAScoreSampler(MCMCMHCorrSampler):
     A straight line is used to compute the trapezoidal rule
     """
 
-    def __init__(self, num_samples_per_step: int, step_sizes, gradient_function, n_trapets=5):
+    def __init__(self, num_samples_per_step: int, step_sizes, gradient_function, n_trapets=10):
         """
         @param num_samples_per_step: Number of LA steps per timestep t
         @param step_sizes: Step sizes for each t
@@ -471,7 +471,7 @@ class AnnealedHMCScoreSampler(MCMCMHCorrSampler):
         mass_diag_sqrt: th.Tensor,
         num_leapfrog_steps: int,
         gradient_function: Callable,
-        n_intermediate_steps: Optional[int] = 0
+        n_intermediate_steps: Optional[int] = 1
     ):
         """
         @param num_samples_per_step: Number of HMC steps per timestep t

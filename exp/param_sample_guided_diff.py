@@ -68,13 +68,10 @@ def main():
         name_suffix = ""
 
     mcmc_methods = ['hmc',
-                    'la',
-                    'ula',
-                    'uhmc']
+                    'la']
+
     mcmc_steps = [2,
-                  6,
-                  6,
-                  2]
+                  6]
 
     # mcmc_methods = ['hmc']
     # mcmc_steps = [2]
@@ -278,7 +275,7 @@ def get_guid_sampler(config, diff_model, diff_sampler, guidance, time_steps, dat
             if energy_param:
                 mcmc_sampler = AnnealedLAEnergySampler(config.mcmc_steps, step_sizes, None)
             else:
-                mcmc_sampler = AnnealedLAScoreSampler(config.mcmc_steps, step_sizes, None, n_trapets=config.n_trapets)
+                mcmc_sampler = AnnealedLAScoreSampler(config.mcmc_steps, step_sizes, None)
         elif config.mcmc_method == "uhmc":
             if energy_param:
                 mcmc_sampler = AnnealedUHMCEnergySampler(
