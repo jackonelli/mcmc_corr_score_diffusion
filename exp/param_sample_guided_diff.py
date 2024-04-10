@@ -97,6 +97,23 @@ def main():
                   round(np.random.rand() + 0.5, 2)]
 
     config.guid_scale = 20
+
+    if args.baseline and args.sim_batch == 1:
+        config.mcmc_method = None
+        config.name = 'cifar100_param_' + name_suffix + 'None'
+        generate_samples(args,
+                         config,
+                         classifier,
+                         diff_model,
+                         diff_sampler,
+                         time_steps,
+                         dataset_name,
+                         energy_param,
+                         num_classes,
+                         device,
+                         num_channels,
+                         image_size)
+
     for i, method in enumerate(mcmc_methods):
         config.mcmc_method = method
         config.name = 'cifar100_param_' + name_suffix + method
@@ -316,6 +333,7 @@ def parse_args():
     )
     parser.add_argument('--parallell', action='store_true', help='All the parallell simulations save '
                                                                  'at the same location')
+    parser.add_argument("--baseline", action='store_true', help='If only reverse without mcmc is desired')
     return parser.parse_args()
 
 
