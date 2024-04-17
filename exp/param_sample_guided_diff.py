@@ -49,7 +49,7 @@ def main():
     mcmc_steps = [2]
     if args.parallell:
         np.random.seed(args.job_id)
-    """
+
     factors_ = [round(5*np.random.rand(), 2),
                 round(10 * np.random.rand() + 0.5, 2),
                 round(10 * np.random.rand() + 0.5, 2),
@@ -67,7 +67,7 @@ def main():
                   round(np.random.rand() + 0.5, 2),
                   round(np.random.rand() + 0.5, 2),
                   round(np.random.rand() + 0.5, 2)]
-
+    """
     config.guid_scale = 20
 
     if args.baseline and (args.sim_batch == 1 or args.parallell):
