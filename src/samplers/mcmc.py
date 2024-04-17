@@ -2,6 +2,7 @@ import pickle
 from pathlib import Path
 from typing import Callable, Dict, Optional
 import itertools
+from sympy.ntheory import factorint
 from abc import ABC, abstractmethod
 import gc
 import torch
@@ -1245,3 +1246,129 @@ def estimate_energy_diff_linear_given_intermediate(gradient_function, grads, x, 
             (e, (grad * diff.detach()).sum(dim=tuple(range(1, dims))).reshape(-1, 1)), 1
         )
     return th.trapz(e, ss_)
+
+
+class AnnealedHMCScoreNumberTrapsSampler(MCMCMHCorrSampler):
+    """Annealed Metropolis-Hasting Adjusted Hamiltonian Monte Carlo
+
+    Trapezoidal rule is computed with the intermediate steps of HMC (leapfrog steps)
+    """
+
+    def __init__(
+        self,
+        num_samples_per_step: int,
+        step_sizes: Dict[int, float],
+        damping_coeff: float,
+        mass_diag_sqrt: th.Tensor,
+        num_leapfrog_steps: int,
+        gradient_function: Callable,
+        n_intermediate_steps: Optional[int] = 1
+    ):
+        """
+        @param num_samples_per_step: Number of HMC steps per timestep t
+        @param step_sizes: Step size for leapfrog steps for each t
+        @param damping_coeff: Damping coefficient
+        @param mass_diag_sqrt: Square root of mass diagonal matrix for each t
+        @param num_leapfrog_steps: Number of leapfrog steps per HMC step
+        @param gradient_function: Function that returns the score for a given x, t, and text_embedding
+        """
+        super().__init__(
+            num_samples_per_step=num_samples_per_step, step_sizes=step_sizes, gradient_function=gradient_function
+        )
+        self._damping_coeff = damping_coeff
+        self._mass_diag_sqrt = mass_diag_sqrt
+        self._num_leapfrog_steps = num_leapfrog_steps
+        self.n_intermediate_steps = n_intermediate_steps
+        self.factor_alpha = dict()
+
+    @th.no_grad()
+    def sample_step(self, x, t, t_idx, classes=None):
+        dims = x.dim()
+
+        # Sample Momentum
+        v = th.randn_like(x) * self._mass_diag_sqrt[t_idx]
+        self.update_save_dicts(t)
+
+        for _ in range(self.num_samples_per_step):
+            # Partial Momentum Refreshment
+            v_prime = get_v_prime(v=v, damping_coeff=self._damping_coeff, mass_diag_sqrt=self._mass_diag_sqrt[t_idx])
+
+            x_next, v_next, diffs, grads = leapfrog_steps_intermediate(
+                x_0=x,
+                v_0=v_prime,
+                t=t,
+                t_idx=t_idx,
+                gradient_function=self.gradient_function,
+                step_size=self.step_sizes[t],
+                mass_diag_sqrt=self._mass_diag_sqrt[t_idx],
+                num_steps=self._num_leapfrog_steps,
+                classes=classes,
+                n_intermediate_steps=self.n_intermediate_steps
+            )
+
+            logp_v_p, logp_v = transition_hmc(
+                v_prime=v_prime, v_next=v_next, mass_diag_sqrt=self._mass_diag_sqrt[t_idx], dims=dims
+            )
+
+            # Energy diff estimation
+            if self.class_log_prob is not None:
+                classifier_energy_diff = (self.class_log_prob(x_next, t, t_idx, classes) -
+                                          self.class_log_prob(x, t, t_idx, classes))
+            else:
+                classifier_energy_diff = 0.
+            energy_diff = classifier_energy_diff + estimate_energy_diff_intermediate(diffs, grads, dims).to(x_next.device)
+            logp_accept = logp_v - logp_v_p + energy_diff
+
+            u = th.rand(x_next.shape[0]).to(x_next.device)
+            alpha = th.exp(logp_accept)
+            accept = (u < alpha).to(th.float32).reshape((x_next.shape[0],) + tuple(([1 for _ in range(dims - 1)])))
+
+            # update samples
+            x = accept * x_next + (1 - accept) * x
+            v = accept * v_next + (1 - accept) * v_prime
+            factors = factorint(self.n_intermediate_steps + 1).keys()
+            factor_alpha = {}
+            if len(factors) > 1:
+                for factor in factors:
+                    grads_ = find_intermediate_grads(factor, grads)
+                    energy_diff = classifier_energy_diff + estimate_energy_diff_intermediate(diffs, grads_, dims).to(
+                        x_next.device)
+                    logp_accept = logp_v - logp_v_p + energy_diff
+                    alpha_ = th.exp(logp_accept)
+                    factor_alpha[factor - 1] = alpha_.detach().cpu()
+            self.save_stats(t, alpha, factor_alpha, accept, energy_diff)
+        return x
+
+
+    def save_stats(self, t, alpha, factor_alpha, all_accepts, energy_diff):
+        self.alpha[t].append(alpha.detach().cpu())
+        self.all_accepts[t].append(all_accepts.detach().cpu())
+        self.energy_diff[t].append(energy_diff.detach().cpu())
+        self.factor_alpha[t].append(factor_alpha)
+
+    def update_save_dicts(self, t):
+        self.alpha[t] = list()
+        self.accept_ratio[t] = list()
+        self.all_accepts[t] = list()
+        self.energy_diff[t] = list()
+        self.factor_alpha[t] = list()
+
+    def save_stats_to_file(self, dir_: Path, suffix: str):
+        with open(dir_ / f"alphas_{suffix}", "wb") as ff:
+            pickle.dump(self.alpha, ff)
+        with open(dir_ / f"factor_alpha_{suffix}", "wb") as ff:
+            pickle.dump(self.factor_alpha, ff)
+        with open(dir_ / f"all_accepts_{suffix}", "wb") as ff:
+            pickle.dump(self.all_accepts, ff)
+        with open(dir_ / f"energy_diff_{suffix}", "wb") as ff:
+            pickle.dump(self.energy_diff, ff)
+
+
+def find_intermediate_grads(factor, grads):
+    grads_ = list()
+    n = factor + 1
+    L = len(grads[0])
+    for grads_leapfrog in grads:
+        indices = [int(i * (L - 1) / (n - 1)) for i in range(n)]
+        grads_.append([grads_leapfrog[i] for i in indices])
+    return grads_

@@ -295,7 +295,7 @@ class MCMCGuidanceSamplerStacking(MCMCGuidanceSampler):
                     gc.collect()
                     torch.cuda.empty_cache()
 
-            if t > 0:
+            if t_idx > 0:
                 # Note x is on cpu!
                 respaced_t = self.diff_proc.time_steps[t_idx - 1].item()
                 x = self.mcmc_sampler.sample_step(x, respaced_t, t_idx - 1, classes)
@@ -356,7 +356,7 @@ class GuidanceSamplerAcceptanceComparison:
                 else:
                     x_tm1 = reverse_func(self_, t, t_idx, x_tm1, classes, device, self_.diff_cond)
 
-            if t > 0:
+            if t_idx > 0:
                 current_rng_state = th.get_rng_state()
                 respaced_t = self_.diff_proc.time_steps[t_idx - 1].item()
                 for i in range(self.n_models):
@@ -427,7 +427,7 @@ class GuidanceSamplerAcceptanceComparison:
                     else:
                         x_tm1 = reverse_func(self_, t, t_idx, x_tm1, classes, device, self_.diff_cond)
 
-                if t > 0:
+                if t_idx > 0:
                     current_rng_state = th.get_rng_state()
                     t_idx = t_idx - 1
                     t = self_.diff_proc.time_steps[t_idx].item()

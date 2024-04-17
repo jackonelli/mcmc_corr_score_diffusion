@@ -4,7 +4,8 @@ import sys
 sys.path.append(".")
 from pathlib import Path
 from argparse import ArgumentParser
-from exp.sample_guided_diff import load_models, get_guid_sampler
+from src.model.utils import load_models
+from src.samplers.utils import get_guid_sampler
 from src.utils.net import get_device, Device
 import scipy
 import pickle
@@ -22,6 +23,8 @@ from src.samplers.mcmc import (get_v_prime, leapfrog_steps, transition_hmc,
                                estimate_energy_diff_linear_given_require_grad)
 
 
+MODELS_DIR = Path.cwd() / "models"
+
 def main():
     args = parse_args()
     device = get_device(Device.GPU)
@@ -31,8 +34,8 @@ def main():
 
     set_seed(config_score.seed)
 
-    (diff_model_score, classifier, dataset, beta_schedule, post_var, _) = load_models(config_score, device)
-    (diff_model_energy, _, _, _, _, _) = load_models(config_energy, device)
+    (diff_model_score, classifier, dataset, beta_schedule, post_var, _) = load_models(config_score, device, MODELS_DIR)
+    (diff_model_energy, _, _, _, _, _) = load_models(config_energy, device, MODELS_DIR)
 
     sim_dir = setup_results_dir(config_score, args.job_id)
     _ = setup_results_dir(config_energy, args.job_id, suffix="_energy")
