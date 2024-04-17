@@ -69,10 +69,11 @@ def main():
                   round(np.random.rand() + 0.5, 2)]
     """
     config.guid_scale = 20
+    base_name = config.name
 
     if args.baseline and (args.sim_batch == 1 or args.parallell):
         config.mcmc_method = None
-        config.name = 'cifar100_param_' + name_suffix + 'None'
+        config.name = base_name + '_' + name_suffix + 'None'
         generate_samples(args,
                          config,
                          classifier,
@@ -88,7 +89,7 @@ def main():
 
     for i, method in enumerate(mcmc_methods):
         config.mcmc_method = method
-        config.name = 'cifar100_param_' + name_suffix + method
+        config.name = base_name + '_' + name_suffix + method
         config.mcmc_steps = mcmc_steps[i]
         config.mcmc_stepsizes["params"]["factor"] = factors_[i]
         config.mcmc_stepsizes["params"]["exponent"] = exponents_[i]
