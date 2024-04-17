@@ -41,14 +41,12 @@ def main():
     else:
         name_suffix = ""
 
-    mcmc_methods = ['hmc',
-                    'la']
+    # mcmc_methods = ['hmc', 'la']
 
-    mcmc_steps = [2,
-                  6]
+    # mcmc_steps = [2, 6]
 
-    # mcmc_methods = ['hmc']
-    # mcmc_steps = [2]
+    mcmc_methods = ['hmc']
+    mcmc_steps = [2]
     if args.parallell:
         np.random.seed(args.job_id)
     """
