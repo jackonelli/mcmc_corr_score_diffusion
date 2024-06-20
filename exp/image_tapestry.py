@@ -4,7 +4,7 @@ Code is based on https://github.com/yilundu/reduce_reuse_recycle commit 513361e6
 import matplotlib.pyplot as plt
 from src.utils.tapestry_components import visualize_context, IFPipeline
 from diffusers import DiffusionPipeline
-from src.samplers.mcmc import AnnealedLAScoreSampler
+from src.samplers.mcmc import AnnealedLAScoreSampler, AnnealedULAScoreSampler, MCMCMHCorrSampler
 import torch
 import pickle
 import numpy as np
@@ -41,19 +41,52 @@ if __name__ == '__main__':
 
     # Guidance Magnitude
     guidance_mag = 20.0
+
+    """
     context = {
-        (1, 0, 32): {'string': 'An epic space battle', 'magnitude': guidance_mag},
-        (1, 0, 64): {'string': 'An epic space battle', 'magnitude': guidance_mag},
-        (1, 32, 0): {'string': 'An epic space battle', 'magnitude': guidance_mag},
-        (1, 32, 64): {'string': 'An epic space battle', 'magnitude': guidance_mag},
-        (1, 64, 0): {'string': 'An epic space battle', 'magnitude': guidance_mag},
-        (1, 32, 64): {'string': 'An epic space battle', 'magnitude': guidance_mag},
-        (1, 64, 32): {'string': 'An epic space battle', 'magnitude': guidance_mag},
-        (1, 0, 0): {'string': 'The starship Enterprise', 'magnitude': guidance_mag},
-        (1, 64, 64): {'string': 'A star destroyer from Star Wars', 'magnitude': guidance_mag},
+        (2, 0, 0):{'string':'An epic space battle', 'magnitude':guidance_mag},
+        (1, 0, 0):{'string':'The starship Enterprise', 'magnitude':guidance_mag},
+        (1, 64, 64):{'string':'A star destroyer from Star Wars', 'magnitude':guidance_mag},
     }
+    
+    context = {
+        (1, 0, 0): {'string': 'The starship Enterprise', 'magnitude': guidance_mag},
+        (1, 64, 0): {'string': 'An epic space battle', 'magnitude': guidance_mag},
+        (1, 0, 64): {'string': 'An epic space battle', 'magnitude': guidance_mag},
+        (1, 64, 64): {'string': 'A star destroyer from Star Wars', 'magnitude': guidance_mag},
+        (1, 32, 0): {'string': 'An epic space battle', 'magnitude': guidance_mag},
+        (1, 0, 32): {'string': 'An epic space battle', 'magnitude': guidance_mag},
+        (1, 32, 32): {'string': 'An epic space battle', 'magnitude': guidance_mag},
+        (1, 64, 32): {'string': 'An epic space battle', 'magnitude': guidance_mag},
+        (1, 32, 64): {'string': 'An epic space battle', 'magnitude': guidance_mag},
+    }
+    
+    context = {
+        (1, 0, 0): {'string': 'A fearsome red dragon breathing fire', 'magnitude': guidance_mag},
+        (1, 0, 64): {'string': 'A mysterious and powerful wizard casting a spell', 'magnitude': guidance_mag},
+        (1, 64, 0): {'string': 'A majestic castle', 'magnitude': guidance_mag},
+        (1, 64, 64): {'string': 'A brave and strong knight protecting himself with his shield', 'magnitude': guidance_mag},
+        (1, 32, 0): {'string': 'Fantasy world', 'magnitude': guidance_mag},
+        (1, 0, 32): {'string': 'An epic fantasy battle', 'magnitude': guidance_mag},
+        (1, 32, 32): {'string': 'An epic fantasy battle', 'magnitude': guidance_mag},
+        (1, 64, 32): {'string': 'An epic fantasy battle', 'magnitude': guidance_mag},
+        (1, 32, 64): {'string': 'Fantasy world', 'magnitude': guidance_mag},
+    }
+    """
+    context = {
+        (1, 0, 0): {'string': 'The starship Enterprise shooting laser', 'magnitude': guidance_mag},
+        (1, 64, 0): {'string': 'The moon made of cheese', 'magnitude': guidance_mag},
+        (1, 0, 64): {'string': 'An epic space battle', 'magnitude': guidance_mag},
+        (1, 64, 64): {'string': 'A star destroyer from Star Wars', 'magnitude': guidance_mag},
+        (1, 32, 0): {'string': 'An epic space battle', 'magnitude': guidance_mag},
+        (1, 0, 32): {'string': 'An epic space battle', 'magnitude': guidance_mag},
+        (1, 32, 32): {'string': 'An epic space battle', 'magnitude': guidance_mag},
+        (1, 64, 32): {'string': 'An epic space battle', 'magnitude': guidance_mag},
+        (1, 32, 64): {'string': 'An epic space battle', 'magnitude': guidance_mag},
+    }
+
     # Increase the number of MCMC steps run to sample between intermediate distributions
-    mcmc_steps = 0
+    mcmc_steps = 6
 
     # Steps sizes as a function of beta
     a = '1e0'
@@ -65,13 +98,17 @@ if __name__ == '__main__':
     # Save image
     time = datetime.now()
     time = time.strftime("%Y%m-%H%M")
-    save_file = 'space_seed0_1000_overlap_LA' + str(mcmc_steps) + '_' + a + '_' + time
+    # save_file = 'space_seed0_1000_overlap_ULA_' + str(mcmc_steps) + '_' + a + '_' + time
+    save_file = 'space_seed0_1000_overlap_LA_' + str(mcmc_steps) + '_' + a + '_' + time
+    # save_file = 'fantasy_seed0_1000_reverse_' + time
+    # save_file = 'space_seed0_1000_reverse_' + time
 
     # Stage 2
     stage2 = False
 
     # Construct Sampler
     sampler = AnnealedLAScoreSampler(mcmc_steps, step_sizes, None, 5)
+    # sampler = AnnealedULAScoreSampler(mcmc_steps, step_sizes, None)
 
     color_lookup = {}
 
@@ -81,6 +118,7 @@ if __name__ == '__main__':
     plt.figure(figsize=(5, 5))
     img = visualize_context(128, 64, context, color_lookup)
     plt.imshow(img)
+    plt.show()
 
     for k, v in context.items():
         scale, xstart, ystart = k
@@ -93,13 +131,14 @@ if __name__ == '__main__':
     plt.savefig('composite_captions.png', bbox_inches='tight', facecolor=plt.gca().get_facecolor())
 
     with torch.no_grad():
-        latents = stage_1(context, sampler, height=128, width=128, generator=generator, num_inference_steps=steps)
+        latents = stage_1(context, sampler, height=128, width=128, generator=generator, num_inference_steps=steps, guidance_scale=guidance_mag)
 
     pickle.dump(latents, open("{}.p".format(save_file), "wb"))
-    if mcmc_steps > 0:
+    if mcmc_steps > 0 and isinstance(sampler, MCMCMHCorrSampler):
         sampler.save_stats_to_file(Path.cwd(), save_file + '.p')
 
     plot_image(latents)
+    plt.show()
 
     if stage2:
         stage_2 = DiffusionPipeline.from_pretrained("DeepFloyd/IF-II-L-v1.0", text_encoder=None, variant="fp16",
@@ -113,4 +152,5 @@ if __name__ == '__main__':
                           generator=generator, output_type="pt").images
 
         plot_image(latents)
+        plt.show()
         pickle.dump(latents, open("{}_refined.p".format(save_file), "wb"))

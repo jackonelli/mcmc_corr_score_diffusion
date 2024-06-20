@@ -807,7 +807,7 @@ class IFPipeline(DiffusionPipeline, LoraLoaderMixin):
             prompt: Union[str, List[str]] = None,
             num_inference_steps: int = 100,
             timesteps: List[int] = None,
-            guidance_scale: float = 7.0,
+            guidance_scale: float = 7.5,
             negative_prompt: Optional[Union[str, List[str]]] = None,
             num_images_per_prompt: Optional[int] = 1,
             height: Optional[int] = None,
@@ -1003,10 +1003,14 @@ class IFPipeline(DiffusionPipeline, LoraLoaderMixin):
                                                    in_channels=self.unet.config.in_channels)
             noise_pred_text_canvas = make_canvas(noise_pred_text_, canvas_size, sizes,
                                                  in_channels=self.unet.config.in_channels)
-            noise_pred = noise_pred_uncond_canvas + 7.5 * (noise_pred_text_canvas - noise_pred_uncond_canvas)
+            noise_pred = noise_pred_uncond_canvas + guidance_scale * (noise_pred_text_canvas - noise_pred_uncond_canvas)
 
             scale = scalar[t]
             return -1 * scale * noise_pred
+
+        def gradient_fn_unnorm_double(x, t, text_embeddings, classes):
+            grad = gradient_fn_unnorm(x, t, text_embeddings, classes)
+            return grad, grad
 
         def sync_fn(x):
             x_canvas = make_canvas(x, canvas_size, sizes, in_channels=self.unet.config.in_channels)
@@ -1018,7 +1022,9 @@ class IFPipeline(DiffusionPipeline, LoraLoaderMixin):
             noise = extract_latents(noise_canvas, sizes)
             return noise
 
-        sampler.gradient_function = gradient_fn_unnorm
+        sampler.set_gradient_function(gradient_fn_unnorm_double)
+        sampler.set_grad_diff(gradient_fn_unnorm)
+
         sampler._sync_function = sync_fn
         sampler._noise_function = noise_fn
         sampler._gradient_fn_unnorm = gradient_fn_unnorm

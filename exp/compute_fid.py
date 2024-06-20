@@ -1,6 +1,7 @@
 import sys
 sys.path.append(".")
-from src.utils.fid_utils import get_model, dataset_thfiles, dataset_jpeg, compute_fid_statistics_dataloader, PILDataset
+from src.utils.fid_utils import (get_model, dataset_thfiles, dataset_jpeg, compute_fid_statistics_dataloader, PILDataset,
+                                 compute_fid_statistics_thfiles_split)
 from argparse import ArgumentParser
 from pytorch_fid.fid_score import (save_fid_stats, calculate_fid_given_paths, compute_statistics_of_path,
                                    calculate_frechet_distance)
@@ -15,14 +16,13 @@ import os
 
 def get_statistics(model, device, batch_size, dims, path_dataset, type_dataset, num_workers, path_save_stats,
                    num_samples=None):
+
     if type_dataset == 'th':
-        dataset = dataset_thfiles(path_dataset, num_samples=num_samples)
-        if th.any(dataset.isnan()).item():
-            m, s = None, None
-        else:
-            dataloader = th.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=False,
-                                                  num_workers=num_workers)
-            m, s = compute_fid_statistics_dataloader(model, dataloader, device, dims)
+        m, s = compute_fid_statistics_thfiles_split(model=model,
+                                                    device=device,
+                                                    dims=dims,
+                                                    path_folder=path_dataset,
+                                                    num_samples=num_samples)
     elif type_dataset == 'cifar100_train':
         if path_dataset is not None:
             path_dataset = str(path_dataset)

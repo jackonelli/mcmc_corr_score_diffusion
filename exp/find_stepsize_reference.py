@@ -219,10 +219,10 @@ def best_step_size(accept_rate_reference, a_step_sizes):
 
 def parse_args():
     parser = ArgumentParser(prog="Find step size for MCMC for classifier-full guidance")
-    parser.add_argument("--guid_scale", default=1.0, type=float, help="Guidance scale")
+    parser.add_argument("--guid_scale", default=20.0, type=float, help="Guidance scale")
     parser.add_argument("--num_diff_steps", default=1000, type=int, help="Num diffusion steps")
-    parser.add_argument("--batch_size", default=10, type=int, help="Batch size")
-    parser.add_argument("--num_samples", default=120, type=int, help="Number of samples for estimate acceptance ratio")
+    parser.add_argument("--batch_size", default=50, type=int, help="Batch size")
+    parser.add_argument("--num_samples", default=150, type=int, help="Number of samples for estimate acceptance ratio")
     parser.add_argument("--accept_rate_referemce_path", help="Path to file with acceptance ratio reference values")
     parser.add_argument("--marginal", type=float, default=0.025, help="The marginal up and down from reference point")
     parser.add_argument("--max_iter", default=50, type=int, help="Number of search iterations per time step")

@@ -154,6 +154,7 @@ def compute_metrics(p_file, sim_dirs, pattern, classifier, dataset, batch_size, 
             else:
                 num_samples = compute_nbr_samples(classes_and_samples)
                 simple_acc, r3_acc, top_5_acc = "-", "-", "-"
+
             res_acc.append((simple_acc, r3_acc, top_5_acc, config, num_samples, sim_dir.name))
             if path_fid_compare is not None:
                 m2, s2 = get_statistics(model=fid_model,
@@ -311,8 +312,10 @@ def validate(coll):
     """Double check that the sorting shenanigans above actually pair the correct samples to the correct classes"""
     for cl, sm in coll:
         tmp = PATTERN.match(cl.name)
+        # print(cl.name)
         cl_1, cl_2 = tmp[1], tmp[2]
         tmp = PATTERN.match(sm.name)
+        # print(sm.name)
         sm_1, sm_2 = tmp[1], tmp[2]
         assert cl_1 == sm_1, "Mismatched slurm ID"
         assert cl_2 == sm_2, "Mismatched batch index"
