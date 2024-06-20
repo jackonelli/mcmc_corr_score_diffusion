@@ -1136,3 +1136,24 @@ def visualize_context(canvas_size, base_size, context, color_lookup):
         draw_box(img, (xstart, ystart), scale * base_size, color, canvas_size-1)
 
     return img
+
+
+def context_examples(idx: int = 1, guidance_mag: float = 20.0):
+    contexts = [{
+            (2, 0, 0): {'string': 'An epic space battle', 'magnitude': guidance_mag},
+            (1, 0, 0): {'string': 'The starship Enterprise', 'magnitude': guidance_mag},
+            (1, 64, 64): {'string': 'A star destroyer from Star Wars', 'magnitude': guidance_mag},
+        },
+        {
+            (1, 0, 0): {'string': 'The starship Enterprise shooting laser', 'magnitude': guidance_mag},
+            (1, 64, 0): {'string': 'The moon made of cheese', 'magnitude': guidance_mag},
+            (1, 0, 64): {'string': 'An epic space battle', 'magnitude': guidance_mag},
+            (1, 64, 64): {'string': 'A star destroyer from Star Wars', 'magnitude': guidance_mag},
+            (1, 32, 0): {'string': 'An epic space battle', 'magnitude': guidance_mag},
+            (1, 0, 32): {'string': 'An epic space battle', 'magnitude': guidance_mag},
+            (1, 32, 32): {'string': 'An epic space battle', 'magnitude': guidance_mag},
+            (1, 64, 32): {'string': 'An epic space battle', 'magnitude': guidance_mag},
+            (1, 32, 64): {'string': 'An epic space battle', 'magnitude': guidance_mag},
+        }
+    ]
+    return contexts[idx]

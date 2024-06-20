@@ -5,22 +5,19 @@ import sys
 
 sys.path.append(".")
 
+from argparse import ArgumentParser
 import matplotlib.pyplot as plt
-from src.utils.tapestry_components import visualize_context, IFPipeline
+from src.utils.tapestry_components import visualize_context, IFPipeline, context_examples
 from diffusers import DiffusionPipeline
 from src.samplers.mcmc import AnnealedLAScoreSampler, AnnealedULAScoreSampler, MCMCMHCorrSampler
 import torch
 import pickle
 import numpy as np
+import json
 from src.utils.seeding import set_seed
 from pathlib import Path
 from datetime import datetime
 
-# Set Seed
-seed = 0
-
-generator = torch.Generator('cuda').manual_seed(seed)
-set_seed(seed)
 
 has_cuda = torch.cuda.is_available()
 device = torch.device('cpu' if not has_cuda else 'cuda')
@@ -40,79 +37,76 @@ def plot_image(latents_):
     plt.imshow(image)
 
 
+def parse_args():
+    parser = ArgumentParser(prog="Sample a tapestry image")
+    parser.add_argument("--config", type=Path, required=True, help="Config file path")
+    parser.add_argument(
+        "--job_id", type=int, default=None, help="Simulation batch index, indexes parallell simulations."
+    )
+    parser.add_argument(
+        "--sim_batch", type=int, default=0, help="Simulation batch index, indexes parallell simulations."
+    )
+    return parser.parse_args()
+
+
 if __name__ == '__main__':
+
     # Tunable Parameters
+    args = parse_args()
+    config_path = args.config
+    with open(config_path) as cfg_file:
+        config = json.load(cfg_file)
+
+    res_dir = Path(config['results_dir'])
+    res_dir.mkdir(exist_ok=True, parents=True)
+    res_dir = res_dir / 'tapestry'
+    res_dir.mkdir(exist_ok=True)
+
+    # Set Seed
+    seed = config['seed']
+    generator = torch.Generator('cuda')
+    if seed is not None:
+        generator.manual_seed(seed)
+        set_seed(seed)
 
     # Guidance Magnitude
-    guidance_mag = 20.0
+    guidance_mag = config['guidance_mag']
+    guidance_scale = config['guidance_scale']
+    idx = config['context_index']
 
-    """
-    context = {
-        (2, 0, 0):{'string':'An epic space battle', 'magnitude':guidance_mag},
-        (1, 0, 0):{'string':'The starship Enterprise', 'magnitude':guidance_mag},
-        (1, 64, 64):{'string':'A star destroyer from Star Wars', 'magnitude':guidance_mag},
-    }
-    
-    context = {
-        (1, 0, 0): {'string': 'The starship Enterprise', 'magnitude': guidance_mag},
-        (1, 64, 0): {'string': 'An epic space battle', 'magnitude': guidance_mag},
-        (1, 0, 64): {'string': 'An epic space battle', 'magnitude': guidance_mag},
-        (1, 64, 64): {'string': 'A star destroyer from Star Wars', 'magnitude': guidance_mag},
-        (1, 32, 0): {'string': 'An epic space battle', 'magnitude': guidance_mag},
-        (1, 0, 32): {'string': 'An epic space battle', 'magnitude': guidance_mag},
-        (1, 32, 32): {'string': 'An epic space battle', 'magnitude': guidance_mag},
-        (1, 64, 32): {'string': 'An epic space battle', 'magnitude': guidance_mag},
-        (1, 32, 64): {'string': 'An epic space battle', 'magnitude': guidance_mag},
-    }
-    
-    context = {
-        (1, 0, 0): {'string': 'A fearsome red dragon breathing fire', 'magnitude': guidance_mag},
-        (1, 0, 64): {'string': 'A mysterious and powerful wizard casting a spell', 'magnitude': guidance_mag},
-        (1, 64, 0): {'string': 'A majestic castle', 'magnitude': guidance_mag},
-        (1, 64, 64): {'string': 'A brave and strong knight protecting himself with his shield', 'magnitude': guidance_mag},
-        (1, 32, 0): {'string': 'Fantasy world', 'magnitude': guidance_mag},
-        (1, 0, 32): {'string': 'An epic fantasy battle', 'magnitude': guidance_mag},
-        (1, 32, 32): {'string': 'An epic fantasy battle', 'magnitude': guidance_mag},
-        (1, 64, 32): {'string': 'An epic fantasy battle', 'magnitude': guidance_mag},
-        (1, 32, 64): {'string': 'Fantasy world', 'magnitude': guidance_mag},
-    }
-    """
-    context = {
-        (1, 0, 0): {'string': 'The starship Enterprise shooting laser', 'magnitude': guidance_mag},
-        (1, 64, 0): {'string': 'The moon made of cheese', 'magnitude': guidance_mag},
-        (1, 0, 64): {'string': 'An epic space battle', 'magnitude': guidance_mag},
-        (1, 64, 64): {'string': 'A star destroyer from Star Wars', 'magnitude': guidance_mag},
-        (1, 32, 0): {'string': 'An epic space battle', 'magnitude': guidance_mag},
-        (1, 0, 32): {'string': 'An epic space battle', 'magnitude': guidance_mag},
-        (1, 32, 32): {'string': 'An epic space battle', 'magnitude': guidance_mag},
-        (1, 64, 32): {'string': 'An epic space battle', 'magnitude': guidance_mag},
-        (1, 32, 64): {'string': 'An epic space battle', 'magnitude': guidance_mag},
-    }
+    context = context_examples(idx, guidance_mag)
 
     # Increase the number of MCMC steps run to sample between intermediate distributions
-    mcmc_steps = 6
+    mcmc_steps = config['mcmc_steps']
 
     # Steps sizes as a function of beta
-    a = '1e0'
-    step_sizes = stage_1.scheduler.betas * float(a)
+    a = config['parameters']['a']
+    b = config['parameters']['b']
+    step_sizes = float(a) * stage_1.scheduler.betas ** float(b)
 
     # Number of reverse steps
-    steps = 1000
-
-    # Save image
-    time = datetime.now()
-    time = time.strftime("%Y%m-%H%M")
-    # save_file = 'space_seed0_1000_overlap_ULA_' + str(mcmc_steps) + '_' + a + '_' + time
-    save_file = 'space_seed0_1000_overlap_LA_' + str(mcmc_steps) + '_' + a + '_' + time
-    # save_file = 'fantasy_seed0_1000_reverse_' + time
-    # save_file = 'space_seed0_1000_reverse_' + time
+    steps = config['n_steps']
 
     # Stage 2
     stage2 = False
 
+    sampler_text = 'reverse'
+
     # Construct Sampler
-    sampler = AnnealedLAScoreSampler(mcmc_steps, step_sizes, None, 5)
-    # sampler = AnnealedULAScoreSampler(mcmc_steps, step_sizes, None)
+    if config['mh']:
+        sampler = AnnealedLAScoreSampler(mcmc_steps, step_sizes, None, config['n_trapets'])
+        sampler_text = 'LA'
+    else:
+        sampler = AnnealedULAScoreSampler(mcmc_steps, step_sizes, None)
+        sampler_text = 'ULA'
+
+    # Save image
+    time = datetime.now()
+    time = time.strftime("%Y%m-%H%M")
+    save_file = ('space_seed' + str(config['seed']) + '_' + str(steps) + '_' +
+                 sampler_text + '_idx' + str(idx) + '_a_' + config['parameters']['a'] + '_b_'
+                 + config['parameters']['b'] + '_traps' + str(config['n_trapets']) + time + '_'
+                 + str(args.sim_batch) + '.p')
 
     color_lookup = {}
 
@@ -135,11 +129,14 @@ if __name__ == '__main__':
     plt.savefig('composite_captions.png', bbox_inches='tight', facecolor=plt.gca().get_facecolor())
 
     with torch.no_grad():
-        latents = stage_1(context, sampler, height=128, width=128, generator=generator, num_inference_steps=steps, guidance_scale=guidance_mag)
+        latents = stage_1(context, sampler, height=128, width=128, generator=generator, num_inference_steps=steps, guidance_scale=guidance_scale)
+
+    with open(res_dir / save_file, "wb") as ff:
+        pickle.dump(latents, ff)
 
     pickle.dump(latents, open("{}.p".format(save_file), "wb"))
     if mcmc_steps > 0 and isinstance(sampler, MCMCMHCorrSampler):
-        sampler.save_stats_to_file(Path.cwd(), save_file + '.p')
+        sampler.save_stats_to_file(res_dir, save_file)
 
     plot_image(latents)
     plt.show()
