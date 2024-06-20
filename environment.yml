@@ -139,4 +139,5 @@ dependencies:
       - ipykernel
       - opencv-python
       - pytorch-fid
+      - transformer
 
