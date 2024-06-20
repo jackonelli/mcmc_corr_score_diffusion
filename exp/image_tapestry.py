@@ -1,6 +1,10 @@
 """
 Code is based on https://github.com/yilundu/reduce_reuse_recycle commit 513361e60bb677dec75c086a234715f3db97ea51
 """
+import sys
+
+sys.path.append(".")
+
 import matplotlib.pyplot as plt
 from src.utils.tapestry_components import visualize_context, IFPipeline
 from diffusers import DiffusionPipeline
