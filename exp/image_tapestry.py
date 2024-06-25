@@ -14,6 +14,7 @@ import torch
 import pickle
 import numpy as np
 import json
+import os
 from src.utils.seeding import set_seed
 from pathlib import Path
 from datetime import datetime
@@ -22,15 +23,6 @@ from datetime import datetime
 has_cuda = torch.cuda.is_available()
 device = torch.device('cpu' if not has_cuda else 'cuda')
 print(f'torch device {device}')
-
-# initialize model
-print('Load model')
-stage_1 = IFPipeline.from_pretrained("DeepFloyd/IF-I-XL-v1.0", variant="fp16", torch_dtype=torch.float16,
-                                     use_auth_token=True)
-stage_1.enable_xformers_memory_efficient_attention()
-stage_1.enable_model_cpu_offload()
-stage_1.safety_checker = None
-print('Successfully loaded the model')
 
 
 def plot_image(latents_):
@@ -59,6 +51,19 @@ if __name__ == '__main__':
     config_path = args.config
     with open(config_path) as cfg_file:
         config = json.load(cfg_file)
+
+    # initialize model
+    print('Load model')
+    if config['cache'] is not None:
+        custom_cache_dir = os.path.expanduser(config['cache'])
+    else:
+        custom_cache_dir = None
+    stage_1 = IFPipeline.from_pretrained("DeepFloyd/IF-I-XL-v1.0", variant="fp16", torch_dtype=torch.float16,
+                                         use_auth_token=True, cache_dir=custom_cache_dir)
+    stage_1.enable_xformers_memory_efficient_attention()
+    stage_1.enable_model_cpu_offload()
+    stage_1.safety_checker = None
+    print('Successfully loaded the model')
 
     res_dir = Path(config['results_dir'])
     res_dir.mkdir(exist_ok=True, parents=True)
