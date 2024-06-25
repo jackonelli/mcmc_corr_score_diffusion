@@ -21,14 +21,16 @@ from datetime import datetime
 
 has_cuda = torch.cuda.is_available()
 device = torch.device('cpu' if not has_cuda else 'cuda')
-print(device)
+print(f'torch device {device}')
 
 # initialize model
+print('Load model')
 stage_1 = IFPipeline.from_pretrained("DeepFloyd/IF-I-XL-v1.0", variant="fp16", torch_dtype=torch.float16,
                                      use_auth_token=True)
 stage_1.enable_xformers_memory_efficient_attention()
 stage_1.enable_model_cpu_offload()
 stage_1.safety_checker = None
+print('Successfully loaded the model')
 
 
 def plot_image(latents_):
@@ -51,6 +53,7 @@ def parse_args():
 
 if __name__ == '__main__':
 
+    print('Set up experiment')
     # Tunable Parameters
     args = parse_args()
     config_path = args.config
