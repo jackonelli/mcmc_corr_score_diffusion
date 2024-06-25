@@ -84,7 +84,7 @@ if __name__ == '__main__':
     # Steps sizes as a function of beta
     a = config['parameters']['a']
     b = config['parameters']['b']
-    step_sizes = float(a) * stage_1.scheduler.betas ** float(b)
+    step_sizes = a * stage_1.scheduler.betas ** b
 
     # Number of reverse steps
     steps = config['n_steps']
@@ -109,6 +109,7 @@ if __name__ == '__main__':
         name = args.job_id
     folder_name = f"{sampler_text}_context_{str(idx)}_{name}"
     res_dir = res_dir / folder_name
+    res_dir.mkdir(exist_ok=True, parents=True)
 
     # Save config data
     with open(res_dir / f"config.json", "w") as outfile:
