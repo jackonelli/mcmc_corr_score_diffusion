@@ -65,11 +65,6 @@ if __name__ == '__main__':
     stage_1.safety_checker = None
     print('Successfully loaded the model')
 
-    res_dir = Path(config['results_dir'])
-    res_dir.mkdir(exist_ok=True, parents=True)
-    res_dir = res_dir / 'tapestry'
-    res_dir.mkdir(exist_ok=True)
-
     # Set Seed
     seed = config['seed']
     generator = torch.Generator('cuda')
@@ -79,7 +74,6 @@ if __name__ == '__main__':
 
     # Guidance Magnitude
     guidance_mag = config['guidance_mag']
-    guidance_scale = config['guidance_scale']
     idx = config['context_index']
 
     context = context_examples(idx, guidance_mag)
@@ -95,9 +89,6 @@ if __name__ == '__main__':
     # Number of reverse steps
     steps = config['n_steps']
 
-    # Stage 2
-    stage2 = False
-
     sampler_text = 'reverse'
 
     # Construct Sampler
@@ -108,46 +99,59 @@ if __name__ == '__main__':
         sampler = AnnealedULAScoreSampler(mcmc_steps, step_sizes, None)
         sampler_text = 'ULA'
 
-    # Save image
-    time = datetime.now()
-    time = time.strftime("%Y%m-%H%M")
-    save_file = ('space_seed' + str(config['seed']) + '_' + str(steps) + '_' +
-                 sampler_text + '_idx' + str(idx) + '_a_' + config['parameters']['a'] + '_b_'
-                 + config['parameters']['b'] + '_traps' + str(config['n_trapets']) + time + '_'
-                 + str(args.sim_batch) + '.p')
+    # Results directory
+    res_dir = Path(config['results_dir'])
+    res_dir.mkdir(exist_ok=True, parents=True)
+    if args.job_id is None:
+        time = datetime.now()
+        name = time.strftime("%Y%m-%H%M")
+    else:
+        name = args.job_id
+    folder_name = f"{sampler_text}_context_{str(idx)}_{name}"
+    res_dir = res_dir / folder_name
+
+    # Save config data
+    with open(res_dir / f"config.json", "w") as outfile:
+        json.dump(config, outfile, indent=4, sort_keys=False)
 
     color_lookup = {}
 
     for k, v in context.items():
         color_lookup[v['string']] = (np.random.uniform(size=(3,)), k[0]**2)
 
-    plt.figure(figsize=(5, 5))
-    img = visualize_context(128, 64, context, color_lookup)
-    plt.imshow(img)
-    plt.show()
+    if config['plot']:
+        plt.figure(figsize=(5, 5))
+        img = visualize_context(128, 64, context, color_lookup)
+        plt.imshow(img)
+        plt.show()
 
-    for k, v in context.items():
-        scale, xstart, ystart = k
-        caption = v['string']
-        color = color_lookup[caption][0]
-        plt.plot([], [], color=color, label=caption)
+        for k, v in context.items():
+            scale, xstart, ystart = k
+            caption = v['string']
+            color = color_lookup[caption][0]
+            plt.plot([], [], color=color, label=caption)
 
-    plt.legend(loc='center left', bbox_to_anchor=(1.1, 0.5))
-    plt.savefig('composite_captions.pdf', bbox_inches='tight')
-    plt.savefig('composite_captions.png', bbox_inches='tight', facecolor=plt.gca().get_facecolor())
+        plt.legend(loc='center left', bbox_to_anchor=(1.1, 0.5))
+        plt.savefig('composite_captions.pdf', bbox_inches='tight')
+        plt.savefig('composite_captions.png', bbox_inches='tight', facecolor=plt.gca().get_facecolor())
 
     with torch.no_grad():
-        latents = stage_1(context, sampler, height=128, width=128, generator=generator, num_inference_steps=steps, guidance_scale=guidance_scale)
+        latents = stage_1(context, sampler, height=128, width=128, generator=generator, num_inference_steps=steps, guidance_scale=guidance_mag)
 
+    # Save image
+    save_file = f"sample_{str(args.sim_batch)}.p"
     with open(res_dir / save_file, "wb") as ff:
         pickle.dump(latents, ff)
 
-    pickle.dump(latents, open("{}.p".format(save_file), "wb"))
     if mcmc_steps > 0 and isinstance(sampler, MCMCMHCorrSampler):
-        sampler.save_stats_to_file(res_dir, save_file)
+        sampler.save_stats_to_file(res_dir, args.sim_batch)
 
-    plot_image(latents)
-    plt.show()
+    if config['plot']:
+        plot_image(latents)
+        plt.show()
+
+    # Stage 2
+    stage2 = config['stage2']
 
     if stage2:
         stage_2 = DiffusionPipeline.from_pretrained("DeepFloyd/IF-II-L-v1.0", text_encoder=None, variant="fp16",
@@ -160,6 +164,11 @@ if __name__ == '__main__':
         latents = stage_2(image=latents, prompt_embeds=prompt_embeds, negative_prompt_embeds=negative_embeds,
                           generator=generator, output_type="pt").images
 
-        plot_image(latents)
-        plt.show()
-        pickle.dump(latents, open("{}_refined.p".format(save_file), "wb"))
+        # Save image
+        save_file = f"sample_stage2_{str(args.sim_batch)}.p"
+        with open(res_dir / save_file, "wb") as ff:
+            pickle.dump(latents, ff)
+
+        if config['plot']:
+            plot_image(latents)
+            plt.show()
