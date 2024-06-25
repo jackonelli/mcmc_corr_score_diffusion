@@ -138,7 +138,8 @@ if __name__ == '__main__':
         plt.savefig('composite_captions.png', bbox_inches='tight', facecolor=plt.gca().get_facecolor())
 
     with torch.no_grad():
-        latents = stage_1(context, sampler, height=128, width=128, generator=generator, num_inference_steps=steps, guidance_scale=guidance_mag)
+        latents = stage_1(context, sampler, height=128, width=128, generator=generator, num_inference_steps=steps,
+                          guidance_scale=guidance_mag, normalize=config['normalize'])
 
     # Save image
     save_file = f"sample_{str(args.sim_batch)}.p"

@@ -822,6 +822,7 @@ class IFPipeline(DiffusionPipeline, LoraLoaderMixin):
             callback_steps: int = 1,
             clean_caption: bool = True,
             cross_attention_kwargs: Optional[Dict[str, Any]] = None,
+            normalize = False
     ):
         """
         Function invoked when calling the pipeline for generation.
@@ -1006,6 +1007,8 @@ class IFPipeline(DiffusionPipeline, LoraLoaderMixin):
             noise_pred = noise_pred_uncond_canvas + guidance_scale * (noise_pred_text_canvas - noise_pred_uncond_canvas)
 
             scale = scalar[t]
+            if normalize:
+                noise_pred = noise_pred / (noise_pred ** 2).mean().sqrt()
             return -1 * scale * noise_pred
 
         def gradient_fn_unnorm_double(x, t, text_embeddings, classes):
