@@ -89,15 +89,16 @@ if __name__ == '__main__':
     # Number of reverse steps
     steps = config['n_steps']
 
-    sampler_text = 'reverse'
-
     # Construct Sampler
-    if config['mh']:
+    if config['mh'] and mcmc_steps > 0:
         sampler = AnnealedLAScoreSampler(mcmc_steps, step_sizes, None, config['n_trapets'])
         sampler_text = 'LA'
-    else:
+    elif not config['mh'] and mcmc_steps > 0:
         sampler = AnnealedULAScoreSampler(mcmc_steps, step_sizes, None)
         sampler_text = 'ULA'
+    else:
+        sampler = AnnealedULAScoreSampler(mcmc_steps, step_sizes, None)
+        sampler_text = 'reverse'
 
     # Results directory
     res_dir = Path(config['results_dir'])
