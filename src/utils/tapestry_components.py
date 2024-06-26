@@ -1070,7 +1070,7 @@ class IFPipeline(DiffusionPipeline, LoraLoaderMixin):
                 self.rng_state = torch.get_rng_state()
                 torch.set_rng_state(current_rng_state)
 
-                if t > 0:  # 50:
+                if t > 50:
                     # The score functions in the last 50 steps don't really change the image
                     intermediate_images_canvas = make_canvas(intermediate_images, canvas_size, sizes,
                                                              in_channels=self.unet.config.in_channels)
@@ -1148,9 +1148,9 @@ def context_examples(idx: int = 1, guidance_mag: float = 20.0):
             (1, 64, 64): {'string': 'A star destroyer from Star Wars', 'magnitude': guidance_mag},
         },
         {
-            (1, 0, 0): {'string': 'The starship Enterprise shooting laser', 'magnitude': guidance_mag},
-            (1, 64, 0): {'string': 'The moon made of cheese', 'magnitude': guidance_mag},
-            (1, 0, 64): {'string': 'An epic space battle', 'magnitude': guidance_mag},
+            (1, 0, 0): {'string': 'The starship Enterprise', 'magnitude': guidance_mag},
+            (1, 64, 0): {'string': 'A meteor flying through space', 'magnitude': guidance_mag},
+            (1, 0, 64): {'string': 'One can see a part of a planet Mars', 'magnitude': guidance_mag},
             (1, 64, 64): {'string': 'A star destroyer from Star Wars', 'magnitude': guidance_mag},
             (1, 32, 0): {'string': 'An epic space battle', 'magnitude': guidance_mag},
             (1, 0, 32): {'string': 'An epic space battle', 'magnitude': guidance_mag},
@@ -1165,13 +1165,13 @@ def context_examples(idx: int = 1, guidance_mag: float = 20.0):
             (1, 64, 64): {'string': 'A star destroyer from Star Wars', 'magnitude': guidance_mag},
             (1, 32, 0): {'string': 'An epic space battle', 'magnitude': guidance_mag},
             (1, 0, 32): {'string': 'An epic space battle', 'magnitude': guidance_mag},
-            (1, 32, 32): {'string': 'A large laser beam', 'magnitude': guidance_mag},
+            (1, 32, 32): {'string': 'An epic space battle', 'magnitude': guidance_mag},
             (1, 64, 32): {'string': 'An epic space battle', 'magnitude': guidance_mag},
             (1, 32, 64): {'string': 'An epic space battle', 'magnitude': guidance_mag},
         },
         {
             (1, 0, 0): {'string': 'Dragon at a waterfall', 'magnitude': guidance_mag},
-            (1, 64, 0): {'string': 'A fairytale castle', 'magnitude': guidance_mag},
+            (1, 64, 0): {'string': 'A fairytale castle nearby', 'magnitude': guidance_mag},
             (1, 0, 64): {'string': 'A sparkling lake with water lilies', 'magnitude': guidance_mag},
             (1, 64, 64): {'string': 'A large stone with moss in the woods', 'magnitude': guidance_mag},
             (1, 32, 0): {'string': 'A mountain chain in a magical world', 'magnitude': guidance_mag},
