@@ -1070,7 +1070,7 @@ class IFPipeline(DiffusionPipeline, LoraLoaderMixin):
                 self.rng_state = torch.get_rng_state()
                 torch.set_rng_state(current_rng_state)
 
-                if t > 50:
+                if t > 0:
                     # The score functions in the last 50 steps don't really change the image
                     intermediate_images_canvas = make_canvas(intermediate_images, canvas_size, sizes,
                                                              in_channels=self.unet.config.in_channels)
