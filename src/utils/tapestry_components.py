@@ -1171,7 +1171,7 @@ def context_examples(idx: int = 1, guidance_mag: float = 20.0):
         },
         {
             (1, 0, 0): {'string': 'Dragon at a waterfall', 'magnitude': guidance_mag},
-            (1, 64, 0): {'string': 'A fairytale castle nearby', 'magnitude': guidance_mag},
+            (1, 64, 0): {'string': 'A fairytale castle', 'magnitude': guidance_mag},
             (1, 0, 64): {'string': 'A sparkling lake with water lilies', 'magnitude': guidance_mag},
             (1, 64, 64): {'string': 'A large stone with moss in the woods', 'magnitude': guidance_mag},
             (1, 32, 0): {'string': 'A mountain chain in a magical world', 'magnitude': guidance_mag},
@@ -1179,6 +1179,17 @@ def context_examples(idx: int = 1, guidance_mag: float = 20.0):
             (1, 32, 32): {'string': 'Beautiful landscape', 'magnitude': guidance_mag},
             (1, 64, 32): {'string': 'A tranquil forest', 'magnitude': guidance_mag},
             (1, 32, 64): {'string': 'Stunning scenery with a beautiful butterfly', 'magnitude': guidance_mag},
+        },
+        {
+            (1, 0, 0): {'string': 'A fearsome mighty dragon with large wings', 'magnitude': guidance_mag},
+            (1, 64, 0): {'string': 'A fairytale castle', 'magnitude': guidance_mag},
+            (1, 0, 64): {'string': 'Beautiful fantasy landscape', 'magnitude': guidance_mag},
+            (1, 64, 64): {'string': 'Stunning scenery with a beautiful butterfly', 'magnitude': guidance_mag},
+            (1, 32, 0): {'string': 'Beautiful fantasy landscape', 'magnitude': guidance_mag},
+            (1, 0, 32): {'string': 'Beautiful fantasy landscape', 'magnitude': guidance_mag},
+            (1, 32, 32): {'string': 'Beautiful fantasy landscape', 'magnitude': guidance_mag},
+            (1, 64, 32): {'string': 'Beautiful fantasy landscape', 'magnitude': guidance_mag},
+            (1, 32, 64): {'string': 'A sparkling lake with water lilies', 'magnitude': guidance_mag},
         }
     ]
     return contexts[idx]
