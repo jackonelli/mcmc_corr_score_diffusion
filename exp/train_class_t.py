@@ -132,7 +132,7 @@ def parse_args():
     parser.add_argument("--dropout", type=float, default=0., help="Dropout rate")
     parser.add_argument("--ema", action='store_true', help='If model is trained with EMA')
     parser.add_argument(
-        "--arch", default="unet", type=str, choices=["unet", "resnet", "guided_diff", "unet_ho_drop"],
+        "--arch", default="unet_ho_drop", type=str, choices=["unet", "resnet", "guided_diff", "unet_ho_drop"],
         help="Model architecture to use"
     )
     parser.add_argument(

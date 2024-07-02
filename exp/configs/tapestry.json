@@ -1,0 +1,19 @@
+{
+    "name": "tapestry",
+    "cache": null,
+    "guidance_mag": 20.0,
+    "context_index": 4,
+    "mcmc_steps": 15,
+    "parameters": {
+        "a": 1.0,
+        "b": 1.0
+    },
+    "n_steps": 100,
+    "n_trapets": 5,
+    "mh": true,
+    "seed": 13,
+    "results_dir": "results/tapestry",
+    "plot": false,
+    "stage2": true,
+    "normalize": false
+}

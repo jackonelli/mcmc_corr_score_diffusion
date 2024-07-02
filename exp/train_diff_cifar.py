@@ -137,9 +137,9 @@ def main():
         th.save(unet.state_dict(), model_path)
 
 def parse_args():
-    parser = ArgumentParser(prog="Train Cifar10 diffusion model")
+    parser = ArgumentParser(prog="Train Cifar100 diffusion model")
     parser.add_argument("--energy", action='store_true', help="Use energy-parameterization")
-    parser.add_argument("--model_size", choices=['small', 'large', 'large2'], help="Model size of Unet")
+    parser.add_argument("--model_size", choices=['small', 'large', 'large2'], default='large2', help="Model size of Unet")
     parser.add_argument("--beta", choices=['lin', 'cos'], help="Type of beta schedule")
     parser.add_argument("--dataset", choices=['cifar10', 'cifar100'], help="Type of beta schedule")
     parser.add_argument("--dataset_path", default=None, help="Path to dataset root")

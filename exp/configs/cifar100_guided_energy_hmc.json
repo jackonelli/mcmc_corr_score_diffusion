@@ -1,0 +1,30 @@
+{
+    "name": "cifar100_guided_energy_hmc",
+    "image_size": 32,
+    "num_channels": 3,
+    "diff_model": "",
+    "class_cond": false,
+    "num_diff_steps": 1000,
+    "num_respaced_diff_steps": 1000,
+    "num_samples": 500,
+    "batch_size": 250,
+    "classifier": "",
+    "guid_scale": 20.0,
+    "mcmc_method": "hmc",
+    "mcmc_steps": 2,
+    "mcmc_lower_t": null,
+    "mcmc_stepsizes": {
+        "load": false,
+        "beta_schedule": "lin",
+        "bounds": "68_72",
+        "params": {
+            "factor": 9.33,
+            "exponent": 1.48
+        }
+    },
+    "n_trapets": -1,
+    "seed": null,
+    "save_traj": false,
+    "results_dir": "results/cifar100",
+    "t_skip": 0
+}

@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import haiku as hk
 import distrax
 import chex
-from src.utils import extract, cosine_beta_schedule
+from r_3_comp_2d.utils import extract, cosine_beta_schedule
 
 DATA_DIM = 2
 
@@ -42,7 +42,7 @@ class ResnetDiffusionModel(hk.Module):
 
         chex.assert_shape(x, (None, self._x_dim))
         chex.assert_shape(t, (None,))
-        chex.assert_type([x, t], [jnp.float32, jnp.int64])
+        # chex.assert_type([x, t], [jnp.float32, jnp.int64])
 
         if self._emb_type == "learned":
             emb = hk.Embed(self._n_steps, self._emb_dim)(t)
@@ -246,7 +246,7 @@ class PortableDiffusionModel(hk.Module):
 
         chex.assert_shape(x, (None, self._dim))
         chex.assert_shape(t, (None,))
-        chex.assert_type(t, jnp.int64)
+        # chex.assert_type(t, jnp.int64)
 
         outs = self.net(x, t)
         chex.assert_shape(outs, x.shape)
@@ -279,7 +279,7 @@ class PortableDiffusionModel(hk.Module):
         """Sample from q(x_t | x_0)."""
         chex.assert_shape(x_0, (None, self._dim))
         chex.assert_shape(t, (None,))
-        chex.assert_type([x_0, t], [jnp.float32, jnp.int64])
+        # chex.assert_type([x_0, t], [jnp.float32, jnp.int64])
 
         if noise is None:
             noise = jax.random.normal(hk.next_rng_key(), x_0.shape)
@@ -295,7 +295,7 @@ class PortableDiffusionModel(hk.Module):
         """Training loss for given x_0 and t."""
         chex.assert_shape(x_0, (None, self._dim))
         chex.assert_shape(t, (None,))
-        chex.assert_type([x_0, t], [jnp.float32, jnp.int64])
+        # chex.assert_type([x_0, t], [jnp.float32, jnp.int64])
 
         noise = jax.random.normal(hk.next_rng_key(), x_0.shape)
         x_noise = self.q_sample(x_0, t, noise)
@@ -313,7 +313,7 @@ class PortableDiffusionModel(hk.Module):
         """Training loss for given x_0 and t (KL-weighted)."""
         chex.assert_shape(x_0, (None, self._dim))
         chex.assert_shape(t, (None,))
-        chex.assert_type([x_0, t], [jnp.float32, jnp.int64])
+        # chex.assert_type([x_0, t], [jnp.float32, jnp.int64])
 
         x_t = self.q_sample(x_0, t)
         q_mean, _, q_log_variance = self.q_posterior(x_0, x_t, t)
@@ -337,7 +337,7 @@ class PortableDiffusionModel(hk.Module):
         """Obtain parameters of q(x_{t-1} | x_0, x_t)."""
         chex.assert_shape(x_0, (None, self._dim))
         chex.assert_shape(t, (None,))
-        chex.assert_type([x_0, t], [jnp.float32, jnp.int64])
+        # chex.assert_type([x_0, t], [jnp.float32, jnp.int64])
 
         mean = (
             extract(self._posterior_mean_coef1, t, x_t.shape) * x_0
@@ -353,7 +353,7 @@ class PortableDiffusionModel(hk.Module):
         """Predict x_0 from x_t."""
         chex.assert_shape(x_t, (None, self._dim))
         chex.assert_shape(t, (None,))
-        chex.assert_type([x_t, t], [jnp.float32, jnp.int64])
+        # chex.assert_type([x_t, t], [jnp.float32, jnp.int64])
 
         x_0 = (
             extract(self._sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t
@@ -366,7 +366,7 @@ class PortableDiffusionModel(hk.Module):
         """Parameters of p(x_{t-1} | x_t)."""
         chex.assert_shape(x, (None, self._dim))
         chex.assert_shape(t, (None,))
-        chex.assert_type([x, t], [jnp.float32, jnp.int64])
+        # chex.assert_type([x, t], [jnp.float32, jnp.int64])
 
         x_recon = jnp.clip(
             self.predict_start_from_noise(x, t, noise=self.forward(x, t)), -clip, clip

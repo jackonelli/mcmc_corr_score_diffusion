@@ -225,17 +225,6 @@ def load_classifier_cifar100(type_: str, batch_size: int):
         ts = th.zeros((batch_size,)).to(DEVICE)
         classifier = partial(classifier, t=ts)
     elif type_ == "independent":
-        """
-        classifier = load_standard_class(
-            model_path=Path.cwd() / "models/cifar100_simple_class.pt",
-            device=DEVICE,
-            num_channels=CIFAR_NUM_CHANNELS,
-            num_classes=CIFAR_100_NUM_CLASSES,
-        )
-        classifier.eval()
-        ts = th.zeros((batch_size,)).to(DEVICE)
-        classifier = partial(classifier, t=ts)
-        """
         classifier = vgg16_bn(model_path=Path.cwd() / "models/vgg16_bn_ema_cifar100.ckpt",
                               dataset='cifar100').to(DEVICE)
         classifier.eval()

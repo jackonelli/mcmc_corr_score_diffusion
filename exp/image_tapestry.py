@@ -7,7 +7,7 @@ sys.path.append(".")
 
 from argparse import ArgumentParser
 import matplotlib.pyplot as plt
-from src.utils.tapestry_components import visualize_context, IFPipeline, context_examples
+from src.utils.tapestry_components import visualize_context, IFPipeline, context_examples, TapestryConfig
 from diffusers import DiffusionPipeline
 from src.samplers.mcmc import AnnealedLAScoreSampler, AnnealedULAScoreSampler, MCMCMHCorrSampler
 import torch
@@ -48,14 +48,12 @@ if __name__ == '__main__':
     print('Set up experiment')
     # Tunable Parameters
     args = parse_args()
-    config_path = args.config
-    with open(config_path) as cfg_file:
-        config = json.load(cfg_file)
+    config = TapestryConfig.from_json(args.config)
 
     # initialize model
     print('Load model')
-    if config['cache'] is not None:
-        custom_cache_dir = os.path.expanduser(config['cache'])
+    if config.cache is not None:
+        custom_cache_dir = os.path.expanduser(config.cache)
     else:
         custom_cache_dir = None
     stage_1 = IFPipeline.from_pretrained("DeepFloyd/IF-I-XL-v1.0", variant="fp16", torch_dtype=torch.float16,
@@ -66,34 +64,34 @@ if __name__ == '__main__':
     print('Successfully loaded the model')
 
     # Set Seed
-    seed = config['seed']
+    seed = config.seed
     generator = torch.Generator('cuda')
     if seed is not None:
         generator.manual_seed(seed)
         set_seed(seed)
 
     # Guidance Magnitude
-    guidance_mag = config['guidance_mag']
-    idx = config['context_index']
+    guidance_mag = config.guidance_mag
+    idx = config.context_index
 
     context = context_examples(idx, guidance_mag)
 
     # Increase the number of MCMC steps run to sample between intermediate distributions
-    mcmc_steps = config['mcmc_steps']
+    mcmc_steps = config.mcmc_steps
 
     # Steps sizes as a function of beta
-    a = config['parameters']['a']
-    b = config['parameters']['b']
+    a = config.parameters['a']
+    b = config.parameters['b']
     step_sizes = a * stage_1.scheduler.betas ** b
 
     # Number of reverse steps
-    steps = config['n_steps']
+    steps = config.n_steps
 
     # Construct Sampler
-    if config['mh'] and mcmc_steps > 0:
-        sampler = AnnealedLAScoreSampler(mcmc_steps, step_sizes, None, config['n_trapets'])
+    if config.mh and mcmc_steps > 0:
+        sampler = AnnealedLAScoreSampler(mcmc_steps, step_sizes, None, config.n_trapets)
         sampler_text = 'LA'
-    elif not config['mh'] and mcmc_steps > 0:
+    elif not config.mh and mcmc_steps > 0:
         sampler = AnnealedULAScoreSampler(mcmc_steps, step_sizes, None)
         sampler_text = 'ULA'
     else:
@@ -101,7 +99,7 @@ if __name__ == '__main__':
         sampler_text = 'reverse'
 
     # Results directory
-    res_dir = Path(config['results_dir'])
+    res_dir = Path(config.results_dir)
     res_dir.mkdir(exist_ok=True, parents=True)
     if args.job_id is None:
         time = datetime.now()
@@ -113,15 +111,14 @@ if __name__ == '__main__':
     res_dir.mkdir(exist_ok=True, parents=True)
 
     # Save config data
-    with open(res_dir / f"config.json", "w") as outfile:
-        json.dump(config, outfile, indent=4, sort_keys=False)
+    config.save(res_dir)
 
     color_lookup = {}
 
     for k, v in context.items():
         color_lookup[v['string']] = (np.random.uniform(size=(3,)), k[0]**2)
 
-    if config['plot']:
+    if config.plot:
         plt.figure(figsize=(5, 5))
         img = visualize_context(128, 64, context, color_lookup)
         plt.imshow(img)
@@ -139,17 +136,17 @@ if __name__ == '__main__':
 
     with torch.no_grad():
         latents = stage_1(context, sampler, height=128, width=128, generator=generator, num_inference_steps=steps,
-                          guidance_scale=guidance_mag, normalize=config['normalize'])
+                          guidance_scale=guidance_mag, normalize=config.normalize)
 
     # Save image
     save_file = f"sample_{str(args.sim_batch)}.p"
     with open(res_dir / save_file, "wb") as ff:
-        pickle.dump(latents, ff)
+        pickle.dump(latents.cpu(), ff)
 
     if mcmc_steps > 0 and isinstance(sampler, MCMCMHCorrSampler):
         sampler.save_stats_to_file(res_dir, args.sim_batch)
 
-    if config['plot']:
+    if config.plot:
         plot_image(latents)
         plt.show()
 
@@ -170,8 +167,8 @@ if __name__ == '__main__':
         # Save image
         save_file = f"sample_stage2_{str(args.sim_batch)}.p"
         with open(res_dir / save_file, "wb") as ff:
-            pickle.dump(latents, ff)
+            pickle.dump(latents.cpu(), ff)
 
-        if config['plot']:
+        if config.plot:
             plot_image(latents)
             plt.show()

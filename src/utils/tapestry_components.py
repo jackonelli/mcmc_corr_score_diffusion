@@ -10,14 +10,18 @@ from diffusers.models.modeling_utils import ModelMixin
 from diffusers.utils import PIL_INTERPOLATION, BaseOutput
 from torch.nn.functional import interpolate
 
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from typing import Any, Callable, Dict, List, Optional, Union
 from transformers import CLIPImageProcessor, T5EncoderModel, T5Tokenizer
 import urllib.parse as ul
 import matplotlib.pyplot as plt
 import inspect
 import html
+import json
+from pathlib import Path
 import re
+from copy import deepcopy
+
 
 from diffusers import DiffusionPipeline
 from diffusers.loaders import LoraLoaderMixin
@@ -1139,6 +1143,54 @@ def visualize_context(canvas_size, base_size, context, color_lookup):
         draw_box(img, (xstart, ystart), scale * base_size, color, canvas_size-1)
 
     return img
+
+
+@dataclass
+class TapestryConfig:
+    name: str
+    # path to saved Huggingface model
+    cache: str
+    guidance_mag: float
+    context_index: int
+    mcmc_steps: int
+    # step-size parameters
+    parameters: dict
+    # number diffusion steps
+    n_steps: int
+    # number of steps used in the trapezoidal rule’s mesh
+    n_trapets: int
+    # use MH-like correction
+    mh: bool
+    seed: int
+    results_dir: str
+    plot: bool
+    stage2: bool
+    normalize: bool
+
+    @staticmethod
+    def load(cfg_file_path: Path):
+        with open(cfg_file_path) as cfg_file:
+            cfg = json.load(cfg_file)
+        return cfg
+
+
+    @staticmethod
+    def from_json_no_load(cfg):
+        cfg = TapestryConfig(**cfg)
+        cfg.results_dir = Path(cfg.results_dir)
+        return cfg
+
+    @staticmethod
+    def from_json(cfg_file_path: Path):
+        cfg = TapestryConfig.load(cfg_file_path)
+        cfg = TapestryConfig.from_json_no_load(cfg)
+        return cfg
+
+    def save(self, res_dir: Path, suffix=""):
+        tmp_config = deepcopy(self)
+        tmp_config.results_dir = str(tmp_config.results_dir)
+        with open(res_dir / f"config{suffix}.json", "w") as outfile:
+            json.dump(asdict(tmp_config), outfile, indent=4, sort_keys=False)
 
 
 def context_examples(idx: int = 1, guidance_mag: float = 20.0):

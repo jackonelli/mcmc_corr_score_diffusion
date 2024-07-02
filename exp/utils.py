@@ -1,18 +1,15 @@
 from dataclasses import dataclass, asdict
-from typing import Optional, Tuple
+from typing import Optional, Union
 from pathlib import Path
 import json
 from datetime import datetime
 from copy import deepcopy
-from typing import Tuple, Union
 import pickle
-import random
-import numpy as np
-import torch as th
+
 
 
 def test():
-    cfg = SimulationConfig.from_json(Path.cwd() / "exp/configs/hmc.json")
+    cfg = SimulationConfig.from_json(Path.cwd() / "exp/configs/cifar100_guided_score_reverse.json")
     cfg.save(Path.cwd() / "results")
     print(cfg.mcmc_bounds, type(cfg.mcmc_bounds))
 

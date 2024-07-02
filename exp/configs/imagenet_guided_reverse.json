@@ -1,0 +1,31 @@
+{
+    "name":"imagenet_guided_reverse",
+    "image_size": 256,
+    "num_channels": 3,
+    "diff_model": "",
+    "class_cond": false,
+    "num_diff_steps": 1000,
+    "num_respaced_diff_steps": 1000,
+    "num_samples": 100,
+    "batch_size": 50,
+    "classifier": "",
+    "guid_scale": 20.0,
+    "mcmc_method": null,
+    "mcmc_steps": 2,
+    "mcmc_lower_t": null,
+    "seed": null,
+    "mcmc_stepsizes":
+      {
+        "load": false,
+        "beta_schedule": "lin",
+        "bounds": null,
+        "params":
+        {
+          "factor": 1.87,
+          "exponent": 1.51
+        }
+      },
+    "n_trapets": 5,
+    "results_dir": "results/imagenet",
+    "t_skip": 0
+}
