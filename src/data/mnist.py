@@ -47,8 +47,9 @@ def get_mnist_data_loaders(batch_size: int):
         transform = Compose([transforms.ToTensor()])
 
         def f(examples):
-            examples["pixel_values"] = [transform(image.convert("L")) for image in examples["image"]]
+            examples["x"] = [transform(image.convert("L")) for image in examples["image"]]
             del examples["image"]
+            examples["labels"] = examples["label"]
 
             return examples
 

@@ -6,6 +6,7 @@ from argparse import ArgumentParser
 import torch as th
 import torch.nn.functional as F
 import pytorch_lightning as pl
+from pytorch_lightning.callbacks import ModelCheckpoint
 from src.diffusion.base import DiffusionSampler
 from src.diffusion.trainer import DiffusionModel
 from src.diffusion.beta_schedules import improved_beta_schedule
@@ -21,10 +22,10 @@ def main():
     channels = 1
     num_diff_steps = 1000
     batch_size = 128
-    name = ""
+    model_type = ""
     if args.type == "energy":
-        name = args.type
-    model_path = Path.cwd() / "models" / f"{name}_uncond_unet_mnist.pt"
+        model_type = args.type
+    model_path = Path.cwd() / "models" / f"{model_type}_{args.name}.pt"
     if not model_path.parent.exists():
         print(f"Save dir. '{model_path.parent}' does not exist.")
         return
@@ -42,18 +43,41 @@ def main():
     diffm = DiffusionModel(model=unet, loss_f=F.mse_loss, noise_scheduler=diff_sampler)
 
     diffm.to(dev)
-    trainer = pl.Trainer(max_epochs=1, num_sanity_val_steps=0, accelerator="gpu", devices=1, inference_mode=False)
+
+    checkpoint_callback = ModelCheckpoint(
+        filename=args.name,
+        save_last=True,
+        every_n_epochs=1,
+        save_top_k=1,
+        monitor='val_loss'
+    )
+
+    if args.log_dir is None:
+        root_dir = "logs/MNIST"
+    else:
+        root_dir = args.log_dir
+
+    trainer = pl.Trainer(max_epochs=50,
+                         num_sanity_val_steps=0,
+                         default_root_dir=root_dir,
+                         accelerator="gpu",
+                         devices=1,
+                         callbacks=[checkpoint_callback])
 
     dataloader_train, dataloader_val = get_mnist_data_loaders(batch_size)
     trainer.fit(diffm, dataloader_train, dataloader_val)
 
-    print(f"Saving model to '{model_path}'")
-    th.save(unet.state_dict(), model_path)
+    if args.save:
+        print(f"Saving model to '{model_path}'")
+        th.save(unet.state_dict(), model_path)
 
 
 def parse_args():
     parser = ArgumentParser(prog="Train unconditional diffusion model (score or energy)")
     parser.add_argument("--type", default="energy", type=str, choices=["score", "energy"])
+    parser.add_argument("--name", default="uncond_unet_mnist", type=str)
+    parser.add_argument("--log_dir", default=None, help="Root directory for logging")
+    parser.add_argument("--save", action='store_true')
     return parser.parse_args()
 
 
