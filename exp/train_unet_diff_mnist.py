@@ -64,7 +64,7 @@ def main():
                          devices=1,
                          callbacks=[checkpoint_callback])
 
-    dataloader_train, dataloader_val = get_mnist_data_loaders(batch_size)
+    dataloader_train, dataloader_val = get_mnist_data_loaders(batch_size, data_root=args.dataset_path)
     trainer.fit(diffm, dataloader_train, dataloader_val)
 
     if args.save:
@@ -78,6 +78,7 @@ def parse_args():
     parser.add_argument("--name", default="uncond_unet_mnist", type=str)
     parser.add_argument("--log_dir", default=None, help="Root directory for logging")
     parser.add_argument("--save", action='store_true')
+    parser.add_argument("--dataset_path", default=None, help="Path to dataset root")
     return parser.parse_args()
 
 

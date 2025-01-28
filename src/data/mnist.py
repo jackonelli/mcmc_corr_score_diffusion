@@ -39,8 +39,8 @@ def get_noise_mnist_data_loader(dataset_size: int, batch_size: int):
 
 
 
-def get_mnist_data_loaders(batch_size: int):
-    dataset = load_dataset("mnist")
+def get_mnist_data_loaders(batch_size: int, data_root=None):
+    dataset = load_dataset("mnist", cache_dir=data_root)
 
     # define image transformations
     def transforms_f(train=True):
