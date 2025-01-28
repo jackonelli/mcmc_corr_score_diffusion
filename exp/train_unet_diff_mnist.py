@@ -1,5 +1,8 @@
 """Script for training a UNet-based unconditional diffusion model for MNIST"""
+import sys
 
+
+sys.path.append(".")
 
 from pathlib import Path
 from argparse import ArgumentParser
