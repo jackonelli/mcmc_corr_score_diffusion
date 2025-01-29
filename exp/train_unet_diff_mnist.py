@@ -47,8 +47,10 @@ def main():
 
     diffm.to(dev)
 
+    filename = "MNIST_" + args.type + "_unet_diff_{epoch:02d}"
+
     checkpoint_callback = ModelCheckpoint(
-        filename=args.name,
+        filename=filename,
         save_last=True,
         every_n_epochs=1,
         save_top_k=1,
@@ -60,7 +62,7 @@ def main():
     else:
         root_dir = args.log_dir
 
-    trainer = pl.Trainer(max_epochs=50,
+    trainer = pl.Trainer(max_epochs=100,
                          num_sanity_val_steps=0,
                          default_root_dir=root_dir,
                          accelerator="gpu",
