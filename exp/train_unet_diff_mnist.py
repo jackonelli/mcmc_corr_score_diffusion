@@ -29,9 +29,6 @@ def main():
     if args.type == "energy":
         model_type = args.type
     model_path = Path.cwd() / "models" / f"{model_type}_{args.name}.pt"
-    if not model_path.parent.exists():
-        print(f"Save dir. '{model_path.parent}' does not exist.")
-        return
 
     dev = get_device(Device.GPU)
     if args.type == "score":
